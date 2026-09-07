@@ -84,6 +84,8 @@ export const starteAnruf = async () => "";
 export const fehlerGruppen = async () => [];
 export const verbrauchsUebersicht = () => [];
 export const uebergabenText = async () => "";
+export const eroeffne = async () => ""; export const schliesse = async () => "";
+export const stand = async () => "";
 export const herkunftHeute = async () => [];
 `,
 );

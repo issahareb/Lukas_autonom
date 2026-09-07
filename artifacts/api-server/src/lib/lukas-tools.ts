@@ -14,6 +14,11 @@ import { createProposal } from "./proposals";
 import { MCP_TOOL_PREFIX, activeServers, callMcpTool } from "./mcp";
 import { runSubagent, subagentUebersicht, createSubagent, fixError } from "./subagents";
 import { uebergabenText } from "./uebergaben";
+import {
+  eroeffne as papierEroeffne,
+  schliesse as papierSchliesse,
+  stand as papierStand,
+} from "./papierhandel";
 
 /**
  * Wohin der heutige Verbrauch geflossen ist.
@@ -357,6 +362,96 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       name: "read_usage",
       description:
         "Zeig, welches Modell wie viele Tokens verbraucht hat, seit der Server läuft. Nimm das, wenn Issa nach Kosten fragt oder wenn du wissen willst, ob du gerade unnötig auf dem teuren Modell arbeitest. Zwischen luna, terra und sol liegt ein Vielfaches — wenn sol ganz oben steht, obwohl es nur Gespräche waren, stimmt etwas mit der Modellwahl nicht, und das gehört durch fix_error.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "papier_eroeffnen",
+      description:
+        "Eröffne eine PAPIER-Position — eine Wette ohne Geld, aber mit Protokoll. Nimm das, wenn du bei einem Markt eine begründete Meinung hast: so entsteht über Wochen eine Zahl statt eines Bauchgefühls, und erst die entscheidet, ob dir irgendwann echtes Geld anvertraut wird. Du gibst KEINEN Kurs an — der Server holt ihn selbst von der Quelle, damit er später zählt. Was du angibst, sind Grund, Erwartung und Frist, und die stehen danach fest.",
+      parameters: {
+        type: "object",
+        properties: {
+          markt: { type: "string", description: "Worauf du setzt, in Worten." },
+          art: {
+            type: "string",
+            enum: ["binaer", "preis"],
+            description:
+              "binaer = Vorhersagemarkt mit Kurs zwischen 0 und 1 (Polymarket). preis = normaler Kurs (BTC).",
+          },
+          richtung: {
+            type: "string",
+            description: "Bei binaer: ja oder nein. Bei preis: long oder short.",
+          },
+          einsatz_cent: {
+            type: "integer",
+            description: "Gedachter Einsatz in Cent. Ganzzahlig.",
+          },
+          quelle: {
+            type: "string",
+            description:
+              "URL einer JSON-Datenquelle mit dem Kurs, z.B. gamma-api.polymarket.com. Sieh sie dir vorher mit fetch_url an.",
+          },
+          kurs_pfad: {
+            type: "string",
+            description:
+              "Wo in der JSON-Antwort der Kurs steht, mit Punkten getrennt, z.B. \"0.outcomePrices.0\". Zahlen sind Listenindizes.",
+          },
+          grund: {
+            type: "string",
+            description: "Warum du das denkst. Wird nie wieder änderbar.",
+          },
+          erwartung: {
+            type: "string",
+            description:
+              "Was konkret eintreten soll, prüfbar formuliert. \"Läuft gut\" ist keine Erwartung.",
+          },
+          frist_stunden: {
+            type: "integer",
+            description: "In wie vielen Stunden deine Erwartung eingetreten sein soll.",
+          },
+        },
+        required: [
+          "markt",
+          "art",
+          "richtung",
+          "einsatz_cent",
+          "quelle",
+          "kurs_pfad",
+          "grund",
+          "erwartung",
+          "frist_stunden",
+        ],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "papier_schliessen",
+      description:
+        "Schließe eine Papier-Position. Der Ausstiegskurs wird wieder selbst geholt. Sag dazu, was passiert ist und ob deine Erwartung eingetreten ist — daraus lernst du, nicht aus der Zahl. Eine geschlossene Position lässt sich nicht erneut schließen.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "integer", description: "Nummer der Position." },
+          ergebnis: {
+            type: "string",
+            description: "Was passiert ist, und ob deine Erwartung eingetreten ist.",
+          },
+        },
+        required: ["id", "ergebnis"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "papier_stand",
+      description:
+        "Zeig deinen Papierhandel: offene, geschlossene und über die Frist gelaufene Positionen, mit Ergebnis. Nimm das, bevor du eine neue Position eröffnest, und wenn Issa fragt, wie du dich schlägst. Positionen, die du über die Frist hast laufen lassen, stehen hier auch — sie zählen wie ein Fehlschlag.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -1432,6 +1527,22 @@ export async function executeLukasTool(
         (await herkunftsAbschnitt())
       );
     }
+    case "papier_eroeffnen":
+      return await papierEroeffne({
+        markt: String(input.markt ?? ""),
+        art: input.art === "preis" ? "preis" : "binaer",
+        richtung: String(input.richtung ?? ""),
+        einsatzCent: Number(input.einsatz_cent ?? 0),
+        quelle: String(input.quelle ?? ""),
+        kursPfad: String(input.kurs_pfad ?? ""),
+        grund: String(input.grund ?? ""),
+        erwartung: String(input.erwartung ?? ""),
+        fristStunden: Number(input.frist_stunden ?? 0),
+      });
+    case "papier_schliessen":
+      return await papierSchliesse(Number(input.id ?? 0), String(input.ergebnis ?? ""));
+    case "papier_stand":
+      return await papierStand();
     case "read_uebergaben":
       return await uebergabenText(
         typeof input.anzahl === "number" ? Math.min(50, Math.max(1, input.anzahl)) : 15,

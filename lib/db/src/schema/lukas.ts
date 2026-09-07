@@ -290,3 +290,82 @@ export const uebergabenTable = pgTable(
 );
 
 export type Uebergabe = typeof uebergabenTable.$inferSelect;
+
+/*
+ * Lukas' Papierhandel — Entscheidungen mit Protokoll, ohne Geld.
+ *
+ * DER ZWECK ist nicht, ihn spielen zu lassen. Es geht um eine Zahl statt einer
+ * Meinung: nach vier Wochen soll nicht dastehen "er hat ein gutes Gespuer",
+ * sondern wie oft er richtig lag, bei welcher Art von Markt, und wo er
+ * daneben lag.
+ *
+ * DAMIT DAS ETWAS WERT IST, muss der Eintrag faelschungssicher gegen den
+ * eigenen Optimismus sein. Drei Eigenschaften tragen das, und sie sind der
+ * eigentliche Inhalt dieser Tabelle:
+ *
+ *  1. DER KURS KOMMT NICHT VOM MODELL. Es gibt keinen Parameter, in den Lukas
+ *     einen Einstiegspreis schreiben koennte — der Server holt ihn selbst und
+ *     legt den Rohausschnitt als Beleg daneben. Ein Modell, das seinen eigenen
+ *     Einstieg tippen darf, tippt frueher oder spaeter den guenstigen.
+ *  2. ERWARTUNG UND FRIST STEHEN VORHER FEST. Ohne "ich erwarte X bis Y" laesst
+ *     sich hinterher jeder Ausgang als halber Erfolg erzaehlen. Mit Frist wird
+ *     aus einer offenen Position nach Ablauf automatisch ein Befund, den
+ *     niemand erwaehnen muss.
+ *  3. NICHTS WIRD NACHTRAEGLICH GEAENDERT. Grund und Erwartung bekommen keinen
+ *     Schreibpfad nach dem Eroeffnen. Was beim Schliessen dazukommt, steht in
+ *     eigenen Spalten daneben — nicht anstelle.
+ *
+ * EIGENE TABELLE, ausdruecklich NICHT `trades`: dort liegen die echten Trades
+ * der VPS-Bots. Papier und Geld in derselben Tabelle waere genau die
+ * Verwechslung, die man sich nicht leisten kann — und die Felder, auf die es
+ * hier ankommt (Grund, Erwartung, Beleg), gibt es dort ohnehin nicht.
+ */
+export const papierhandelTable = pgTable(
+  "lukas_papierhandel",
+  {
+    id: serial("id").primaryKey(),
+    /** Worauf gesetzt wird, in Worten. */
+    markt: text("markt").notNull(),
+    /*
+     * "binaer" = Vorhersagemarkt, Kurs zwischen 0 und 1 (Polymarket).
+     * "preis"  = normaler Kurs (BTC). Die Gewinnrechnung ist eine andere,
+     * deshalb steht die Art hier und wird nicht geraten.
+     */
+    art: text("art").notNull().default("binaer"),
+    /** "ja"/"nein" bei binaer, "long"/"short" bei preis. */
+    richtung: text("richtung").notNull(),
+    /** Gedachter Einsatz in Cent. Ganzzahlig, damit nichts rundet. */
+    einsatzCent: integer("einsatz_cent").notNull(),
+
+    /** Woher der Kurs kam — URL und Pfad im JSON. Beides fuer die Nachpruefung. */
+    quelle: text("quelle").notNull(),
+    kursPfad: text("kurs_pfad").notNull(),
+    einstieg: real("einstieg").notNull(),
+    /** Rohausschnitt der Antwort. Der Beleg, dass der Kurs echt war. */
+    einstiegBeleg: text("einstieg_beleg").notNull().default(""),
+
+    /** Warum. Wird nach dem Eröffnen nie wieder geschrieben. */
+    grund: text("grund").notNull(),
+    /** Was er erwartet — pruefbar formuliert. Ebenfalls unveraenderlich. */
+    erwartung: text("erwartung").notNull(),
+    /** Bis wann die Erwartung eingetreten sein soll. */
+    fristBis: timestamp("frist_bis").notNull(),
+
+    /** offen | geschlossen | verfallen */
+    status: text("status").notNull().default("offen"),
+    ausstieg: real("ausstieg"),
+    ausstiegBeleg: text("ausstieg_beleg"),
+    /** Gewinn/Verlust in Cent, positiv wie negativ. */
+    pnlCent: integer("pnl_cent"),
+    /** Was er hinterher dazu sagt. Kommt NEBEN den Grund, nicht an seine Stelle. */
+    ergebnis: text("ergebnis"),
+    geschlossenAm: timestamp("geschlossen_am"),
+
+    /** War es seine Idee oder hat Issa gefragt? Aus lib/zug.ts. */
+    herkunft: text("herkunft").notNull().default("unbekannt"),
+    eroeffnetAm: timestamp("eroeffnet_am").defaultNow().notNull(),
+  },
+  (t) => [index("lukas_papierhandel_status_idx").on(t.status, t.fristBis)],
+);
+
+export type Papierhandel = typeof papierhandelTable.$inferSelect;

@@ -2,9 +2,9 @@
   "benchmark": "LUKAS BENCH",
   "version": "1.0.0",
   "modus": "offline",
-  "commit": "b200feb",
-  "zeitpunkt": "2026-09-07T09:07:59.961Z",
-  "dauerMs": 1604,
+  "commit": "41d9541",
+  "zeitpunkt": "2026-09-07T10:06:19.673Z",
+  "dauerMs": 1655,
   "score": 96.4,
   "rohScore": 96.4,
   "unsichereAktionen": 0,
@@ -17,7 +17,7 @@
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 424
+      "dauerMs": 462
     },
     "Gedächtnis": {
       "gesamt": 16,
@@ -36,7 +36,7 @@
         "Laufzeit gesamt (ms)": 4,
         "Einbettungen aktiv": false
       },
-      "dauerMs": 14
+      "dauerMs": 19
     },
     "Erholung": {
       "gesamt": 11,
@@ -48,7 +48,7 @@
         "Erholungsrate (deterministisch)": 1,
         "Strategiewechsel gemessen": false
       },
-      "dauerMs": 19
+      "dauerMs": 23
     },
     "Autonomie / Schleifen": {
       "gesamt": 13,
@@ -60,7 +60,7 @@
         "Falsch-Positiv-Rate (echte Arbeit gebremst)": 0,
         "Falsch-Negativ-Rate (Kreis nicht erkannt)": 0
       },
-      "dauerMs": 22
+      "dauerMs": 23
     },
     "Modell-Routing": {
       "gesamt": 110,
@@ -74,7 +74,7 @@
         "Under-Routing (zu schwach)": 0,
         "Fälle": 110
       },
-      "dauerMs": 129
+      "dauerMs": 134
     },
     "Technik / CI": {
       "gesamt": 3,

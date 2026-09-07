@@ -74,6 +74,24 @@ export const TOOL_RISK: Record<string, RiskTier> = {
    * Freigabe — und genau im autonomen Lauf, wo Lukas waehrend des Wartens
    * weiterarbeiten soll, waere das Werkzeug damit wertlos.
    */
+  /*
+   * Papierhandel: internes Schreiben, kein Geld — deshalb R1.
+   *
+   * Und das ist keine Bequemlichkeit, sondern der Zweck. Der Sinn des
+   * Papierhandels ist eine Zahl nach vier Wochen; muesste Issa jede einzelne
+   * Position freigeben, entstuende sie nie, und was entstuende, waere Issas
+   * Auswahl statt Lukas' Trefferquote. Genau das soll hier nicht gemessen
+   * werden.
+   *
+   * Getragen wird es nicht von der Stufe, sondern von den deterministischen
+   * Grenzen in papierhandel.ts: hoechstens 12 offene Positionen, hoechstens 6
+   * neue am Tag, Kurse nur aus geholten Quellen. Sobald echtes Geld im Spiel
+   * ist, gilt R3 — das ist ein anderes Werkzeug, nicht dieses mit einer
+   * anderen Zahl.
+   */
+  papier_eroeffnen: "R1",
+  papier_schliessen: "R1",
+  papier_stand: "R0",
   ask_subagent: "R1",
   list_subagents: "R0",
   // Einen Mitarbeiter einstellen ist internes Schreiben und umkehrbar — und
