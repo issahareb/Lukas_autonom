@@ -83,6 +83,8 @@ export const meldeDichBeiIssa = async () => "";
 export const starteAnruf = async () => "";
 export const fehlerGruppen = async () => [];
 export const verbrauchsUebersicht = () => [];
+export const uebergabenText = async () => "";
+export const herkunftHeute = async () => [];
 `,
 );
 

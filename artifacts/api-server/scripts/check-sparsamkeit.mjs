@@ -42,6 +42,8 @@ export const inArray = () => () => true;
 export const gte = (_f, wert) => (z) => new Date(z.createdAt).getTime() >= new Date(wert).getTime();
 export const logger = { info() {}, warn() {}, error() {}, debug() {} };
 export const tageskostenTable = new Proxy({}, { get: (_t, k) => String(k) });
+export const verbrauchHerkunftTable = new Proxy({}, { get: (_t, k) => String(k) });
+export const uebergabenTable = new Proxy({}, { get: (_t, k) => String(k) });
 export const sql = () => ({});
 export const desc = () => ({});
 

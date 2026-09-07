@@ -8,6 +8,16 @@ import { neueAntworten } from "./melden";
 import { anlass, laufNotiert } from "./autonomie-anlass";
 import { mitSperre } from "./lauf-sperre";
 import { budgetTor } from "./tagesbudget";
+import { imZug } from "./zug";
+
+/*
+ * Obergrenze fuer einen autonomen Lauf, Mitarbeiter eingerechnet.
+ *
+ * Grosszuegig gewaehlt: ein Lauf, der wirklich arbeitet, soll sie nicht
+ * sehen. Sie faengt den Fall, in dem sich eine Kette aus Helfern gegenseitig
+ * beschaeftigt, ohne dass jemand die Summe im Blick hat.
+ */
+const DECKEL_AUTONOM = Number(process.env.LUKAS_DECKEL_AUTONOM ?? 800_000);
 import { kennzahlenHinweis, meldeAuffaelligkeiten } from "./kennzahlen";
 
 /*
@@ -226,12 +236,25 @@ export async function runAutonomyCycle(): Promise<void> {
 
   const episode = await openEpisode("autonomer_lauf");
   try {
-    const result = await runLukasTurn({
-      history: [{ role: "user", content: brief }],
-      userText: brief,
-      // Ziele und Tagebuch stehen oben im Auftrag — nicht noch einmal.
-      ohneZieleUndTagebuch: true,
-    });
+    /*
+     * Unter eigener Herkunft und mit Deckel.
+     *
+     * Der Deckel gilt fuer den GANZEN Lauf, Mitarbeiter eingerechnet — genau
+     * das war die Luecke: der Lauf hatte ein Token-Budget, aber jeder Helfer
+     * bekam in runLukasTurn eine frische Arbeitsschleife mit eigenem vollem
+     * Budget obendrauf. Neun Helfer waren neun Budgets, und keins davon sah
+     * das andere.
+     */
+    const result = await imZug(
+      { herkunft: "autonom", istIssa: false, deckel: DECKEL_AUTONOM },
+      () =>
+        runLukasTurn({
+          history: [{ role: "user", content: brief }],
+          userText: brief,
+          // Ziele und Tagebuch stehen oben im Auftrag — nicht noch einmal.
+          ohneZieleUndTagebuch: true,
+        }),
+    );
 
     const summary = (result || "").trim();
     logger.info({ laenge: summary.length }, "Autonomer Lauf abgeschlossen");

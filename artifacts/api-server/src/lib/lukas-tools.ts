@@ -13,6 +13,34 @@ import { githubRequest, resolveGithubOwner, ownRepoRef } from "./github";
 import { createProposal } from "./proposals";
 import { MCP_TOOL_PREFIX, activeServers, callMcpTool } from "./mcp";
 import { runSubagent, subagentUebersicht, createSubagent, fixError } from "./subagents";
+import { uebergabenText } from "./uebergaben";
+
+/**
+ * Wohin der heutige Verbrauch geflossen ist.
+ *
+ * Leer, solange nichts gebucht wurde — dann steht auch nichts da, statt einer
+ * Ueberschrift ohne Inhalt.
+ */
+async function herkunftsAbschnitt(): Promise<string> {
+  const zeilen = await herkunftHeute();
+  if (!zeilen.length) return "";
+  const gesamt = zeilen.reduce((n, z) => n + z.tokens, 0);
+  if (gesamt <= 0) return "";
+  return (
+    `\n\nWOHIN DER HEUTIGE VERBRAUCH GING (aus der Datenbank, übersteht Neustarts — ` +
+    `${gesamt.toLocaleString("de-DE")} Tokens):\n` +
+    zeilen
+      .map(
+        (z) =>
+          `- ${z.herkunft}: ${z.tokens.toLocaleString("de-DE")} Tokens in ${z.aufrufe} Aufrufen ` +
+          `(${Math.round((z.tokens / gesamt) * 100)} %)`,
+      )
+      .join("\n") +
+    `\n\n"chat" ist Issas eigene Frage. Alles andere lief ohne ihn — steht dort viel, ` +
+    `sieh mit read_uebergaben nach, welcher Mitarbeiter es war.`
+  );
+}
+import { herkunftHeute } from "./tagesbudget";
 import { meldeDichBeiIssa } from "./melden";
 import { starteAnruf } from "./telefon";
 import { fehlerGruppen } from "./debug-log";
@@ -330,6 +358,23 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       description:
         "Zeig, welches Modell wie viele Tokens verbraucht hat, seit der Server läuft. Nimm das, wenn Issa nach Kosten fragt oder wenn du wissen willst, ob du gerade unnötig auf dem teuren Modell arbeitest. Zwischen luna, terra und sol liegt ein Vielfaches — wenn sol ganz oben steht, obwohl es nur Gespräche waren, stimmt etwas mit der Modellwahl nicht, und das gehört durch fix_error.",
       parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_uebergaben",
+      description:
+        "Sieh nach, was dein Team zuletzt gemacht hat: wer wofür beauftragt wurde, was es gekostet hat, wie lang die Antwort war und ob sie bei der Übergabe gekürzt werden musste. Nimm das, wenn eine Kette ein schwaches Ergebnis geliefert hat — die nützliche Frage ist dann nicht OB es schiefging, sondern WO. Und nimm es, wenn dein Verbrauch hoch war: hier steht, welcher Mitarbeiter ihn verursacht hat.",
+      parameters: {
+        type: "object",
+        properties: {
+          anzahl: {
+            type: "integer",
+            description: "Wie viele der letzten Übergaben. Standard 15, höchstens 50.",
+          },
+        },
+      },
     },
   },
   {
@@ -1371,9 +1416,26 @@ export async function executeLukasTool(
               `verändert etwas den Anfang des Prompts zwischen den Runden.`
             : ` Der wiederholte Teil des Prompts wird also nicht jedes Mal voll bezahlt.`) +
         `\n\nZur Einordnung: sol ist das teure Modell, terra das mittlere, luna das günstige. ` +
-        `Steht sol weit oben, obwohl es überwiegend Gespräche waren, arbeitest du zu teuer.`
+        `Steht sol weit oben, obwohl es überwiegend Gespräche waren, arbeitest du zu teuer.` +
+        /*
+         * Und die zweite Frage, die oben fehlte.
+         *
+         * "Welches Modell" beantwortet nicht "wer hat es geschickt". An dem
+         * Tag mit 4,2 Millionen Tokens war genau das die Luecke: Chat,
+         * autonomer Lauf, Selbstheilung und neun Mitarbeiter laufen alle ueber
+         * denselben Modellpfad, und danach war nicht mehr zu unterscheiden,
+         * wessen Arbeit das Geld genommen hat.
+         *
+         * Diese Zahlen kommen aus der Datenbank, nicht aus dem Speicher — sie
+         * ueberleben also den Neustart, anders als die oben.
+         */
+        (await herkunftsAbschnitt())
       );
     }
+    case "read_uebergaben":
+      return await uebergabenText(
+        typeof input.anzahl === "number" ? Math.min(50, Math.max(1, input.anzahl)) : 15,
+      );
     case "read_diagnostics":
       return await leseDiagnose(typeof input.stunden === "number" ? input.stunden : 24);
     case "melde_dich_bei_issa":

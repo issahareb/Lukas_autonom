@@ -205,3 +205,88 @@ export const versandTable = pgTable(
 );
 
 export type Versand = typeof versandTable.$inferSelect;
+
+/*
+ * Wer den Tag verbraucht hat.
+ *
+ * DER ANLASS: an einem Tag standen 4,2 Millionen Tokens auf der Uhr, nach
+ * eigener Aussage drei Fragen. `lukas_tageskosten` konnte darauf nur
+ * antworten, WELCHES Modell das Geld genommen hat — nicht, wer es geschickt
+ * hat. Chat, autonomer Lauf, Selbstheilung und neun Mitarbeiter laufen alle
+ * ueber denselben Modellpfad und waren danach nicht mehr auseinanderzuhalten.
+ *
+ * WARUM EINE EIGENE TABELLE statt einer Spalte in `lukas_tageskosten`: der
+ * eindeutige Index dort liegt auf (tag, provider, model). Eine Herkunftsspalte
+ * muesste hinein, sonst faellt alles wieder in eine Zeile zusammen — und das
+ * heisst, den Index auf einer GETEILTEN Produktionsdatenbank zu loeschen und
+ * neu zu bauen. Die Migrations-README warnt genau davor, und der Deploy laeuft
+ * dort ueber `db:push` ohne jemanden, der eine Rueckfrage beantwortet. Eine
+ * neue Tabelle ist rein additiv: sie entsteht oder sie entsteht nicht, aber
+ * sie kann nichts kaputtmachen, was schon da ist.
+ *
+ * Es sind ohnehin zwei verschiedene Fragen. Das Budget will den Tagesgesamt-
+ * verbrauch (dafuer bleibt `lukas_tageskosten` unangetastet und bewaehrt); die
+ * Herkunft will wissen, wohin es geflossen ist. Getrennte Fragen, getrennte
+ * Tabellen — und die eine kann die andere nicht in Mitleidenschaft ziehen.
+ */
+export const verbrauchHerkunftTable = pgTable(
+  "lukas_verbrauch_herkunft",
+  {
+    id: serial("id").primaryKey(),
+    /** ISO-Datum in UTC, wie in lukas_tageskosten. */
+    tag: text("tag").notNull(),
+    /** "chat" | "autonom" | "selbstheilung" | "mitarbeiter:<slug>" | "unbekannt" */
+    herkunft: text("herkunft").notNull(),
+    aufrufe: integer("aufrufe").notNull().default(0),
+    rein: integer("rein").notNull().default(0),
+    raus: integer("raus").notNull().default(0),
+    ausCache: integer("aus_cache").notNull().default(0),
+    inCache: integer("in_cache").notNull().default(0),
+    aktualisiert: timestamp("aktualisiert").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("lukas_verbrauch_herkunft_idx").on(t.tag, t.herkunft)],
+);
+
+export type VerbrauchHerkunft = typeof verbrauchHerkunftTable.$inferSelect;
+
+/*
+ * Das Uebergabeprotokoll des Teams.
+ *
+ * Wenn eine Kette aus drei Mitarbeitern ein schwaches Ergebnis liefert, ist
+ * die einzige nuetzliche Frage: WO ist es gebrochen? Hat der Fehleranalyst
+ * eine duenne Diagnose geliefert, hat der Entwickler sie ignoriert, hat der
+ * Pruefer durchgewunken? Bisher stand davon nichts irgendwo — ein
+ * `logger.info` beim Start und ein Einsatzzaehler, das war alles. Danach war
+ * die Kette nicht mehr nachvollziehbar, sondern nur noch ihr Ergebnis da.
+ *
+ * Ein nachvollziehbarer Fehlschlag laesst sich korrigieren. Ein
+ * unerklaerlicher nicht.
+ *
+ * Auftrag und Ergebnis stehen GEKUERZT drin, nicht vollstaendig: das hier ist
+ * eine Spur zum Nachsehen, kein zweites Gedaechtnis. Vollstaendige
+ * Werkzeugergebnisse haben ihren Platz im Gespraech.
+ */
+export const uebergabenTable = pgTable(
+  "lukas_uebergaben",
+  {
+    id: serial("id").primaryKey(),
+    /** Slug des Mitarbeiters — Grundrolle oder selbst eingestellt. */
+    helfer: text("helfer").notNull(),
+    /** Wer ihn gerufen hat: dieselben Werte wie in lukas_verbrauch_herkunft. */
+    herkunft: text("herkunft").notNull().default("unbekannt"),
+    auftrag: text("auftrag").notNull().default(""),
+    ergebnis: text("ergebnis").notNull().default(""),
+    /** Volle Laenge der Antwort — damit sichtbar ist, wie viel hier fehlt. */
+    ergebnisZeichen: integer("ergebnis_zeichen").notNull().default(0),
+    /** Wurde die Antwort bei der Uebergabe abgeschnitten? */
+    gekuerzt: boolean("gekuerzt").notNull().default(false),
+    tokens: integer("tokens").notNull().default(0),
+    dauerMs: integer("dauer_ms").notNull().default(0),
+    /** Gescheitert? Dann steht hier der Grund statt eines Ergebnisses. */
+    fehler: text("fehler"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("lukas_uebergaben_zeit_idx").on(t.createdAt)],
+);
+
+export type Uebergabe = typeof uebergabenTable.$inferSelect;

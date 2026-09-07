@@ -57,23 +57,13 @@ graphify-out/
 # Gedaechtnis-Vault (generierte Sicht auf die DB; Obsidian-lesbar)
 memory-vault/
 __pycache__/
-.consent-check-*/
-.higgsfield-check-*/
-.sse-check-*/
-.memory-check-*/
-.mcp-check-*/
-.schleife-check-*/
-.melde-check-*/
-.ausgabe-check-*/
-.heilung-check-*/
-.lokal-check-*/
-.vorschlag-check-*/
-.gehirn-check-*/
-.spar-check-*/
-.schutz-check-*/
-.ghbuendel-check-*/
-.policy-check-*/
-.bench-*/
 
-# Reste abgebrochener Prüfläufe (scripts/check-browser-bedienen.mjs)
-.browser-check-*
+# Reste abgebrochener Prüfläufe.
+#
+# Jede scripts/check-*.mjs legt ihr Arbeitsverzeichnis als mkdtemp(".<name>-check-")
+# an und raeumt es am Ende weg. Bricht ein Lauf vorher ab — und beim Suchen
+# eines Fehlers bricht man staendig ab — bleibt es liegen und stuende sonst
+# zum Einchecken bereit. EIN Muster statt einer Zeile je Pruefung: sonst
+# fehlt genau die Zeile fuer die Pruefung, die man gerade geschrieben hat.
+.*-check-*/
+.bench-*/

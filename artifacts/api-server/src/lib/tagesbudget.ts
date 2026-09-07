@@ -27,7 +27,7 @@
  * Budget, das kostenlose Arbeit bremst, waere schlicht falsch.
  */
 import { db } from "@workspace/db";
-import { tageskostenTable } from "@workspace/db";
+import { tageskostenTable, verbrauchHerkunftTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -51,8 +51,26 @@ export async function verbucheTag(input: {
   raus: number;
   ausCache?: number;
   inCache?: number;
+  /** "chat" | "autonom" | "selbstheilung" | "mitarbeiter:<slug>" | "unbekannt" */
+  herkunft?: string;
 }): Promise<void> {
   if (!kostenpflichtig(input.provider)) return;
+  /*
+   * Zwei Buecher, zwei Fragen, und bewusst unabhaengig voneinander.
+   *
+   * Das Tagesbuch beantwortet "wie viel hat heute gekostet" und traegt das
+   * Budget — daran wird nichts geaendert, es ist erprobt. Das Herkunftsbuch
+   * beantwortet "wohin ist es geflossen". Die Unabhaengigkeit steckt im
+   * eigenen try/catch von verbucheHerkunft: faellt seine Tabelle aus, merkt
+   * das Tagesbuch davon nichts.
+   *
+   * AWAIT, nicht "void": eine Buchung, deren Zeitpunkt unbestimmt ist, kann
+   * niemand pruefen — weder ein Test noch Lukas, der gleich danach
+   * read_usage aufruft und sich wundert, dass seine eigene Runde fehlt. Es
+   * kostet hier nichts, weil verbucheTag ohnehin von niemandem erwartet wird
+   * (model-client ruft es nebenlaeufig auf).
+   */
+  await verbucheHerkunft(input);
   try {
     await db
       .insert(tageskostenTable)
@@ -85,6 +103,80 @@ export async function verbucheTag(input: {
   } catch (err) {
     // Buchhaltung darf einen Zug nie kippen.
     logger.debug({ err }, "Tagesverbrauch nicht gebucht");
+  }
+}
+
+/*
+ * Dasselbe noch einmal, nach Herkunft statt nach Modell.
+ *
+ * Warum das nicht dieselbe Zeile sein kann: der eindeutige Index von
+ * `lukas_tageskosten` liegt auf (tag, provider, model). Die Herkunft
+ * muesste hinein, sonst fielen Chat und Selbstheilung wieder in eine Zeile
+ * zusammen — und das hiesse, einen Index auf einer geteilten
+ * Produktionsdatenbank zu loeschen und neu zu bauen, im Deploy, ohne dass
+ * jemand eine Rueckfrage beantworten koennte.
+ *
+ * Eigene Fehlerbehandlung, absichtlich: die Herkunft ist eine Diagnosehilfe.
+ * Sie darf das Tagesbudget nicht mit sich reissen, wenn ihre Tabelle nach
+ * einem Deploy noch gar nicht existiert.
+ */
+async function verbucheHerkunft(input: {
+  rein: number;
+  raus: number;
+  ausCache?: number;
+  inCache?: number;
+  herkunft?: string;
+}): Promise<void> {
+  const woher = (input.herkunft ?? "unbekannt").slice(0, 80);
+  try {
+    await db
+      .insert(verbrauchHerkunftTable)
+      .values({
+        tag: heute(),
+        herkunft: woher,
+        aufrufe: 1,
+        rein: input.rein,
+        raus: input.raus,
+        ausCache: input.ausCache ?? 0,
+        inCache: input.inCache ?? 0,
+      })
+      .onConflictDoUpdate({
+        target: [verbrauchHerkunftTable.tag, verbrauchHerkunftTable.herkunft],
+        set: {
+          aufrufe: sql`${verbrauchHerkunftTable.aufrufe} + 1`,
+          rein: sql`${verbrauchHerkunftTable.rein} + ${input.rein}`,
+          raus: sql`${verbrauchHerkunftTable.raus} + ${input.raus}`,
+          ausCache: sql`${verbrauchHerkunftTable.ausCache} + ${input.ausCache ?? 0}`,
+          inCache: sql`${verbrauchHerkunftTable.inCache} + ${input.inCache ?? 0}`,
+          aktualisiert: new Date(),
+        },
+      });
+  } catch (err) {
+    logger.debug({ err }, "Herkunft nicht gebucht");
+  }
+}
+
+/**
+ * Wohin der Tag geflossen ist — absteigend nach Verbrauch.
+ *
+ * Genau die Ansicht, die an dem 4,2-Millionen-Tag gefehlt hat.
+ */
+export async function herkunftHeute(): Promise<Array<{ herkunft: string; tokens: number; aufrufe: number }>> {
+  try {
+    const zeilen = await db
+      .select()
+      .from(verbrauchHerkunftTable)
+      .where(eq(verbrauchHerkunftTable.tag, heute()));
+    return zeilen
+      .map((z) => ({
+        herkunft: z.herkunft,
+        tokens: z.rein + z.raus + z.ausCache + z.inCache,
+        aufrufe: z.aufrufe,
+      }))
+      .sort((a, b) => b.tokens - a.tokens);
+  } catch (err) {
+    logger.debug({ err }, "Herkunft nicht lesbar");
+    return [];
   }
 }
 

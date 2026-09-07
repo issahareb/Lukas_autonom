@@ -20,6 +20,7 @@ import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
 import type { Response } from "express";
 import { Arbeitsschleife } from "../lib/arbeitsschleife";
+import { imZug } from "../lib/zug";
 
 const router = Router();
 
@@ -246,7 +247,16 @@ async function buildAttachmentParts(
 // Der alte /anthropic-Pfad bleibt aus Kompatibilitaetsgruenden bestehen. Intern
 // ist er providerunabhaengig. Spezialmodell-Ausgaben werden NICHT direkt an die
 // UI gestreamt; sichtbar ist nur die einheitliche Lukas-Ausgabeschicht.
-router.post("/anthropic/conversations/:id/messages", async (req, res) => {
+/*
+ * Der Chat laeuft unter der Herkunft "chat" und OHNE Deckel.
+ *
+ * Beides mit Absicht. Die Herkunft, damit in der Buchhaltung steht, was
+ * wirklich Issas Fragen gekostet haben — an dem Tag mit 4,2 Millionen Tokens
+ * war genau das die unbeantwortbare Frage. Kein Deckel, weil das hier Issa
+ * ist: gedeckelt wird, was ohne Aufsicht laeuft, nicht das Gespraech.
+ */
+router.post("/anthropic/conversations/:id/messages", async (req, res) =>
+  imZug({ herkunft: "chat", istIssa: true }, async () => {
   /*
    * Lebenszeichen auf der Leitung.
    *
@@ -677,6 +687,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     // Unterhaltung fuer immer als beschaeftigt und der Client fragt ewig nach.
     if (laufendeId !== null) laufendeZuege.delete(laufendeId);
   }
-});
+  }),
+);
 
 export default router;

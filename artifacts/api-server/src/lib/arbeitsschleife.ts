@@ -38,6 +38,8 @@
  *  5. Erkennung AEHNLICHER Aufrufe, nicht nur identischer.
  */
 
+import { deckelErreicht } from "./zug";
+
 /** Notbremse gegen echte Endlosschleifen. Kein Arbeitslimit. */
 export const NOTBREMSE = Number(process.env.LUKAS_MAX_TOOL_ROUNDS ?? 200);
 
@@ -138,14 +140,22 @@ export class Arbeitsschleife {
     return Math.max(jeTokens, jeZeit);
   }
 
-  /** Nur Notbremse und Budget — sonst laeuft er, solange er arbeitet. */
+  /** Nur Notbremse, Budget und der Deckel der Aufgabe — sonst laeuft er. */
   darfWeiter(): boolean {
-    return this.runde < NOTBREMSE && this.budgetAnteil() < 1.5;
+    return this.runde < NOTBREMSE && this.budgetAnteil() < 1.5 && !deckelErreicht();
   }
 
   /** Warum Schluss war, falls Schluss war. Fuer Protokoll und Antwort. */
   abbruchGrund(): string | null {
     if (this.runde >= NOTBREMSE) return `Notbremse nach ${this.runde} Runden`;
+    /*
+     * Der Deckel VOR dem eigenen Budget, weil er die ehrlichere Auskunft ist:
+     * ein Mitarbeiter, der nach zwei Runden aufhoert, hat sein eigenes Budget
+     * nicht ausgereizt — die Aufgabe war schon vorher am Ende. Stuende hier
+     * "Budget aufgebraucht", suchte Lukas den Fehler beim Helfer.
+     */
+    const deckel = deckelErreicht();
+    if (deckel) return deckel;
     if (this.budgetAnteil() >= 1.5) {
       const minuten = Math.round((Date.now() - this.begonnen) / 60000);
       return `Budget aufgebraucht (${this.tokens.toLocaleString("de-DE")} Tokens, ${minuten} min)`;

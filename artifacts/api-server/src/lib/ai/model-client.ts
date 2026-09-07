@@ -4,6 +4,7 @@ import { logger } from "../logger";
 import { fitLukasContext } from "./context-window";
 import type { ModelRoute } from "./model-router";
 import { localBaseUrl } from "./model-router";
+import { herkunft, zugVerbraucht } from "../zug";
 import { CACHE_TRENNER, ohneTrenner, systemBloecke } from "./cache-marke";
 
 export type LukasToolCall = {
@@ -389,12 +390,31 @@ function merkeVerbrauch(model: string, usage: any, provider = "unbekannt"): { re
    * Die Buchhaltung ist ohnehin nebenlaeufig ("void"), also kostet der spaete
    * Import nichts: er passiert einmal beim ersten Modellaufruf.
    */
+  const rein = cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet;
+  const raus = Number(usage.output_tokens ?? usage.completion_tokens ?? 0);
+
+  /*
+   * Auf die laufende Aufgabe buchen, BEVOR die Datenbank drankommt.
+   *
+   * Der Deckel muss auch dann greifen, wenn Postgres gerade nicht erreichbar
+   * ist — sonst waere ein Datenbankausfall ausgerechnet der Moment, in dem
+   * die Kostenbremse verschwindet. Der Zaehler liegt deshalb im Speicher und
+   * haengt an nichts.
+   *
+   * Fuer die Aufgabe zaehlt der GANZE Eingang, den gecachten Teil
+   * eingeschlossen: guenstiger heisst nicht kostenlos, und ein Zug, der sich
+   * an billigen Wiederholungen festfrisst, ist genau der Fall, den der Deckel
+   * fangen soll.
+   */
+  zugVerbraucht(gemeldet + raus);
+
   void import("../tagesbudget").then(({ verbucheTag }) =>
     verbucheTag({
-    provider,
-    model,
-    rein: cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet,
-    raus: Number(usage.output_tokens ?? usage.completion_tokens ?? 0),
+      provider,
+      model,
+      herkunft: herkunft(),
+      rein,
+      raus,
       ausCache: cache.gelesen,
       inCache: cache.geschrieben,
     }),

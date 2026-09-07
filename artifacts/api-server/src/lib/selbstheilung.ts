@@ -1,5 +1,10 @@
 import { fehlerGruppen, recordDebugEvent, type Fehlergruppe } from "./debug-log";
 import { fixError } from "./subagents";
+import { budgetTor } from "./tagesbudget";
+import { imZug } from "./zug";
+
+/** Obergrenze fuer eine Heilungskette, alle vier Laeufe zusammen. */
+const DECKEL_HEILUNG = Number(process.env.LUKAS_DECKEL_HEILUNG ?? 600_000);
 import { runLukasTurn } from "./lukas-brain";
 import { logger } from "./logger";
 import { mitSperre } from "./lauf-sperre";
@@ -73,6 +78,25 @@ export async function naechsterFehler(): Promise<Fehlergruppe | null> {
 }
 
 export async function runSelbstheilung(): Promise<void> {
+  /*
+   * Das Tagesbudget zuerst, und das fehlte hier ganz.
+   *
+   * Diese Kette laeuft alle zwei Stunden von selbst und startet, sobald sich
+   * IRGENDEIN Fehler dreimal in 24 Stunden haeuft — vier volle Agentenlaeufe
+   * (Analyst, Entwickler, Pruefer, dann Lukas), ohne dass jemand danach
+   * gefragt hat. Der autonome Lauf fragt an dieser Stelle seit jeher nach dem
+   * Budget; die Selbstheilung nicht, obwohl sie oefter feuert. An einem Tag
+   * mit vielen Stoerungen ist sie damit ausgerechnet dann am teuersten, wenn
+   * ohnehin etwas im Argen liegt.
+   *
+   * istIssa: false — das hier hat niemand angefordert.
+   */
+  const tor = await budgetTor({ istIssa: false });
+  if (!tor.weiter) {
+    logger.warn({ grund: tor.grund }, "Selbstheilung: Tagesbudget erreicht, keine Kette");
+    return;
+  }
+
   let gruppe: Fehlergruppe | null = null;
   try {
     gruppe = await naechsterFehler();
@@ -92,11 +116,20 @@ export async function runSelbstheilung(): Promise<void> {
     "Selbstheilung: wiederkehrender Fehler gefunden, Kette läuft",
   );
 
+  const fehler = gruppe;
   try {
+    /*
+     * EIN Zug ueber die ganze Kette: drei Mitarbeiter und Lukas' Entscheidung
+     * danach teilen sich Zaehler und Deckel. Vier getrennte Budgets waeren
+     * genau die Buchhaltung, die diesen Lauf unsichtbar teuer gemacht hat.
+     */
+    await imZug(
+      { herkunft: "selbstheilung", istIssa: false, deckel: DECKEL_HEILUNG },
+      async () => {
     const gutachten = await fixError(
-      gruppe.beispiel,
-      `Dieser Fehler ist in den letzten ${FENSTER_STUNDEN} Stunden ${gruppe.anzahl}× ` +
-        `aufgetreten, im Bereich "${gruppe.scope}". Zuletzt: ${gruppe.zuletzt}. ` +
+      fehler.beispiel,
+      `Dieser Fehler ist in den letzten ${FENSTER_STUNDEN} Stunden ${fehler.anzahl}× ` +
+        `aufgetreten, im Bereich "${fehler.scope}". Zuletzt: ${fehler.zuletzt}. ` +
         `Niemand hat ihn gemeldet — er ist im Fehlerprotokoll aufgefallen.`,
     );
 
@@ -105,15 +138,15 @@ export async function runSelbstheilung(): Promise<void> {
      * passiert, sondern er — genau wie bei einem Fehler, den Issa meldet.
      */
     await runLukasTurn({
-      userText: `Wiederkehrender Fehler: ${gruppe.beispiel.slice(0, 200)}`,
+      userText: `Wiederkehrender Fehler: ${fehler.beispiel.slice(0, 200)}`,
       history: [
         {
           role: "user",
           content:
             `Niemand hat dich darum gebeten — dir ist in deinem eigenen Fehlerprotokoll ` +
             `aufgefallen, dass sich etwas häuft, und du hast es untersuchen lassen.\n\n` +
-            `DER FEHLER (${gruppe.anzahl}× in ${FENSTER_STUNDEN} Stunden, Bereich "${gruppe.scope}"):\n` +
-            `${gruppe.beispiel}\n\n` +
+            `DER FEHLER (${fehler.anzahl}× in ${FENSTER_STUNDEN} Stunden, Bereich "${fehler.scope}"):\n` +
+            `${fehler.beispiel}\n\n` +
             `${gutachten}\n\n` +
             `Entscheide jetzt:\n` +
             `- Überzeugt dich die Änderung? Dann mach einen propose_code_change daraus, ` +
@@ -128,8 +161,10 @@ export async function runSelbstheilung(): Promise<void> {
         },
       ],
     });
+      },
+    );
   } catch (err) {
-    logger.warn({ err, signatur: gruppe.signatur }, "Selbstheilung fehlgeschlagen");
+    logger.warn({ err, signatur: fehler.signatur }, "Selbstheilung fehlgeschlagen");
     recordDebugEvent(SCOPE, err);
   }
 }
