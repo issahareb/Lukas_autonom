@@ -38,6 +38,16 @@ export const db = {
 };
 export const desc = () => ({});
 export const eq = () => ({});
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
+export const asc = () => ({});
 export const inArray = () => ({});
 export const logger = { info() {}, warn() {}, error() {} };
 export function selfBranch() { return "main"; }

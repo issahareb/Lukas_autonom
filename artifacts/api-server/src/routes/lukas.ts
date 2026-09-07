@@ -436,6 +436,7 @@ router.put("/lukas/zugaenge", async (req, res) => {
         sitzung: String(b.sitzung ?? ""),
         feld: String(b.feld ?? ""),
         wert: String(b.wert ?? ""),
+        host: typeof b.host === "string" ? b.host : undefined,
         notiz: typeof b.notiz === "string" ? b.notiz : undefined,
       }),
     );

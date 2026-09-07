@@ -30,6 +30,15 @@ writeFileSync(
 export const approvals = t("approvals");
 export const meldungen = t("meldungen");
 export const eq = (f, w) => (z) => z[f] === w;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
 export const and = (...b) => (z) => b.filter(Boolean).every((fn) => fn(z));
 export const desc = (f) => ({ feld: String(f), richtung: -1 });
 export const asc = (f) => ({ feld: String(f), richtung: 1 });

@@ -44,6 +44,23 @@ export const zugaenge = pgTable(
     feld: text("feld").notNull(),
     /** iv:authTag:ciphertext, alles base64url. Nie der Klartext. */
     geheim: text("geheim").notNull(),
+    /*
+     * WO dieser Wert eingesetzt werden darf — der Hostname, z.B.
+     * "higgsfield.ai". Leer heisst: ueberall, das alte Verhalten.
+     *
+     * WARUM DAS FEHLTE UND WARUM ES SCHLIMM WAR: der Wert war an einen
+     * SITZUNGSNAMEN gebunden, und den waehlt Lukas selbst. Ein Schrittplan
+     * durfte also erst irgendeine Seite oeffnen und dann {{PASSWORT}} in ein
+     * Feld dort tippen — der Container setzte den echten Wert ein, ohne je zu
+     * pruefen, wo er landet.
+     *
+     * Dass Lukas den Wert nicht kennt, half dabei GAR NICHTS: er musste ihn
+     * nicht kennen, der Server hat ihn eingesetzt. Eine praeparierte Seite
+     * ("melde dich hier an, um fortzufahren") haette gereicht.
+     *
+     * Der Host ist deshalb Teil des Geheimnisses, nicht Beiwerk.
+     */
+    host: text("host").notNull().default(""),
     /** Wofür das gut ist — für Issa, nicht für Lukas. Nie das Geheimnis selbst. */
     notiz: text("notiz").notNull().default(""),
     /*

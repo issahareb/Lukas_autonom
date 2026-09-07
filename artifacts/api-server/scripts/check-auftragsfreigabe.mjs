@@ -37,6 +37,14 @@ writeFileSync(
   `const t = (n) => new Proxy({ __name: n }, { get: (o, k) => (k === "__name" ? n : String(k)) });
 export const approvals = t("approvals");
 export const eq = (f, w) => (z) => z[f] === w;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
+export const asc = () => ({});
 export const gt = (f, w) => (z) => {
   const a = z[f], b = w;
   if (a instanceof Date || b instanceof Date) return new Date(a).getTime() > new Date(b).getTime();
@@ -44,6 +52,8 @@ export const gt = (f, w) => (z) => {
 };
 export const and = (...b) => (z) => b.filter(Boolean).every((fn) => fn(z));
 export const desc = () => ({});
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
 export const sql = (teile, ...werte) => ({ __minusEins: true });
 export const logger = { info(){}, warn(){}, error(){}, debug(){} };
 export const isIsolatedBackend = () => true;
@@ -277,6 +287,74 @@ globalThis.__zeilen = [];
 
   const zweite = await checkPolicy("email_send", { an: "anderer@x.de", text: "Noch was" }, 7);
   pruefe("die nächste Mail wird wieder angefragt", zweite.allow === false);
+}
+
+// ── 11. Eine Einmalfreigabe gilt NUR in ihrer Unterhaltung ──────────────
+/*
+ * Der Fund aus dem Audit vom 06.09., und er stimmte: eingelöst wurde vorher
+ * allein über den Argument-Hash. Eine Freigabe, die Issa im Chat erteilt hat,
+ * war damit überall einlösbar — auch im autonomen Lauf um drei Uhr nachts
+ * oder in einem WhatsApp-Faden mit einem Fremden, sobald dort dieselben
+ * Argumente entstanden.
+ *
+ * Der Hash sagt WAS getan wird. Er sagt nicht, WOFÜR jemand ja gesagt hat.
+ */
+globalThis.__zeilen = [];
+{
+  // Issa gibt in Unterhaltung 7 frei.
+  const erst = await checkPolicy("email_send", { an: "kunde@x.de", text: "Angebot" }, 7);
+  pruefe("die Anfrage entsteht in Unterhaltung 7", erst.allow === false);
+  globalThis.__zeilen[0].status = "allowed";
+
+  // Ein anderer Faden versucht, dieselbe Freigabe einzulösen.
+  const fremd = await checkPolicy("email_send", { an: "kunde@x.de", text: "Angebot" }, 999);
+  pruefe("eine andere Unterhaltung kann sie NICHT einlösen", fremd.allow === false);
+
+  // Der autonome Lauf (ohne Unterhaltung) auch nicht.
+  const autonom = await checkPolicy("email_send", { an: "kunde@x.de", text: "Angebot" }, undefined);
+  pruefe("der autonome Lauf kann sie NICHT einlösen", autonom.allow === false);
+
+  // Und in ihrer eigenen Unterhaltung greift sie.
+  const eigen = await checkPolicy("email_send", { an: "kunde@x.de", text: "Angebot" }, 7);
+  pruefe("in Unterhaltung 7 wird sie eingelöst", eigen.allow === true);
+}
+
+// ── 12. Eine Freigabe OHNE Unterhaltung bleibt überall gültig ───────────
+/*
+ * Entsteht die Anfrage im Hintergrundlauf, gibt es keine Unterhaltung. Würde
+ * die Bindung sie dann einfordern, wäre eine solche Anfrage nie einlösbar —
+ * Issa könnte im Dashboard klicken, und nichts passierte.
+ */
+globalThis.__zeilen = [];
+{
+  const erst = await checkPolicy("email_send", { an: "a@b.de", text: "Nachts" }, undefined);
+  pruefe("auch ohne Unterhaltung entsteht eine Anfrage", erst.allow === false);
+  globalThis.__zeilen[0].conversationId = null;
+  globalThis.__zeilen[0].status = "allowed";
+
+  const spaeter = await checkPolicy("email_send", { an: "a@b.de", text: "Nachts" }, undefined);
+  pruefe("und sie ist im Hintergrundlauf einlösbar", spaeter.allow === true);
+}
+
+// ── 13. Eine ungebundene Freigabe darf auch im Chat eingelöst werden ────
+/*
+ * Bewusst so, und deshalb festgehalten: entsteht eine Anfrage im
+ * Hintergrundlauf (ohne Unterhaltung) und Issa gibt sie im Dashboard frei,
+ * dann soll sie auch greifen, wenn er die Sache anschließend im Chat
+ * weiterverfolgt. Sonst hätte er geklickt, und nichts wäre passiert.
+ *
+ * Die Grenze bleibt trotzdem eng: Werkzeug und Argumente müssen exakt
+ * stimmen, und eine Freigabe MIT Unterhaltung gilt nur dort (Fall 11).
+ */
+globalThis.__zeilen = [];
+{
+  const erst = await checkPolicy("email_send", { an: "c@d.de", text: "Aus dem Lauf" }, undefined);
+  pruefe("die Anfrage entsteht ohne Unterhaltung", erst.allow === false);
+  globalThis.__zeilen[0].conversationId = null;
+  globalThis.__zeilen[0].status = "allowed";
+
+  const imChat = await checkPolicy("email_send", { an: "c@d.de", text: "Aus dem Lauf" }, 7);
+  pruefe("und ist danach auch aus dem Chat einlösbar", imChat.allow === true);
 }
 
 if (fehler > 0) process.exit(1);

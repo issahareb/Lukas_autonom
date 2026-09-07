@@ -122,11 +122,31 @@ pruefe(
 pruefe("das Bildschirmfoto kommt mit", ergebnis.bild === "BILDSCHIRMFOTO-BASE64");
 
 // ── 2. Der Plan geht vollständig hinüber ─────────────────────────────────
-const planEingabe = globalThis.__ssh.find((a) => a.befehl.includes("plan.json"))?.eingabe ?? "";
+const planEingabe = globalThis.__ssh.find((a) => /plan-[0-9a-f]+\.json/.test(a.befehl))?.eingabe ?? "";
 pruefe("der Plan wird im Container abgelegt", planEingabe.length > 0);
 const plan = JSON.parse(planEingabe);
 pruefe("mit allen vier Schritten", plan.length === 4);
 pruefe("und mit dem Platzhalter statt des Werts", plan[2].text === "{{PASSWORT}}");
+
+/*
+ * Jeder Aufruf bekommt eine EIGENE Plandatei.
+ *
+ * Vorher schrieben alle nach /browser/plan.json. Zwei gleichzeitige Aufträge —
+ * Issa im Chat und der autonome Lauf — überschrieben sich gegenseitig: der
+ * eine führte den Plan des anderen aus. Auf einer Seite, auf der man
+ * eingeloggt ist, ist das kein Schönheitsfehler.
+ */
+{
+  const planBefehle = globalThis.__ssh.filter((a) => /plan-[0-9a-f]+\.json/.test(a.befehl));
+  pruefe("die Plandatei trägt einen zufälligen Namen", planBefehle.length > 0);
+  pruefe(
+    "und heißt NICHT mehr für alle gleich",
+    !globalThis.__ssh.some((a) => /\bplan\.json\b/.test(a.befehl)),
+  );
+  const laufBefehl = globalThis.__ssh.find((a) => a.befehl.includes("node bedienen.cjs"))?.befehl ?? "";
+  pruefe("der Lauf benutzt genau diese Datei", /plan-[0-9a-f]+\.json/.test(laufBefehl));
+  pruefe("und räumt sie danach weg", /rm -f plan-[0-9a-f]+\.json/.test(laufBefehl));
+}
 
 // ── 3. Das Passwort — die eigentliche Prüfung ────────────────────────────
 pruefe("das Passwort steht NICHT im Schrittplan", !planEingabe.includes(GEHEIM));

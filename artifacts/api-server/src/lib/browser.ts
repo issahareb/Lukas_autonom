@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { sshExec, shQuote } from "./code-sandbox";
 import { BROWSER_SCRIPT } from "./browser-script";
 import { BROWSER_OPERATOR_SCRIPT } from "./browser-operator-script";
@@ -268,6 +269,14 @@ export async function bedienePage(
   sitzung: string,
   schritte: Schritt[],
   zugang?: Record<string, string>,
+  /*
+   * Feldname -> erlaubter Hostname. Wird als eigene Umgebungsvariable
+   * uebergeben, NICHT im Plan: der Plan kommt vom Modell, diese Zuordnung
+   * kommt aus der Datenbank. Stuende sie im Plan, koennte ein Schrittplan sie
+   * mitliefern und damit selbst bestimmen, wo das Passwort eingesetzt wird —
+   * genau die Luecke, gegen die das hier steht.
+   */
+  hosts?: Record<string, string>,
 ): Promise<BedienErgebnis> {
   if (!Array.isArray(schritte) || schritte.length === 0) {
     return { ok: false, fehler: "Kein Schritt angegeben." };
@@ -286,8 +295,21 @@ export async function bedienePage(
     return { ok: false, fehler: `Skript liess sich nicht ablegen: ${ablegen.stderr.slice(0, 300)}` };
   }
 
+  /*
+   * EIGENE PLANDATEI JE AUFRUF.
+   *
+   * Vorher schrieben ALLE Aufrufe nach /browser/plan.json. Zwei gleichzeitige
+   * Auftraege — Issa im Chat und der autonome Lauf, oder zwei Werkzeuge in
+   * derselben Runde — ueberschrieben sich gegenseitig: der eine fuehrte den
+   * Plan des anderen aus. Auf einer Seite, auf der man eingeloggt ist, ist das
+   * kein Schoenheitsfehler.
+   *
+   * Der Name ist zufaellig, nicht fortlaufend: bei einem Neustart faengt ein
+   * Zaehler wieder bei eins an und trifft eine Datei, die noch laeuft.
+   */
+  const planName = `plan-${randomBytes(8).toString("hex")}.json`;
   const planAblegen = await sshExec(
-    `docker exec -i ${CONTAINER} sh -lc ${shQuote("cat > /browser/plan.json")}`,
+    `docker exec -i ${CONTAINER} sh -lc ${shQuote(`cat > /browser/${planName}`)}`,
     30000,
     JSON.stringify(schritte),
   );
@@ -306,9 +328,20 @@ export async function bedienePage(
     .map(([name, wert]) => `-e LUKAS_WEB_${name}=${shQuote(wert)}`)
     .join(" ");
 
+  /*
+   * Und die Bindung dazu: welcher Wert auf welchem Host eingesetzt werden
+   * darf. Getrennt vom Plan, weil der Plan vom Modell kommt und diese
+   * Zuordnung aus der Datenbank.
+   */
+  const hostBindung = Object.entries(hosts ?? {})
+    .filter(([name]) => /^[A-Z_]+$/.test(name))
+    .map(([name, host]) => `${name}=${host}`)
+    .join(",");
+  const hostVar = hostBindung ? ` -e LUKAS_WEB_HOSTS=${shQuote(hostBindung)}` : "";
+
   const lauf = await sshExec(
-    `docker exec ${umgebung} ${CONTAINER} sh -lc ${shQuote(
-      `cd /browser && node bedienen.cjs ${shQuote(sitzung)} plan.json`,
+    `docker exec ${umgebung}${hostVar} ${CONTAINER} sh -lc ${shQuote(
+      `cd /browser && node bedienen.cjs ${shQuote(sitzung)} ${planName}; rm -f ${planName}`,
     )}`,
     240000,
   );

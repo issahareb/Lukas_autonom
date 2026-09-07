@@ -32,6 +32,16 @@ export const meldungen = t("meldungen");
 export const debugLogTable = t("debug");
 
 export const eq = (feld, wert) => (z) => z[feld] === wert;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
+export const asc = () => ({});
 export const gte = (feld, wert) => (z) => {
   const a = z[feld], b = wert;
   if (a instanceof Date || b instanceof Date) return new Date(a).getTime() >= new Date(b).getTime();

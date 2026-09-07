@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
 import { approvals } from "@workspace/db";
-import { and, eq, gt, desc, sql } from "drizzle-orm";
+import { and, eq, gt, desc, sql, isNull, or } from "drizzle-orm";
 import { logger } from "./logger";
 import { isIsolatedBackend } from "./code-sandbox";
 import { isLinkFromEmail } from "./email";
@@ -582,6 +582,24 @@ export async function checkPolicy(
    * die Zeile tatsächlich von "allowed" auf "used" dreht, bekommt sie zurück.
    * Alle anderen gehen leer aus.
    */
+  /*
+   * AN DIE UNTERHALTUNG GEBUNDEN, in der sie erteilt wurde.
+   *
+   * Vorher wurde nur der Argument-Hash verglichen. Eine Freigabe, die Issa im
+   * Chat erteilt hat, war damit ueberall einloesbar — auch im autonomen Lauf
+   * um drei Uhr nachts oder in einem WhatsApp-Faden mit einem Fremden, sobald
+   * dort dieselben Argumente entstanden. Der Hash sagt WAS getan wird, nicht
+   * WOFUER jemand ja gesagt hat.
+   *
+   * Eine Freigabe ohne Unterhaltung (aus einem Hintergrundlauf) bleibt
+   * ungebunden — dort gibt es keine, und sie einzufordern hiesse, dass solche
+   * Anfragen nie einloesbar waeren.
+   */
+  const gebunden = (spalte: typeof approvals.conversationId) =>
+    conversationId === undefined || conversationId === null
+      ? isNull(spalte)
+      : or(eq(spalte, conversationId), isNull(spalte));
+
   const [redeemed] = await db
     .update(approvals)
     .set({ status: "used", decidedAt: now })
@@ -590,6 +608,7 @@ export async function checkPolicy(
         eq(approvals.argumentsHash, hash),
         eq(approvals.status, "allowed"),
         gt(approvals.expiresAt, now),
+        gebunden(approvals.conversationId),
       ),
     )
     .returning();
@@ -608,6 +627,7 @@ export async function checkPolicy(
         eq(approvals.argumentsHash, hash),
         eq(approvals.status, "pending"),
         gt(approvals.expiresAt, now),
+        gebunden(approvals.conversationId),
       ),
     )
     .limit(1);

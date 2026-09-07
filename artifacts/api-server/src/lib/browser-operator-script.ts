@@ -34,15 +34,78 @@ const fs = require('fs');
 const profil = process.argv[2] || 'standard';
 const plan = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 
-// Platzhalter fuellen. Steht die Variable nicht im Container, bleibt der
-// Platzhalter stehen — dann scheitert der Schritt sichtbar, statt still einen
-// leeren Wert einzutippen.
-function fuelle(text) {
+/*
+ * WO darf welcher Wert eingesetzt werden.
+ *
+ * DIE LUECKE, DIE DAS SCHLIESST: der Wert war an einen SITZUNGSNAMEN gebunden,
+ * und den waehlt Lukas selbst. Ein Schrittplan durfte also erst irgendeine
+ * Seite oeffnen und dann {{PASSWORT}} in ein Feld dort tippen — hier wurde der
+ * echte Wert eingesetzt, ohne je zu pruefen, wo er landet.
+ *
+ * Dass Lukas den Wert nicht kennt, half GAR NICHTS: er musste ihn nicht
+ * kennen, dieses Skript hat ihn eingesetzt. Eine praeparierte Seite ("melde
+ * dich hier an, um fortzufahren") haette gereicht, um Issas Passwort an einen
+ * Fremden zu tippen.
+ *
+ * Geprueft wird gegen die TATSAECHLICHE Adresse der offenen Seite, nicht gegen
+ * das, was im Plan steht: eine Weiterleitung nach dem Oeffnen wuerde sonst
+ * daran vorbeifuehren.
+ */
+const HOST_BINDUNG = Object.fromEntries(
+  (process.env.LUKAS_WEB_HOSTS || '')
+    .split(',')
+    .filter(Boolean)
+    .map((teil) => {
+      const i = teil.indexOf('=');
+      return [teil.slice(0, i), teil.slice(i + 1)];
+    }),
+);
+
+function hostPasst(seiteUrl, erlaubt) {
+  if (!erlaubt) return true; // Kein Host hinterlegt: alter Bestand, gilt ueberall.
+  try {
+    const wo = new URL(seiteUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const soll = String(erlaubt).toLowerCase().replace(/^www\./, '');
+    // Unterdomaenen gelten mit — "app.higgsfield.ai" bei "higgsfield.ai".
+    // Aber NICHT "higgsfield.ai.boese.example": deshalb der Punkt davor.
+    return wo === soll || wo.endsWith('.' + soll);
+  } catch {
+    return false;
+  }
+}
+
+/*
+ * Platzhalter fuellen. Steht die Variable nicht im Container, bleibt der
+ * Platzhalter stehen — dann scheitert der Schritt sichtbar, statt still einen
+ * leeren Wert einzutippen.
+ *
+ * seiteUrl ist die Adresse, auf der gerade getippt wird. Fehlt sie (etwa
+ * beim Oeffnen selbst), wird NICHT eingesetzt, was an einen Host gebunden ist:
+ * im Zweifel lieber ein sichtbar gescheiterter Schritt als ein Passwort an der
+ * falschen Stelle.
+ */
+function fuelle(text, seiteUrl) {
   if (typeof text !== 'string') return text;
-  return text.replace(/\{\{([A-Z_]+)\}\}/g, (ganz, name) => {
+  let verweigert = null;
+  const gefuellt = text.replace(/\{\{([A-Z_]+)\}\}/g, (ganz, name) => {
     const wert = process.env['LUKAS_WEB_' + name];
-    return wert === undefined ? ganz : wert;
+    if (wert === undefined) return ganz;
+    const erlaubt = HOST_BINDUNG[name];
+    if (erlaubt && !hostPasst(seiteUrl, erlaubt)) {
+      verweigert = { name, erlaubt, wo: seiteUrl };
+      return ganz;
+    }
+    return wert;
   });
+  if (verweigert) {
+    throw new Error(
+      'Der Wert {{' + verweigert.name + '}} ist an ' + verweigert.erlaubt +
+      ' gebunden und wird auf ' + (verweigert.wo || 'einer unbekannten Adresse') +
+      ' NICHT eingesetzt. Das ist Absicht: so kann ein Schrittplan ein Passwort ' +
+      'nicht auf einer fremden Seite eintippen.',
+    );
+  }
+  return gefuellt;
 }
 
 // Ein Ziel finden: erst als CSS-Auswahl, sonst ueber den sichtbaren Text.
@@ -75,7 +138,7 @@ async function ziel(page, wahl) {
     try {
       switch (s.art) {
         case 'oeffne': {
-          const antwort = await page.goto(fuelle(s.url), { waitUntil: 'domcontentloaded', timeout: 45000 });
+          const antwort = await page.goto(fuelle(s.url, null), { waitUntil: 'domcontentloaded', timeout: 45000 });
           try { await page.waitForLoadState('networkidle', { timeout: 12000 }); } catch {}
           bericht.push({ nummer, art: s.art, ok: true, info: 'HTTP ' + (antwort ? antwort.status() : '?') + ' ' + page.url() });
           break;
@@ -90,7 +153,7 @@ async function ziel(page, wahl) {
         case 'tippe': {
           const el = await ziel(page, s.wahl);
           await el.click({ timeout: 8000 }).catch(() => {});
-          await el.fill(fuelle(s.text), { timeout: s.timeout || 10000 });
+          await el.fill(fuelle(s.text, page.url()), { timeout: s.timeout || 10000 });
           // Absichtlich ohne den Wert: hier stuende sonst das Passwort.
           bericht.push({ nummer, art: s.art, ok: true, info: 'ausgefüllt: ' + s.wahl });
           break;
@@ -103,7 +166,7 @@ async function ziel(page, wahl) {
         }
         case 'waehle': {
           const el = await ziel(page, s.wahl);
-          await el.selectOption(fuelle(s.wert), { timeout: 10000 });
+          await el.selectOption(fuelle(s.wert, page.url()), { timeout: 10000 });
           bericht.push({ nummer, art: s.art, ok: true, info: 'gewählt: ' + s.wert });
           break;
         }

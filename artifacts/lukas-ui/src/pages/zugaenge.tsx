@@ -9,6 +9,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type Zugang = {
   sitzung: string;
   feld: string;
+  host: string;
   notiz: string;
   zuletztBenutzt: string | null;
   createdAt: string;
@@ -41,6 +42,7 @@ export default function Zugaenge() {
   const [sitzung, setSitzung] = useState("");
   const [feld, setFeld] = useState("");
   const [wert, setWert] = useState("");
+  const [host, setHost] = useState("");
   const [notiz, setNotiz] = useState("");
   const [sendet, setSendet] = useState(false);
 
@@ -64,7 +66,7 @@ export default function Zugaenge() {
       const res = await fetch(`${BASE}/api/lukas/zugaenge`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ sitzung, feld, wert, notiz }),
+        body: JSON.stringify({ sitzung, feld, wert, host, notiz }),
       });
       if (!res.ok) {
         setFehler((await res.json().catch(() => ({})))?.error ?? `HTTP ${res.status}`);
@@ -126,7 +128,9 @@ export default function Zugaenge() {
             <code>{"{{PASSWORT}}"}</code> — er kennt den echten Wert nie, und deshalb kann
             ihn auch keine präparierte Webseite danach fragen. Feldnamen sind frei:{" "}
             <code>BENUTZER</code>, <code>PASSWORT</code>, <code>PIN</code>,{" "}
-            <code>API_KEY</code> — jeder wird zu <code>{"{{NAME}}"}</code>.
+            <code>API_KEY</code> — jeder wird zu <code>{"{{NAME}}"}</code>.{" "}
+            <strong>Trag die Website ein</strong>: der Wert wird dann nur dort eingesetzt.
+            Ohne diese Bindung könnte ein Schrittplan ihn auf einer fremden Seite eintippen.
           </div>
         </div>
 
@@ -167,6 +171,21 @@ export default function Zugaenge() {
                 onChange={(e) => setWert(e.target.value)}
                 autoComplete="new-password"
                 placeholder="wird verschlüsselt gespeichert"
+              />
+            </div>
+            <div className="space-y-1">
+              {/* Der Host ist kein Beiwerk, sondern Teil des Geheimnisses: er
+                  entscheidet, WO der Wert eingesetzt werden darf. Ohne ihn
+                  könnte ein Schrittplan das Passwort auf einer fremden Seite
+                  eintippen — Lukas müsste es dafür nicht einmal kennen. */}
+              <label className="text-xs text-muted-foreground" htmlFor="z-host">
+                Nur auf dieser Website
+              </label>
+              <Input
+                id="z-host"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="higgsfield.ai"
               />
             </div>
             <div className="space-y-1">
@@ -217,6 +236,15 @@ export default function Zugaenge() {
                 >
                   <div className="min-w-0">
                     <span className="font-mono">{`{{${z.feld}}}`}</span>
+                    {z.host ? (
+                      <span className="ml-2 font-mono text-xs text-muted-foreground">
+                        nur auf {z.host}
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-xs text-amber-400">
+                        ohne Website-Bindung — gilt überall
+                      </span>
+                    )}
                     {z.notiz && (
                       <span className="ml-2 text-muted-foreground">{z.notiz}</span>
                     )}

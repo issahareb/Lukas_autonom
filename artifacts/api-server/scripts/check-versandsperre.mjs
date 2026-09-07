@@ -37,6 +37,16 @@ globalThis.__dbKaputt = false;
 const t = (n) => new Proxy({ __name: n }, { get: (o, k) => (k === "__name" ? n : String(k)) });
 export const versandTable = t("versand");
 export const eq = (f, w) => (z) => z[f] === w;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
+export const asc = () => ({});
 export const gte = (f, w) => (z) => new Date(z[f]).getTime() >= new Date(w).getTime();
 export const and = (...b) => (z) => b.filter(Boolean).every((fn) => fn(z));
 export const db = {

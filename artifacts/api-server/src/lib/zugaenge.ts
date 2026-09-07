@@ -33,6 +33,8 @@ export function normalisiereSitzung(roh: string): string {
 export type ZugangsUebersicht = {
   sitzung: string;
   feld: string;
+  /** Wo dieser Wert eingesetzt werden darf. Leer = überall (altes Verhalten). */
+  host: string;
   notiz: string;
   zuletztBenutzt: string | null;
   createdAt: string;
@@ -51,16 +53,35 @@ export async function listeZugaenge(): Promise<ZugangsUebersicht[]> {
   return rows.map((r) => ({
     sitzung: r.sitzung,
     feld: r.feld,
+    host: r.host,
     notiz: r.notiz,
     zuletztBenutzt: r.zuletztBenutzt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
   }));
 }
 
+/**
+ * Einen Hostnamen normalisieren — aus allem, was Issa eintippen koennte.
+ *
+ * "https://higgsfield.ai/login" und "Higgsfield.AI" und "higgsfield.ai"
+ * meinen dasselbe. Wer hier auf exakter Eingabe besteht, bekommt einen
+ * Zugang, der stillschweigend nie greift.
+ */
+export function hostAus(roh: string): string {
+  const knapp = String(roh ?? "").trim().toLowerCase();
+  if (!knapp) return "";
+  try {
+    return new URL(knapp.includes("://") ? knapp : `https://${knapp}`).hostname.replace(/^www\./, "");
+  } catch {
+    return knapp.replace(/^www\./, "").split("/")[0];
+  }
+}
+
 export async function setzeZugang(opts: {
   sitzung: string;
   feld: string;
   wert: string;
+  host?: string;
   notiz?: string;
 }): Promise<ZugangsUebersicht> {
   const sitzung = normalisiereSitzung(opts.sitzung);
@@ -92,14 +113,15 @@ export async function setzeZugang(opts: {
    * Wert erzeugt.
    */
   const geheim = verschluessele(wert);
+  const host = hostAus(opts.host ?? "");
   const jetzt = new Date();
 
   const [row] = await db
     .insert(zugaenge)
-    .values({ sitzung, feld, geheim, notiz: opts.notiz?.trim() ?? "" })
+    .values({ sitzung, feld, geheim, host, notiz: opts.notiz?.trim() ?? "" })
     .onConflictDoUpdate({
       target: [zugaenge.sitzung, zugaenge.feld],
-      set: { geheim, notiz: opts.notiz?.trim() ?? "", updatedAt: jetzt },
+      set: { geheim, host, notiz: opts.notiz?.trim() ?? "", updatedAt: jetzt },
     })
     .returning();
 
@@ -109,6 +131,7 @@ export async function setzeZugang(opts: {
   return {
     sitzung: row.sitzung,
     feld: row.feld,
+    host: row.host,
     notiz: row.notiz,
     zuletztBenutzt: row.zuletztBenutzt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -141,9 +164,20 @@ export async function loescheZugang(sitzung: string, feld: string): Promise<bool
  * Anmeldeformular, und fuenf Fehlversuche sperren ein Konto. Fehlt das Feld,
  * meldet browser_do das ehrlich — das ist die bessere Nachricht.
  */
-export async function zugangFuer(sitzung: string): Promise<Record<string, string>> {
+export type ZugangsWerte = {
+  /** Feldname -> Klartext. Geht in den Container, nie in einen Modellaufruf. */
+  werte: Record<string, string>;
+  /**
+   * Feldname -> erlaubter Hostname. Fehlt ein Eintrag, gilt der Wert ueberall
+   * (alter Bestand). Der Container setzt NUR ein, was hier passt.
+   */
+  hosts: Record<string, string>;
+};
+
+export async function zugangFuer(sitzung: string): Promise<ZugangsWerte> {
   const name = normalisiereSitzung(sitzung);
   const werte: Record<string, string> = {};
+  const hosts: Record<string, string> = {};
 
   // 1. Umgebung — der alte Weg, bleibt gültig.
   const schluessel = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
@@ -158,13 +192,14 @@ export async function zugangFuer(sitzung: string): Promise<Record<string, string
     rows = await db.select().from(zugaenge).where(eq(zugaenge.sitzung, name));
   } catch (err) {
     logger.warn({ err, sitzung: name }, "Zugänge nicht lesbar — nur Umgebung");
-    return werte;
+    return { werte, hosts };
   }
 
   const benutzt: string[] = [];
   for (const r of rows) {
     try {
       werte[r.feld] = entschluessele(r.geheim);
+      if (r.host) hosts[r.feld] = r.host;
       benutzt.push(r.feld);
     } catch (err) {
       logger.warn({ sitzung: name, feld: r.feld }, "Zugang nicht entschlüsselbar — übergangen");
@@ -179,7 +214,7 @@ export async function zugangFuer(sitzung: string): Promise<Record<string, string
       .catch(() => {});
   }
 
-  return werte;
+  return { werte, hosts };
 }
 
 /**
@@ -190,5 +225,5 @@ export async function zugangFuer(sitzung: string): Promise<Record<string, string
  * fehlgeschlagener Anmeldeversuch, den er sich selbst erklären muss.
  */
 export async function verfuegbareFelder(sitzung: string): Promise<string[]> {
-  return Object.keys(await zugangFuer(sitzung)).sort();
+  return Object.keys((await zugangFuer(sitzung)).werte).sort();
 }

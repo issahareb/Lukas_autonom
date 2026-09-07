@@ -36,6 +36,15 @@ export const meldungen = { betreff: "betreff", status: "status", id: "id", geles
 
 // Bedingungen werden als Funktion ueber eine Zeile abgebildet.
 export const eq = (feld, wert) => (z) => z[feld] === wert;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
 export const and = (...fns) => (z) => fns.every((f) => f(z));
 export const desc = () => ({});
 export const asc = () => ({});

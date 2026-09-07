@@ -37,6 +37,11 @@ export const conversations = {}; export const messages = {}; export const memAct
 export const knownAgentsTable = {}; export const strategiesTable = {}; export const goalsTable = {};
 export const diaryTable = {};
 export const eq = () => ({}); export const ne = () => ({}); export const and = () => ({});
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const not = (b) => (z) => !b(z);
+export const lt = (f, w) => (z) => z[f] < w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
 export const or = () => ({}); export const desc = () => ({}); export const asc = () => ({});
 export const gte = () => ({}); export const lte = () => ({}); export const sql = () => ({});
 export const inArray = () => ({}); export const ilike = () => ({}); export const isNull = () => ({});

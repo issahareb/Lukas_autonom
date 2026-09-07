@@ -36,9 +36,26 @@ const DB_ATTRAPPE = `globalThis.__zeilen = [];
 let id = 1;
 export const approvals = new Proxy({}, { get: (_t, k) => String(k) });
 export const eq = (f, w) => (z) => z[f] === w;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
+export const asc = () => ({});
 export const gt = (f, w) => (z) => z[f] > w;
 export const and = (...b) => (z) => b.every((fn) => fn(z));
 export const desc = () => () => true;
+/*
+ * sql\`\` fuer den Zaehler der Auftragsfreigabe. Fehlte hier, waehrend die
+ * beiden Pruefungen in scripts/ schon nachgezogen waren — der Benchmark ist
+ * eben NICHT Teil von typecheck. Genau deshalb ist er tagelang rot gelaufen,
+ * ohne dass etwas anderes es gemeldet haette.
+ */
+export const sql = () => ({ __zaehler: true });
 export const db = {
   update: () => ({ set: (w) => ({ where: (b) => ({ returning: async () => {
     const t = globalThis.__zeilen.filter(b); for (const z of t) Object.assign(z, w); return t; } }) }) }),

@@ -1475,7 +1475,7 @@ export async function executeLukasTool(
        * Lukas sieht sie nie, und was er nicht kennt, kann ihm auch keine
        * fremde Webseite entlocken.
        */
-      const zugang = await zugangFuer(sitzung);
+      const { werte: zugang, hosts: zugangHosts } = await zugangFuer(sitzung);
 
       /*
        * Fehlt ein Platzhalter, wird der Plan GAR NICHT ausgefuehrt.
@@ -1501,7 +1501,7 @@ export async function executeLukasTool(
         );
       }
 
-      const e = await bedienePage(sitzung, schritte, zugang);
+      const e = await bedienePage(sitzung, schritte, zugang, zugangHosts);
       if (!e.ok && e.fehler) return `Die Seite liess sich nicht bedienen: ${e.fehler}`;
 
       /*

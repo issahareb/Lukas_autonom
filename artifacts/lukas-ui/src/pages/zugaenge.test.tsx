@@ -10,6 +10,12 @@
  * Speichern sofort leer sein (sonst nimmt es ein Screenshot oder ein Blick
  * ueber die Schulter mit), und ohne gesetzten Schluessel muss die Seite es
  * SAGEN, statt still nichts zu speichern.
+ *
+ * Und ein drittes, seit es die Host-Bindung gibt: ein Zugang OHNE Website
+ * darf nicht aussehen wie einer mit. Die Bindung ist das, was verhindert,
+ * dass ein Schrittplan das Passwort auf einer fremden Seite eintippt — fehlt
+ * sie, muss die Zeile das sichtbar sagen, sonst haelt Issa den Zugang fuer
+ * enger, als er ist.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,6 +27,7 @@ type Ruf = { url: string; init?: RequestInit };
 const eintrag = {
   sitzung: "higgsfield",
   feld: "PASSWORT",
+  host: "higgsfield.ai",
   notiz: "Studio-Login",
   zuletztBenutzt: null,
   createdAt: new Date().toISOString(),
@@ -71,6 +78,7 @@ describe("Zugänge", () => {
     await userEvent.type(screen.getByLabelText(/Sitzung/), "higgsfield");
     await userEvent.type(screen.getByLabelText(/^Feld$/), "PASSWORT");
     await userEvent.type(screen.getByLabelText(/^Wert$/), "geheim123");
+    await userEvent.type(screen.getByLabelText(/Nur auf dieser Website/), "higgsfield.ai");
     await userEvent.click(screen.getByRole("button", { name: /Speichern/ }));
 
     await waitFor(() => {
@@ -80,6 +88,9 @@ describe("Zugänge", () => {
         sitzung: "higgsfield",
         feld: "PASSWORT",
         wert: "geheim123",
+        /* Ohne diese Zeile kommt der Host nie beim Server an, und die
+           Bindung existiert nur in der Oberflaeche. */
+        host: "higgsfield.ai",
       });
     });
   });
@@ -143,6 +154,31 @@ describe("Zugänge", () => {
       const weg = rufe.find((r) => r.init?.method === "DELETE");
       expect(weg?.url).toBe("/api/lukas/zugaenge/higgsfield/PASSWORT");
     });
+  });
+
+  /*
+   * Die Bindung ist der Unterschied zwischen "Lukas darf sich bei Higgsfield
+   * anmelden" und "Lukas darf dieses Passwort ueberall eintippen". Beides sah
+   * in der Liste identisch aus, solange die Zeile den Host verschwieg.
+   */
+  it("zeigt, auf welche Website ein Zugang gebunden ist", async () => {
+    mitAntwort({ bereit: true, zugaenge: [eintrag] });
+    render(<Zugaenge />);
+
+    expect(await screen.findByText(/nur auf higgsfield\.ai/)).toBeInTheDocument();
+    expect(screen.queryByText(/gilt überall/)).not.toBeInTheDocument();
+  });
+
+  it("warnt sichtbar, wenn ein Zugang ohne Website-Bindung liegt", async () => {
+    mitAntwort({ bereit: true, zugaenge: [{ ...eintrag, host: "" }] });
+    render(<Zugaenge />);
+
+    const warnung = await screen.findByText(/ohne Website-Bindung/);
+    expect(warnung).toBeInTheDocument();
+    /* Nicht bloss vorhanden, sondern als Warnung erkennbar: eine graue Zeile
+       neben allen anderen grauen Zeilen liest niemand als Hinweis. */
+    expect(warnung.className).toContain("amber");
+    expect(screen.queryByText(/^nur auf /)).not.toBeInTheDocument();
   });
 
   it("zeigt den Grund, wenn der Server ablehnt", async () => {

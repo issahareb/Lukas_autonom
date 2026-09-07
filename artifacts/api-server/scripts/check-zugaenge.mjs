@@ -36,6 +36,15 @@ writeFileSync(
   `const t = (n) => new Proxy({ __name: n }, { get: (o, k) => (k === "__name" ? n : String(k)) });
 export const zugaenge = t("zugaenge");
 export const eq = (f, w) => (z) => z[f] === w;
+export const isNull = (f) => (z) => z[f] === null || z[f] === undefined;
+export const isNotNull = (f) => (z) => z[f] !== null && z[f] !== undefined;
+export const or = (...b) => (z) => b.filter(Boolean).some((fn) => fn(z));
+export const not = (b) => (z) => !b(z);
+export const ne = (f, w) => (z) => z[f] !== w;
+export const lt = (f, w) => (z) => z[f] < w;
+export const lte = (f, w) => (z) => z[f] <= w;
+export const notInArray = (f, w) => (z) => !(w ?? []).includes(z[f]);
+export const like = () => () => true;
 export const and = (...b) => (z) => b.filter(Boolean).every((fn) => fn(z));
 export const asc = () => ({});
 
@@ -133,7 +142,7 @@ globalThis.__protokoll = [];
 
 // ── 2. Zurück kommt er nur an EINER Stelle ────────────────────────────────
 {
-  const werte = await zugangFuer("higgsfield");
+  const { werte } = await zugangFuer("higgsfield");
   pruefe("browser_do bekommt den echten Wert", werte.PASSWORT === GEHEIM);
   pruefe("und sonst nichts Fremdes", Object.keys(werte).join() === "PASSWORT");
   pruefe("die Benutzung wird vermerkt", globalThis.__zeilen[0].zuletztBenutzt instanceof Date);
@@ -197,7 +206,7 @@ globalThis.__protokoll = [];
   const a = globalThis.__zeilen.find((z) => z.sitzung === "dienst-a").geheim;
   const b = globalThis.__zeilen.find((z) => z.sitzung === "dienst-b").geheim;
   pruefe("gleicher Wert, verschiedener Kryptotext", a !== b);
-  pruefe("beide entschlüsseln trotzdem richtig", (await zugangFuer("dienst-a")).PASSWORT === GEHEIM);
+  pruefe("beide entschlüsseln trotzdem richtig", (await zugangFuer("dienst-a")).werte.PASSWORT === GEHEIM);
 }
 
 // ── 6. Verändertes wird erkannt, nicht durchgereicht ──────────────────────
@@ -209,7 +218,7 @@ globalThis.__protokoll = [];
   kaputt[0] ^= 1;
   zeile.geheim = [iv, tag, kaputt.toString("base64url")].join(":");
 
-  const werte = await zugangFuer("dienst-a");
+  const { werte } = await zugangFuer("dienst-a");
   pruefe("ein verändertes Geheimnis wird ÜBERGANGEN, nicht getippt", werte.PASSWORT === undefined);
   pruefe(
     "und der Wert steht auch dabei nicht im Protokoll",
@@ -221,12 +230,12 @@ globalThis.__protokoll = [];
 {
   await setzeZugang({ sitzung: "dienst-c", feld: "PASSWORT", wert: GEHEIM });
   process.env.LUKAS_TRESOR_SCHLUESSEL = "eine-voellig-andere-passphrase-die-nicht-passt";
-  const werte = await zugangFuer("dienst-c");
+  const { werte } = await zugangFuer("dienst-c");
   pruefe("mit falschem Schlüssel kommt NICHTS zurück", werte.PASSWORT === undefined);
   process.env.LUKAS_TRESOR_SCHLUESSEL = "eine-lange-zufaellige-passphrase-fuer-den-test";
   pruefe(
     "mit dem richtigen wieder der echte Wert",
-    (await zugangFuer("dienst-c")).PASSWORT === GEHEIM,
+    (await zugangFuer("dienst-c")).werte.PASSWORT === GEHEIM,
   );
 }
 
@@ -234,7 +243,7 @@ globalThis.__protokoll = [];
 {
   await setzeZugang({ sitzung: "bank", feld: "PIN", wert: "4711" });
   await setzeZugang({ sitzung: "bank", feld: "KUNDENNUMMER", wert: "DE-99" });
-  const werte = await zugangFuer("bank");
+  const { werte } = await zugangFuer("bank");
   pruefe("eine PIN geht genauso", werte.PIN === "4711");
   pruefe("und eine Kundennummer auch", werte.KUNDENNUMMER === "DE-99");
 
@@ -255,11 +264,11 @@ globalThis.__protokoll = [];
 {
   process.env.LUKAS_WEB_ALTMODISCH_USER = "aus-der-umgebung";
   process.env.LUKAS_WEB_ALTMODISCH_PASS = "auch-von-dort";
-  let werte = await zugangFuer("altmodisch");
+  let { werte } = await zugangFuer("altmodisch");
   pruefe("die Umgebung wirkt weiterhin", werte.BENUTZER === "aus-der-umgebung");
 
   await setzeZugang({ sitzung: "altmodisch", feld: "PASSWORT", wert: "aus-dem-tresor" });
-  werte = await zugangFuer("altmodisch");
+  ({ werte } = await zugangFuer("altmodisch"));
   pruefe("der Tresor sticht die Umgebung", werte.PASSWORT === "aus-dem-tresor");
   pruefe("was nur in der Umgebung steht, bleibt", werte.BENUTZER === "aus-der-umgebung");
   delete process.env.LUKAS_WEB_ALTMODISCH_USER;
@@ -269,7 +278,7 @@ globalThis.__protokoll = [];
 // ── 10. Löschen löscht ────────────────────────────────────────────────────
 {
   pruefe("löschen meldet Erfolg", (await loescheZugang("bank", "pin")) === true);
-  pruefe("und der Zugang ist weg", (await zugangFuer("bank")).PIN === undefined);
+  pruefe("und der Zugang ist weg", (await zugangFuer("bank")).werte.PIN === undefined);
   pruefe("zweimal löschen meldet ehrlich nichts", (await loescheZugang("bank", "pin")) === false);
 }
 

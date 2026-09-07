@@ -74,3 +74,6 @@ __pycache__/
 .ghbuendel-check-*/
 .policy-check-*/
 .bench-*/
+
+# Reste abgebrochener Prüfläufe (scripts/check-browser-bedienen.mjs)
+.browser-check-*
