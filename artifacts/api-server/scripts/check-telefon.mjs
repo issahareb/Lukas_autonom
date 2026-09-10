@@ -27,7 +27,7 @@ export const logger = { warn() {}, info() {}, error() {} };
 export const buildSystemPrompt = async () => "privat";
 export const buildPublicSystemPrompt = async () => "oeffentlich";
 export const SPRACH_REGEL = ""; export const sprachAudio = () => ({});
-export const sprachModell = () => "gpt-realtime-2.1";
+export const sprachModell = () => "gpt-live-1";
 `,
 );
 

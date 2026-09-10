@@ -20,7 +20,7 @@ auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfär
 Ruhiger, männlicher, conversational-natürlicher Tonfall.`;
 
 export function sprachModell(): string {
-  return process.env.LUKAS_REALTIME_MODEL ?? "gpt-realtime-2.1";
+  return process.env.LUKAS_REALTIME_MODEL ?? "gpt-live-1";
 }
 
 export function sprachStimme(): string {

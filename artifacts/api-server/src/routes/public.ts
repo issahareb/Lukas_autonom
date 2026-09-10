@@ -334,7 +334,7 @@ deutscher Aussprache — jedes Wort so, wie ein deutscher Muttersprachler es sag
 auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfärbung.
 
 ${basePrompt}`;
-    const model = process.env.LUKAS_REALTIME_MODEL ?? "gpt-realtime-2.1";
+    const model = process.env.LUKAS_REALTIME_MODEL ?? "gpt-live-1";
     const clientSecret = await openai.realtime.clientSecrets.create({
       session: {
         type: "realtime",

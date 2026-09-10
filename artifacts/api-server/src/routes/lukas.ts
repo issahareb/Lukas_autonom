@@ -561,7 +561,7 @@ router.get("/lukas/gehirn/vault.zip", async (_req, res) => {
 
 // ── REALTIME-SESSION (privater Sprachkanal, OpenAI Realtime) ────────────────
 // Erzeugt ein kurzlebiges Client-Secret fuer OpenAIs Realtime API (Speech-to-
-// Speech, gpt-realtime-2.1) MIT Lukas' vollem privaten Kontext (Erinnerungen,
+// Speech, gpt-live-1) MIT Lukas' vollem privaten Kontext (Erinnerungen,
 // Ziele, Tagebuch, Emotion) als serverseitig hinterlegte Session-Instructions.
 // Der echte OpenAI-Key bleibt auf dem Server; der Browser bekommt nur das
 // kurzlebige Secret (ek_...) und verbindet direkt per WebRTC zu OpenAI --
@@ -587,7 +587,7 @@ ${basePrompt}`;
     const clientSecret = await openai.realtime.clientSecrets.create({
       session: {
         type: "realtime",
-        model: process.env.LUKAS_REALTIME_MODEL ?? "gpt-realtime-2.1",
+        model: process.env.LUKAS_REALTIME_MODEL ?? "gpt-live-1",
         instructions,
         audio: {
           output: { voice: process.env.LUKAS_REALTIME_VOICE ?? "ash" },
