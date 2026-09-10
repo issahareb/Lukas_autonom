@@ -174,7 +174,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph takt["Taktgeber, gestartet in index.ts"]
-        a["autonomy.ts<br/>alle 30 min"]
+        a["autonomy.ts<br/>alle 4,5 h"]
         m["moltbook-worker.ts"]
         s["selbstheilung.ts"]
         k["consolidation-worker.ts<br/>täglich"]

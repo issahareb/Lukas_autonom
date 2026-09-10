@@ -34,7 +34,7 @@ import { kennzahlenHinweis, meldeAuffaelligkeiten } from "./kennzahlen";
  *    selbst ab.
  */
 
-const CYCLE_MS = Number(process.env.LUKAS_AUTONOMY_INTERVAL_MIN ?? 30) * 60 * 1000;
+const CYCLE_MS = Number(process.env.LUKAS_AUTONOMY_INTERVAL_MIN ?? 270) * 60 * 1000;
 
 function enabled(): boolean {
   return (process.env.LUKAS_AUTONOMY_ENABLED ?? "true").trim().toLowerCase() !== "false";

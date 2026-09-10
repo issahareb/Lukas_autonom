@@ -12,7 +12,7 @@ Dieses README beschreibt, was **da ist**. Was fehlt, steht unter
 
 ## Was ihn von einem Chatbot unterscheidet
 
-**Er arbeitet weiter, wenn niemand zusieht.** Alle 30 Minuten fragt
+**Er arbeitet weiter, wenn niemand zusieht.** Alle 4,5 Stunden fragt
 `lib/autonomy.ts`, ob es etwas zu tun gibt: aktive Ziele, neue Antworten,
 Ereignisse. Gab es seit dem letzten Lauf keine Änderung, wird gar nicht erst
 gedacht — das spart Geld, statt im Leerlauf Tokens zu verbrennen.
