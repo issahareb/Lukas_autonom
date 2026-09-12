@@ -23,9 +23,11 @@ import { logger } from "./logger";
 /*
  * Nicht zweimal dasselbe.
  *
- * Der autonome Lauf startet alle 30 Minuten neu. Ohne Sperre landet dieselbe
- * offene Frage bei jedem Durchlauf erneut im Tab — nach einem Tag waeren das
- * 48 identische Eintraege, und danach liest sie niemand mehr.
+ * Der autonome Lauf startet immer wieder neu. Ohne Sperre landet dieselbe
+ * offene Frage bei jedem Durchlauf erneut im Tab — und ein Tab, in dem
+ * dieselbe Frage mehrfach steht, wird nicht mehr gelesen. Wie schnell sich
+ * das haeuft, haengt am Takt (LUKAS_AUTONOMY_INTERVAL_MIN); dass es sich
+ * haeuft, nicht.
  *
  * Die Sperre haengt hier NICHT am Speicher, sondern an der offenen Meldung
  * selbst: solange eine mit demselben Betreff offen ist, kommt keine zweite

@@ -2,13 +2,18 @@
  * Eine Sperre, die verhindert, dass derselbe Hintergrundlauf zweimal
  * gleichzeitig laeuft.
  *
- * Das Problem ist konkret, nicht theoretisch. Der autonome Lauf startet alle
- * 30 Minuten. Seit die feste Rundenzahl weg ist, darf ein Zug bis zu 25
- * Minuten arbeiten (LUKAS_TURN_MAX_MINUTEN) — und die Uhr laeuft erst ab dem
- * ersten Modellaufruf, nicht ab dem Zyklusbeginn. Ein Lauf, der in eine
- * langsame Antwort geraet, ueberholt seinen eigenen Takt. Dann arbeiten zwei
- * Laeufe an denselben Zielen, oeffnen zwei Episoden, verbrauchen doppelt
- * Tokens und schreiben sich gegenseitig den Fortschritt um.
+ * Das Problem ist konkret, nicht theoretisch. Seit die feste Rundenzahl weg
+ * ist, darf ein Zug bis zu 25 Minuten arbeiten (LUKAS_TURN_MAX_MINUTEN) — und
+ * die Uhr laeuft erst ab dem ersten Modellaufruf, nicht ab dem Zyklusbeginn.
+ * Steht der Takt eng, ueberholt ein Lauf, der in eine langsame Antwort
+ * geraet, seinen eigenen Zyklus. Dann arbeiten zwei Laeufe an denselben
+ * Zielen, oeffnen zwei Episoden, verbrauchen doppelt Tokens und schreiben
+ * sich gegenseitig den Fortschritt um.
+ *
+ * Der Abstand ist derzeit weit genug, dass das aus dem Takt allein nicht mehr
+ * folgt (LUKAS_AUTONOMY_INTERVAL_MIN). Das entwertet die Sperre nicht: der
+ * Takt ist eine Einstellung, und die beiden Faelle unten haengen gar nicht an
+ * ihm.
  *
  * WARUM NICHT EINFACH EIN FLAG IM PROZESS. Ein `let laeuft = false` deckt den
  * haeufigsten Fall ab und genau den nicht, der weh tut: waehrend eines

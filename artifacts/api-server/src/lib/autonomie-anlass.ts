@@ -125,7 +125,19 @@ async function neueFehler(seit: Date): Promise<number> {
 export async function anlass(): Promise<{ starten: boolean; grund: string }> {
   await ladeStand();
   const jetzt = Date.now();
-  const grundtakt = minuten("LUKAS_AUTONOMY_MIN_PAUSE_MIN", 180) * 60 * 1000;
+  /*
+   * Der Grundtakt darf nicht kuerzer sein als der Herzschlag.
+   *
+   * Nachgesehen wird nur beim Herzschlag (LUKAS_AUTONOMY_INTERVAL_MIN,
+   * autonomy.ts). Steht der Grundtakt darunter, ist er wirkungslos: er waere
+   * laengst faellig, wenn ueberhaupt das naechste Mal geschaut wird. Genau das
+   * ist passiert, als der Herzschlag von 30 auf 270 Minuten ging und hier 180
+   * stehen blieb — eine Drei-Stunden-Regel, die nie greifen konnte.
+   *
+   * Beide Voreinstellungen stehen deshalb auf 270: ohne Anlass arbeitet er
+   * bei jedem Herzschlag weiter, mit Anlass frueher.
+   */
+  const grundtakt = minuten("LUKAS_AUTONOMY_MIN_PAUSE_MIN", 270) * 60 * 1000;
 
   const { signatur } = await weltbild();
 

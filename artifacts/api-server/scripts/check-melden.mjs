@@ -5,7 +5,7 @@
  * Eine Meldung hat einen ZUSTAND — sie ist offen, bis Issa geantwortet hat.
  * Daran haengen drei Dinge, die alle leicht kaputtzumachen sind:
  *
- *  1. Keine Wiederholung. Der autonome Lauf startet alle 30 Minuten neu; ohne
+ *  1. Keine Wiederholung. Der autonome Lauf startet immer wieder neu; ohne
  *     Sperre landet dieselbe offene Frage bei jedem Durchlauf erneut im Tab.
  *     Nach einem Tag waeren das 48 identische Eintraege, und danach liest sie
  *     niemand mehr.

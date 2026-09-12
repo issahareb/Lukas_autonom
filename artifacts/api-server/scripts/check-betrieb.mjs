@@ -1,11 +1,17 @@
 /*
  * Prueft zwei Dinge, die man erst merkt, wenn sie fehlen — und dann teuer.
  *
- * 1. DIE SPERRE. Der autonome Lauf startet alle 30 Minuten und darf 25 Minuten
- *    arbeiten. Diese Rechnung geht nicht auf: ein Lauf, der in eine langsame
- *    Antwort geraet, laeuft noch, wenn der naechste startet. Dann arbeiten
- *    zwei Laeufe an denselben Zielen und schreiben sich gegenseitig den
- *    Fortschritt um. Geprueft wird deshalb: der zweite Lauf laeuft NICHT an,
+ * 1. DIE SPERRE. Zwei Laeufe duerfen nie gleichzeitig an denselben Zielen
+ *    arbeiten — sonst schreiben sie sich gegenseitig den Fortschritt um.
+ *    Dass sich das ueberhaupt ueberschneiden kann, hat drei Gruende, und nur
+ *    der erste haengt am Takt: ein Zug darf bis zu 25 Minuten arbeiten
+ *    (LUKAS_TURN_MAX_MINUTEN), gemessen ab dem ersten Modellaufruf — steht
+ *    der Takt eng, ueberholt ein langsamer Lauf seinen eigenen Zyklus. Der
+ *    Abstand ist derzeit weit (LUKAS_AUTONOMY_INTERVAL_MIN), aber das ist
+ *    eine Einstellung, kein Gesetz. Die beiden anderen Gruende bleiben davon
+ *    ohnehin unberuehrt: waehrend eines Deployments laufen kurz zwei
+ *    Instanzen, und die Instanzzahl kann jemand hochsetzen.
+ *    Geprueft wird deshalb: der zweite Lauf laeuft NICHT an,
  *    die Sperre wird danach wieder freigegeben, und ohne Datenbank passiert
  *    gar nichts (statt blind loszulaufen und Tokens fuer ein Ergebnis
  *    auszugeben, das nirgends abgelegt werden kann).

@@ -10,7 +10,7 @@
  * Der Preis dafuer steht nicht nur in der Zeit. Jeder gescheiterte Aufruf
  * kommt als Werkzeugergebnis zurueck, geht in den naechsten Modellaufruf ein
  * und wird dort bezahlt. Vierzig Fehlschlaege in einem Zug sind vierzig
- * Runden Kontext — und der autonome Lauf startet alle 30 Minuten neu.
+ * Runden Kontext — und der autonome Lauf startet immer wieder neu.
  *
  * WAS DAS HIER IST: ein Schalter, der nach zwei Fehlschlaegen in Folge
  * umlegt. Danach kommt die Diagnose SOFORT zurueck, ohne dass es noch

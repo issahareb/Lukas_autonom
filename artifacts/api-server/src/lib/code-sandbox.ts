@@ -191,7 +191,7 @@ export function sshExec(
    * und jeder gescheiterte Aufruf kommt als Werkzeugergebnis zurueck, geht in
    * den naechsten Modellaufruf ein und wird dort bezahlt. Vierzig Fehlschlaege
    * in einem Zug sind vierzig Runden Kontext, und der autonome Lauf startet
-   * alle 30 Minuten neu.
+   * immer wieder neu.
    */
   const bekannt = ausgefallen(SSH_BEREICH);
   if (bekannt) return Promise.reject(new Error(bekannt));

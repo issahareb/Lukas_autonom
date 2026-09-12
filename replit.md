@@ -49,7 +49,7 @@ Persistenter KI-Agent mit Persönlichkeit, Gedächtnis (PostgreSQL), echtem Tool
 - Die private API akzeptiert Browser-Aufrufe nur vom eigenen Host; weitere Ursprünge über `LUKAS_ALLOWED_ORIGINS` (kommagetrennt). `/api/public/*` und die Webhooks bleiben bewusst offen.
 - Rate-Limit der privaten API: 240 Anfragen/Minute je Adresse, per `LUKAS_RATE_LIMIT` änderbar. Ausgenommen: localhost, Webhooks, `/healthz`, `/api/public/*` (hat ein eigenes, engeres Limit).
 - Kontextfenster je Modellaufruf: `LUKAS_CONTEXT_MAX_CHARS` (Standard 60.000 Zeichen ≈ 17k Tokens). Der Rohverlauf bleibt vollständig in der DB; Älteres kommt über memoryContextFor/query_memory zurück.
-- Autonomie: Herzschlag alle `LUKAS_AUTONOMY_INTERVAL_MIN` (270) Minuten, ein voller Lauf startet aber nur bei einem Ereignis (Ziel bewegt, Freigabe, Antwort von Issa, ≥3 neue Fehler) oder nach `LUKAS_AUTONOMY_MIN_PAUSE_MIN` (180) Minuten Grundtakt — `lib/autonomie-anlass.ts`.
+- Autonomie: Herzschlag alle `LUKAS_AUTONOMY_INTERVAL_MIN` (270) Minuten, ein voller Lauf startet aber nur bei einem Ereignis (Ziel bewegt, Freigabe, Antwort von Issa, ≥3 neue Fehler) oder nach `LUKAS_AUTONOMY_MIN_PAUSE_MIN` (270) Minuten Grundtakt — `lib/autonomie-anlass.ts`.
 - Ausgabeschicht bekommt nur die letzten `LUKAS_VOICE_HISTORY` (4) Dialogzeilen plus den Entwurf, nie den System-Prompt.
 - Budget je Zug: `LUKAS_TURN_TOKEN_BUDGET` (300.000 Tokens) und `LUKAS_TURN_MAX_MINUTEN` (25). Bei 100 % Hinweis "komm zum Ende", bei 150 % Schluss — `lib/arbeitsschleife.ts`.
 - Content-Security-Policy ist an; `LUKAS_CSP=report` meldet nur, `LUKAS_CSP=off` schaltet sie ab. Widget und Demoseite bleiben ausgenommen.
