@@ -135,19 +135,16 @@ eines mit bekannten Lücken.
 
 **Sicherheit**
 
-- **Die Rufnummernanzeige entscheidet über den privaten Prompt.** Sie ist
-  fälschbar. Handeln kann ein Anrufer nicht — die Sprachsitzung hat keine
-  Werkzeuge —, aber zuhören. `LUKAS_TELEFON_STRENG=true` schließt das;
-  Voreinstellung ist offen, weil es Issas Zugang verengt.
-  ([Details](docs/SICHERHEITSMODELL.md#7-restrisiken--was-auch-nach-diesem-durchgang-bleibt))
-- **Ein Token ist der einzige Faktor.** Wer `LUKAS_API_TOKEN` hat, ist Issa —
-  kann damit aber **keine hinterlegten Zugangsdaten auslesen**, nur anlegen und
-  löschen. Die Werte liegen AES-256-GCM-verschlüsselt in der Datenbank, der
-  Schlüssel steht in der Umgebung (`LUKAS_TRESOR_SCHLUESSEL`); ohne ihn wird
-  nichts gespeichert statt im Klartext. Lukas selbst kennt sie nie — im Plan
-  steht `{{PASSWORT}}`, eingesetzt wird erst im Browser-Container.
-- **Issas Nummer steht in der Git-Historie.** Aus dem aktuellen Stand ist sie
-  entfernt; alte Commits eines öffentlichen Repositories bleiben.
+- **Hinterlegte Zugangsdaten kann niemand auslesen — auch Lukas nicht.** Die
+  Werte liegen AES-256-GCM-verschlüsselt in der Datenbank, der Schlüssel steht
+  in der Umgebung (`LUKAS_TRESOR_SCHLUESSEL`); ohne ihn wird nichts gespeichert
+  statt im Klartext. Über die Schnittstelle lassen sie sich anlegen und löschen,
+  nicht lesen. Im Plan steht `{{PASSWORT}}`, eingesetzt wird erst im
+  Browser-Container.
+- **Es gibt weitere bekannte Restrisiken rund um Telefonie und
+  Authentifizierung.** Sie sind dem Betreiber bekannt und bewusst nicht
+  öffentlich aufgeschlüsselt: eine Betriebsanleitung dafür gehört nicht in ein
+  öffentliches README.
 
 **Betrieb**
 

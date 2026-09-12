@@ -197,35 +197,21 @@ für etwas, das es nicht ist.
 
 ## 7. Restrisiken — was auch nach diesem Durchgang bleibt
 
-### 1. Die Rufnummernanzeige ist kein Ausweis ⚠️ **das schärfste**
+### 1-3. Telefonie und Authentifizierung — nicht öffentlich aufgeschlüsselt
 
-Ob ein Anrufer Issas **vollen privaten Prompt** bekommt — Erinnerungen, Ziele,
-Tagebuch —, entscheidet sich an der Nummer im SIP-From-Header. Die behauptet
-das anrufende Netz; mit einem VoIP-Anschluss ist sie frei setzbar.
+Es bleiben Restrisiken an der Telefonanbindung, an der Bekanntheit der
+Admin-Nummer und daran, dass die Anmeldung an der Schnittstelle einen einzigen
+Faktor hat. Sie sind bekannt, benannt und dem Betreiber im Detail übergeben.
 
-*Was es nicht ist:* ein Weg, etwas auszulösen. Die Sprachsitzung bekommt
-ausschließlich Anweisungen und Ton, **keine Werkzeuge**. Es geht um Preisgabe.
+Hier stand bis zuletzt die genaue Mechanik samt Schalter und Voreinstellung.
+Das war gut gemeint und falsch platziert: dieses Repository ist öffentlich, und
+die drei Punkte ergeben zusammengesetzt eine Anleitung gegen genau eine Person.
+Eine Schwäche ehrlich zu benennen und sie vorzuführen sind zwei verschiedene
+Dinge — dieses Dokument tut ab hier nur noch das Erste.
 
-*Warum nicht einfach zugenagelt:* eine gesprochene Geheimzahl gäbe die
-Architektur nicht her — die Anweisungen stehen fest, sobald der Anruf
-angenommen ist, und ein Modell, das selbst entscheidet, ob die Zahl stimmte,
-wäre keine Prüfung, sondern eine Bitte.
-
-*Der Schalter:* `LUKAS_TELEFON_STRENG=true`. Dann bekommen eingehende Anrufe
-nie den privaten Prompt; privat sind nur noch Gespräche, die **Lukas selbst
-gewählt** hat. Voreinstellung ist aus, mit einer Warnung im Protokoll bei jedem
-betroffenen Anruf.
-
-### 2. Issas Nummer steht in der Git-Historie
-
-Aus dem aktuellen Stand ist sie entfernt. In alten Commits eines öffentlichen
-Repositories bleibt sie. Dagegen hilft nur ein Umschreiben der Historie — das
-ist Issas Entscheidung. Praktische Folge: die **Admin-Nummer ist bekannt**. Für
-WhatsApp ist das folgenlos (Meta signiert), fürs Telefon siehe Restrisiko 1.
-
-### 3. Ein Freigabe-Klick im Dashboard ist so sicher wie das Token
-
-Wer `LUKAS_API_TOKEN` hat, ist Issa. Kein zweiter Faktor, keine Sitzungsbindung.
+Was hier bewusst NICHT verschwiegen wird: alles, woran jemand anders eine
+Entscheidung über seine eigenen Daten festmacht. Restrisiko 7 (Bildschirmfotos)
+bleibt deshalb unverändert stehen, ebenso 5 und 6.
 
 ### 4. Der autonome Lauf kann Freigaben stapeln
 
