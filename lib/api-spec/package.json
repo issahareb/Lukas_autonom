@@ -6,6 +6,6 @@
     "codegen": "orval --config ./orval.config.ts && npm run typecheck:libs --prefix ../.."
   },
   "devDependencies": {
-    "orval": "^8.26.0"
+    "orval": "^8.31.0"
   }
 }

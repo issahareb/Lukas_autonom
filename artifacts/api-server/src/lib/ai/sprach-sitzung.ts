@@ -36,15 +36,34 @@ export function sprachStimme(): string {
  *   Geraet ohnehin ans Ohr.
  */
 export function sprachAudio(amTelefon = false) {
+  void amTelefon;
   return {
     output: { voice: sprachStimme() },
     input: {
+      /*
+       * near_field statt far_field. far_field ist fuer Konferenzmikrofone
+       * quer durch den Raum gedacht; Widget und Dashboard laufen auf
+       * Handy/Laptop dicht am Nutzer. Dort hat far_field echte Sprache
+       * mit-weggefiltert und die Erkennung teils gar nicht ausgeloest
+       * ("antwortet manchmal nicht"). Die Rueckkopplung, die far_field
+       * abfangen sollte, erledigt echoCancellation im Widget selbst.
+       */
       noise_reduction: { type: "near_field" as const },
+      /*
+       * Expliziter Sprach-Hinweis, damit das Gespraech durchgehend als
+       * Deutsch erkannt wird. `model` ist in den TS-Typen als optional
+       * markiert, die echte API verlangt es aber zwingend, sobald
+       * `transcription` ueberhaupt gesetzt ist — sonst 400 "Missing
+       * required parameter".
+       */
       transcription: { model: "gpt-4o-mini-transcribe", language: "de" },
       /*
-       * semantic_vad statt fixem Stille-Timer: es entscheidet am Inhalt, ob
-       * jemand ausgeredet hat. Am Telefon zaehlt das doppelt — dort gibt es
-       * keinen Bildschirm, an dem man sieht, dass der andere noch tippt.
+       * semantic_vad statt fixem Stille-Timer (server_vad): das Modell
+       * beurteilt am Inhalt, ob jemand ausgeredet hat, statt starr nach
+       * z.B. 500ms Stille abzubrechen — robuster gegen Sprechpausen, die
+       * sonst als Gespraechsende gewertet werden und zu ausbleibenden
+       * Antworten fuehren. Am Telefon zaehlt das doppelt: dort gibt es
+       * keinen Bildschirm, an dem man sieht, dass der andere noch denkt.
        */
       turn_detection: { type: "semantic_vad" as const, eagerness: "auto" as const },
     },

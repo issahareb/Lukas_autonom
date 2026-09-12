@@ -23,6 +23,7 @@ import { packeZip } from "../lib/zip";
 import { buildSystemPrompt } from "../lib/system-prompt";
 import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../lib/logger";
+import { sprachAudio, sprachModell } from "../lib/ai/sprach-sitzung";
 
 const router = Router();
 
@@ -587,24 +588,11 @@ ${basePrompt}`;
     const clientSecret = await openai.realtime.clientSecrets.create({
       session: {
         type: "realtime",
-        model: process.env.LUKAS_REALTIME_MODEL ?? "gpt-live-1",
+        model: sprachModell(),
         instructions,
-        audio: {
-          output: { voice: process.env.LUKAS_REALTIME_VOICE ?? "ash" },
-          input: {
-            // near_field statt far_field — siehe public.ts für Details: far_field
-            // ist für Konferenz-Mikros aus der Distanz gedacht, nicht für ein
-            // Handy/Laptop dicht am Nutzer, und hat dabei echte Sprache
-            // mit-weggefiltert ("antwortet manchmal nicht").
-            noise_reduction: { type: "near_field" },
-            // Expliziter Sprach-Hinweis für die Eingabe-Transkription. model
-            // ist in den TS-Typen optional, die echte API verlangt es aber
-            // zwingend sobald `transcription` gesetzt ist (sonst 400).
-            transcription: { model: "gpt-4o-mini-transcribe", language: "de" },
-            // semantic_vad statt fixem Stille-Timer — siehe public.ts für Details.
-            turn_detection: { type: "semantic_vad", eagerness: "auto" },
-          },
-        },
+        // Stimme, Rauschfilter, Transkription und Sprecherkennung stehen
+        // gemeinsam in ai/sprach-sitzung.ts — siehe dort fuer die Begruendungen.
+        audio: sprachAudio(),
       },
       expires_after: { anchor: "created_at", seconds: 600 },
     });

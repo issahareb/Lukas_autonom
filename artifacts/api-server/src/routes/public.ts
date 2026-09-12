@@ -10,6 +10,7 @@ import { anfrageVonWebsite } from "../lib/melden";
 import { logger } from "../lib/logger";
 import { gleicherToken } from "../middlewares/schutz";
 import { recordDebugEvent } from "../lib/debug-log";
+import { sprachAudio, sprachModell } from "../lib/ai/sprach-sitzung";
 
 const router = Router();
 
@@ -334,37 +335,15 @@ deutscher Aussprache — jedes Wort so, wie ein deutscher Muttersprachler es sag
 auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfärbung.
 
 ${basePrompt}`;
-    const model = process.env.LUKAS_REALTIME_MODEL ?? "gpt-live-1";
+    const model = sprachModell();
     const clientSecret = await openai.realtime.clientSecrets.create({
       session: {
         type: "realtime",
         model,
         instructions,
-        audio: {
-          output: { voice: process.env.LUKAS_REALTIME_VOICE ?? "ash" },
-          input: {
-            // near_field statt far_field: das Widget läuft auf Handy/Laptop
-            // dicht am Nutzer (nicht als Konferenz-Speakerphone quer durchs
-            // Zimmer, wofür far_field gedacht ist) — far_field hat dadurch
-            // echte Sprache mit-weggefiltert und die Spracherkennung teils
-            // gar nicht ausgelöst ("antwortet manchmal nicht"). Die
-            // Rückkopplungs-Gefahr, die far_field ursprünglich abfangen
-            // sollte, übernimmt bereits echoCancellation im Widget selbst.
-            noise_reduction: { type: "near_field" },
-            // Expliziter Sprach-Hinweis für die Eingabe-Transkription — hilft
-            // zusätzlich, das Gespräch durchgehend als Deutsch zu erkennen.
-            // model ist in den TS-Typen als optional markiert, die echte API
-            // verlangt es aber zwingend, sobald `transcription` überhaupt
-            // gesetzt ist (sonst 400 "Missing required parameter").
-            transcription: { model: "gpt-4o-mini-transcribe", language: "de" },
-            // semantic_vad statt des festen Stille-Timers (server_vad): das
-            // Modell selbst beurteilt, ob der Nutzer wirklich fertig
-            // gesprochen hat, statt starr nach z.B. 500ms Stille abzubrechen
-            // — robuster gegen Sprechpausen, die sonst als Gesprächsende
-            // gewertet werden und zu ausbleibenden Antworten führen.
-            turn_detection: { type: "semantic_vad", eagerness: "auto" },
-          },
-        },
+        // Stimme, Rauschfilter, Transkription und Sprecherkennung stehen
+        // gemeinsam in ai/sprach-sitzung.ts — siehe dort fuer die Begruendungen.
+        audio: sprachAudio(),
       },
       expires_after: { anchor: "created_at", seconds: 300 },
     });
