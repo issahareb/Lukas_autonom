@@ -151,12 +151,16 @@ eines mit bekannten Lücken.
 - **Eine Instanz.** Die Läufe sind über Postgres-Advisory-Locks gegen
   Doppelausführung gesichert, aber der Zustand im Speicher (offene
   SSE-Leitungen, geparkte Anrufanlässe, Stoppwünsche) ist nicht geteilt.
-- **Der Deploy nutzt weiterhin `db:push`.** Versionierte Migrationen gibt es
-  jetzt (`npm run db:generate` / `db:migrate`, Basislinie geprüft), aber der
-  Deploy-Pfad ist noch nicht umgestellt: die erste Migration enthält
-  `CREATE TABLE` ohne `IF NOT EXISTS` und würde auf der bestehenden geteilten
-  Datenbank scheitern. Der Umstieg ist ein bewusster Schritt und in
-  [`lib/db/migrations/README.md`](lib/db/migrations/README.md) beschrieben.
+- **Der Deploy läuft auf versionierten Migrationen.** `start:deploy` ruft
+  `db:deploy` (`lib/db/deploy.mjs`): es erkennt selbst, ob die Datenbank frisch
+  ist, schon übernommen wurde oder noch aus der `push`-Zeit stammt — im letzten
+  Fall wird sie einmalig als Basislinie markiert, ohne dass `0000` läuft (die
+  Datei bleibt unverändert, sie enthält `CREATE TABLE` ohne `IF NOT EXISTS`).
+  Gegen ein echtes Postgres 16 sind alle vier Fälle nachgestellt, auch dass
+  eine *neue* Migration nach der Basislinie noch greift — Details in
+  [`lib/db/migrations/README.md`](lib/db/migrations/README.md). Was bleibt:
+  die Umstellung ist auf der Produktionsdatenbank noch nicht gelaufen, der
+  erste scharfe Lauf passiert beim nächsten Deploy.
 - **Lernen ist eng.** Gelernt wird aus dem Ausgang von Werkzeugaufrufen —
   gelungen oder nicht, und woran es lag. Ob eine *Entscheidung* gut war, ob
   ein Text überzeugt hat, ob ein Ziel den Aufwand wert war: dafür gibt es

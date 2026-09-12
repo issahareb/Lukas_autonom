@@ -17,17 +17,43 @@ Tabellen (`bench/integration`).
 ## Der Umstieg auf der bestehenden Datenbank
 
 **`0000` darf dort nicht einfach laufen.** Die Datei enthält `CREATE TABLE`
-ohne `IF NOT EXISTS` — auf der Produktionsdatenbank, wo alles schon steht,
-würde sie scheitern.
+ohne `IF NOT EXISTS` — auf einer Datenbank, wo alles schon steht, scheitert
+sie. Das ist nachgestellt und bestätigt: nacktes `drizzle-kit migrate` gegen
+eine per `push` aufgebaute Datenbank endet mit Code 1.
 
-Der Umstieg ist deshalb ein bewusster Schritt: `0000` wird als *bereits
-angewendet* markiert, ohne ausgeführt zu werden (Basislinie). Alles danach
-läuft normal durch. Solange das nicht passiert ist, bleibt `start:deploy` auf
-`push` — ich habe den Deploy-Pfad **nicht** umgestellt, weil ein
-fehlgeschlagener Umstieg auf einer geteilten Produktionsdatenbank nichts ist,
-was sich zurücknehmen lässt.
+`0000` wird deshalb **nicht umgeschrieben** — die Datei soll genau das bleiben,
+was sie auf einer leeren Datenbank tut. Stattdessen wird die bestehende
+Datenbank einmalig als „ist schon auf diesem Stand" markiert. Das erledigt
+`npm run db:deploy` (`lib/db/deploy.mjs`) von selbst, es gibt keinen manuellen
+Schritt mehr:
 
-Was sich dagegen schon geändert hat: `start:deploy` startet den Server
-**nicht mehr**, wenn der Schema-Schritt fehlschlägt. Vorher stand dort ein
-`|| echo WARNUNG` — der Server lief dann gegen ein Schema, das nicht zum Code
-passt, und die Fehler tauchten verstreut in den Logs auf statt beim Deployment.
+| Zustand | Was passiert |
+|---|---|
+| Journal hat Zeilen | schon übernommen — nur migrieren |
+| Journal leer, eigene Tabellen vorhanden | Basislinie eintragen, dann migrieren |
+| Journal leer, keine Tabellen | frische Datenbank — alles läuft normal |
+
+Markiert werden **alle** Einträge des Journals, nicht nur `0000`: `push` gleicht
+die Datenbank an das *aktuelle* Schema an, also an den Stand der jüngsten
+Migration. Nur `0000` zu markieren würde die übrigen erneut anwenden.
+
+Der Eintrag geht in einer Transaktion raus — eine halbe Basislinie wäre
+schlimmer als keine.
+
+### Was geprüft ist
+
+Gegen ein echtes Postgres 16, nicht gegen eine Attrappe:
+
+- frische Datenbank → 26 `lukas_*`-Tabellen, ein Journal-Eintrag
+- per `push` aufgebaute Datenbank → Basislinie gesetzt, Tabellen unberührt,
+  `created_at` deckt sich mit `meta/_journal.json`
+- zweiter Lauf → erkennt die Übernahme, ändert nichts (Deploys laufen auch mal doppelt)
+- **neue Migration nach der Basislinie** → wird angewendet, Journal wächst;
+  die Basislinie blockiert künftige Änderungen also nicht
+- mehrere Einträge im Journal bei der Übernahme → alle markiert
+- ohne `DATABASE_URL` → Code 1, der Server startet nicht
+
+`start:deploy` ruft `db:deploy` statt `db:push`. Die Eigenschaft von vorher
+bleibt: schlägt der Schema-Schritt fehl, startet der Server **nicht** — sonst
+liefe er gegen ein Schema, das nicht zum Code passt, und die Fehler tauchten
+verstreut in den Logs auf statt beim Deployment.

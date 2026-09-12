@@ -19,7 +19,7 @@
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
     "dev:api": "npm run dev --workspace=@workspace/api-server",
     "start:api": "npm run start --workspace=@workspace/api-server",
-    "start:deploy": "node scripts/db-push-quiet.mjs && npm run start:api",
+    "start:deploy": "npm run db:deploy && npm run start:api",
     "dev:ui": "npm run dev --workspace=@workspace/lukas-ui",
     "build:ui": "npm run build --workspace=@workspace/lukas-ui",
     "dev:landing": "npm run dev --workspace=@workspace/landing-page",
@@ -29,7 +29,8 @@
     "codegen": "npm run codegen --workspace=@workspace/api-spec",
     "telefon:einrichten": "node scripts/telefon-einrichten.mjs",
     "db:generate": "npm run generate --workspace=@workspace/db",
-    "db:migrate": "npm run migrate --workspace=@workspace/db"
+    "db:migrate": "npm run migrate --workspace=@workspace/db",
+    "db:deploy": "npm run deploy --workspace=@workspace/db"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
