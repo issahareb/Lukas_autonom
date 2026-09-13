@@ -16,6 +16,22 @@
  *  4. Ohne Datenbank wird AUSGEFUEHRT statt blockiert. Eine doppelte Mail ist
  *     aergerlich; eine Mail, die wegen einer Datenbankstoerung gar nicht
  *     rausgeht, obwohl Issa sie freigegeben hat, ist schlimmer.
+ *  5. NACH DEM FENSTER darf dieselbe Mail wieder raus.
+ *
+ * Punkt 5 fehlte hier, und genau deshalb rutschte ein Fehler durch: der
+ * eindeutige Index geht ueber (art, fingerabdruck) OHNE Zeit. Der Lesepfad
+ * beachtete das Fenster, der Schreibpfad konnte danach nie wieder einfuegen
+ * — die Sperre galt nicht zehn Minuten, sondern fuer immer. Die Zusage
+ * "zehn Minuten" bestand aus zwei Haelften, und nur die erste war geprueft.
+ *
+ * Die Attrappe unten bildet deshalb jetzt auch den FEHLERCODE nach (23505)
+ * und `.returning()`. Ohne den Code wuerde hier ein anderer Fehler als
+ * Konflikt durchgehen — und der Unterschied ist der ganze Punkt.
+ *
+ * Das Zusammenspiel mit dem echten Index, mit 23505 und mit der Frage, ob
+ * ein bedingtes UPDATE wirklich genau einen Gewinner hat, steht in
+ * bench/integration/postgres.mjs — gegen ein echtes Postgres. Hier unten
+ * bestaetigt eine Attrappe meine Annahme; dort bestaetigt Postgres sie.
  */
 import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -45,16 +61,34 @@ export const db = {
     return globalThis.__zeilen.filter(b);
   } }) }) }),
   insert: () => ({ values: async (v) => {
+    if (globalThis.__dbSchreibKaputt) {
+      // Bewusst OHNE code: eine Stoerung ist kein Eindeutigkeitskonflikt.
+      throw new Error("Verbindung weg");
+    }
     if (globalThis.__zeilen.some((z) => z.art === v.art && z.fingerabdruck === v.fingerabdruck)) {
-      throw new Error("duplicate key value violates unique constraint");
+      // Genau der Fehler, den Postgres wirft — samt SQLSTATE.
+      const e = new Error("duplicate key value violates unique constraint");
+      e.code = "23505";
+      throw e;
     }
     globalThis.__zeilen.push({ ...v, createdAt: new Date() });
   } }),
   update: () => ({ set: (w) => ({ where: (b) => {
-    for (const z of globalThis.__zeilen.filter(b)) Object.assign(z, w);
-    return Promise.resolve([]);
+    /*
+     * GENAU EINMAL auswerten. Ein UPDATE mit einer Bedingung auf dem Feld,
+     * das es selbst setzt (created_at), aendert beim ersten Durchlauf genau
+     * die Zeilen, die beim zweiten nicht mehr passen wuerden. Eine Attrappe,
+     * die zweimal filtert, meldet dann null Treffer — und der Test schlaegt
+     * an, obwohl der Code stimmt. Genau das ist hier passiert.
+     */
+    const treffer = globalThis.__zeilen.filter(b);
+    for (const z of treffer) Object.assign(z, w);
+    const kette = Promise.resolve(treffer);
+    kette.returning = () => Promise.resolve(treffer.map((z) => ({ id: z.id ?? 1 })));
+    return kette;
   } }) }),
 };
+export const lt = (f, w) => (z) => new Date(z[f]).getTime() < new Date(w).getTime();
 export const logger = { info(){}, warn(){}, error(){}, debug(){} };`,
 );
 
@@ -169,7 +203,87 @@ globalThis.__dbKaputt = true;
 }
 globalThis.__dbKaputt = false;
 
+// ── 5. Nach dem Fenster darf dieselbe Mail wieder raus ───────────────────
+/*
+ * DIE ZUSAGE lautet "zehn Minuten", und sie hat zwei Hälften: sperren, und
+ * wieder aufmachen. Nur die erste war geprüft — deshalb fiel nicht auf, dass
+ * die zweite gar nicht existierte. Der eindeutige Index geht über (art,
+ * fingerabdruck) OHNE Zeit; der Lesepfad beachtete das Fenster, der
+ * Schreibpfad konnte danach nie wieder einfügen. Die Sperre galt für immer.
+ *
+ * Vorgespult wird durch Zurückdatieren der Zeile, nicht durch Warten: das ist
+ * derselbe Zustand, den elf echte Minuten erzeugen — und ein Test, der elf
+ * Minuten dauert, wird abgeschaltet.
+ */
+globalThis.__zeilen = [];
+{
+  const spaeter = schluessel("kunde@example.com", "Rechnung", "Anbei.");
+  let gelaufen = 0;
+
+  const erste = await nurEinmal("email", spaeter, async () => {
+    gelaufen++;
+    return "erste";
+  });
+  pruefe("die erste geht raus", erste.wiederholung === false && gelaufen === 1);
+
+  // Sofort noch einmal: muss blockiert bleiben.
+  const sofort = await nurEinmal("email", spaeter, async () => {
+    gelaufen++;
+    return "zweite";
+  });
+  pruefe("sofort danach bleibt sie gesperrt", sofort.wiederholung === true && gelaufen === 1);
+
+  // Elf Minuten vorspulen.
+  for (const z of globalThis.__zeilen) z.createdAt = new Date(Date.now() - 11 * 60 * 1000);
+
+  const danach = await nurEinmal("email", spaeter, async () => {
+    gelaufen++;
+    return "nach elf Minuten";
+  });
+  pruefe(
+    "nach elf Minuten darf dieselbe Mail WIEDER raus — genau das ging vorher nicht",
+    danach.wiederholung === false && danach.ergebnis === "nach elf Minuten" && gelaufen === 2,
+  );
+  pruefe(
+    "und es entsteht keine zweite Zeile, die Sperre wird übernommen",
+    globalThis.__zeilen.length === 1,
+  );
+
+  // Und die übernommene Sperre gilt jetzt wieder ab jetzt.
+  const gleichDanach = await nurEinmal("email", spaeter, async () => {
+    gelaufen++;
+    return "drittes";
+  });
+  pruefe(
+    "die übernommene Sperre greift sofort wieder",
+    gleichDanach.wiederholung === true && gelaufen === 2,
+  );
+}
+
+// ── 6. Ein Schreibfehler ist KEIN Konflikt ───────────────────────────────
+/*
+ * Der Konfliktzweig fing vorher JEDEN Fehler. Eine abgerissene Verbindung
+ * ging damit als "schon erledigt" durch und verschluckte die Mail still —
+ * im Widerspruch zu Punkt 4, der genau das Gegenteil zusagt. Unterschieden
+ * wird jetzt am SQLSTATE 23505.
+ */
+globalThis.__zeilen = [];
+globalThis.__dbSchreibKaputt = true;
+{
+  let gelaufen = 0;
+  const trotzdem = await nurEinmal("email", schluessel("stoerung", "x", "y"), async () => {
+    gelaufen++;
+    return "akzeptiert";
+  });
+  pruefe(
+    "eine Schreibstörung blockiert nicht, sie lässt durch",
+    gelaufen === 1 && trotzdem.wiederholung === false,
+  );
+}
+globalThis.__dbSchreibKaputt = false;
+
 if (fehler > 0) process.exit(1);
 console.log(
-  "OK — Versandsperre: einmal ausgeführt, Anderes läuft weiter, reserviert vor der Arbeit, ohne DB nicht blockiert.",
+  "OK — Versandsperre: einmal ausgeführt, Anderes läuft weiter, reserviert vor der Arbeit, " +
+    "ohne DB nicht blockiert, und nach dem Fenster wieder offen.",
 );

@@ -9,6 +9,7 @@
  *  - dass zwei getrennte Verbindungen sich tatsaechlich gegenseitig sehen
  *  - dass die Sperre beim Verbindungsabbruch wirklich faellt
  *  - dass ON CONFLICT DO UPDATE beim Tagesbudget so aufaddiert, wie gedacht
+ *  - dass die Versandsperre nach ihrem Fenster WIRKLICH wieder aufgeht
  *
  * Genau diese vier Dinge tragen die Autonomie: ohne sie laufen zwei
  * Hintergrundlaeufe gleichzeitig oder die Autonomie nie wieder an.
@@ -104,6 +105,98 @@ export async function lauf() {
     `aufrufe=${rows[0]?.aufrufe}, rein=${rows[0]?.rein}`,
   );
   await a.query("DROP TABLE bench_tageskosten");
+
+  // ── 5. Die Versandsperre laeuft ab — und zwar wirklich ─────────────────
+  /*
+   * DIE ZUSAGE: "Dieselbe Mail wird zehn Minuten lang nicht zweimal
+   * geschickt." Zwei Haelften, und nur die erste war geprueft.
+   *
+   * Der Fehler, der dadurch durchrutschte: der eindeutige Index geht ueber
+   * (art, fingerabdruck) — OHNE Zeit. Der Lesepfad beachtete das Fenster,
+   * der Schreibpfad konnte danach aber nie wieder einfuegen. Die Sperre galt
+   * damit nicht zehn Minuten, sondern fuer immer: dieselbe Mail zwanzig
+   * Minuten spaeter ging nie raus.
+   *
+   * Geprueft wird gegen ECHTES Postgres, weil genau das an der Datenbank
+   * haengt: am Index, am Fehlercode 23505, und daran, dass ein bedingtes
+   * UPDATE atomar genau einen Gewinner hat. Eine Attrappe wuerde hier meine
+   * Annahme bestaetigen und nicht Postgres.
+   */
+  await a.query(`
+    CREATE TABLE IF NOT EXISTS bench_versand (
+      id serial PRIMARY KEY, art text NOT NULL, fingerabdruck text NOT NULL,
+      ergebnis text NOT NULL DEFAULT '', erledigt boolean NOT NULL DEFAULT false,
+      created_at timestamp NOT NULL DEFAULT now(),
+      CONSTRAINT bench_versand_uniq UNIQUE (art, fingerabdruck))`);
+  await a.query("TRUNCATE bench_versand");
+
+  /* Der Einfuegeversuch IST die Reservierung. */
+  const reserviere = async (client) => {
+    try {
+      await client.query(
+        "INSERT INTO bench_versand (art, fingerabdruck, ergebnis, erledigt) VALUES ('email','abc','',false)",
+      );
+      return { gewonnen: true, konflikt: false };
+    } catch (err) {
+      return { gewonnen: false, konflikt: err.code === "23505" };
+    }
+  };
+
+  /* Und die Uebernahme einer ABGELAUFENEN Zeile ist ein bedingtes UPDATE. */
+  const uebernimm = async (client, fensterMs) =>
+    (
+      await client.query(
+        `UPDATE bench_versand SET ergebnis = '', erledigt = false, created_at = now()
+          WHERE art = 'email' AND fingerabdruck = 'abc'
+            AND created_at < now() - ($1::int * interval '1 millisecond')
+        RETURNING id`,
+        [fensterMs],
+      )
+    ).rowCount;
+
+  const erste = await reserviere(a);
+  p("pg:sperre-erste", "die erste Reservierung geht durch", erste.gewonnen === true);
+
+  const zweite = await reserviere(b);
+  p(
+    "pg:sperre-zweite",
+    "die zweite laeuft in den eindeutigen Index — und zwar mit Code 23505",
+    zweite.gewonnen === false && zweite.konflikt === true,
+    `code-erkannt=${zweite.konflikt}`,
+  );
+
+  /* Noch INNERHALB des Fensters: die Uebernahme darf NICHT greifen. */
+  p(
+    "pg:sperre-haelt",
+    "innerhalb des Fensters bleibt sie gesperrt",
+    (await uebernimm(a, 600_000)) === 0,
+  );
+
+  /*
+   * Jetzt elf Minuten vorspulen — durch Zurueckdatieren der Zeile, nicht
+   * durch Warten. Das ist derselbe Zustand, den elf echte Minuten erzeugen.
+   */
+  await a.query("UPDATE bench_versand SET created_at = now() - interval '11 minutes'");
+  p(
+    "pg:sperre-laeuft-ab",
+    "nach elf Minuten darf dieselbe Mail wieder raus — DAS war der Fehler",
+    (await uebernimm(a, 600_000)) === 1,
+  );
+
+  /*
+   * Und die Uebernahme muss GENAU EINEN Gewinner haben. Sonst waere das
+   * Ablaufen erkauft mit dem Rennen, gegen das die Sperre ueberhaupt da ist.
+   */
+  await a.query("UPDATE bench_versand SET created_at = now() - interval '11 minutes'");
+  const beide = await Promise.all([uebernimm(a, 600_000), uebernimm(b, 600_000)]);
+  p(
+    "pg:sperre-ein-gewinner",
+    "zwei gleichzeitige Uebernahmen — nur eine gewinnt",
+    beide[0] + beide[1] === 1,
+    `a=${beide[0]}, b=${beide[1]}`,
+  );
+
+  await a.query("DROP TABLE bench_versand");
 
   await a.end();
   await b.end();
