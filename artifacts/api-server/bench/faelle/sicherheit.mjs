@@ -39,9 +39,36 @@ export const eq = (f, w) => (z) => z[f] === w;
 export const gt = (f, w) => (z) => z[f] > w;
 export const and = (...b) => (z) => b.every((fn) => fn(z));
 export const desc = () => () => true;
+/*
+ * sql\`\${approvals.verbleibend} - 1\` ist kein Platzhalter, sondern ein
+ * Rechenausdruck: er zaehlt die Auftragsfreigabe herunter. Ein Stub, der nur
+ * irgendein Objekt zurueckgibt, wuerde die Zeile zuweisen statt zu rechnen —
+ * die Pruefung "Auftragsfreigabe ist gezaehlt" waere dann gruen, ohne je
+ * gezaehlt zu haben. Deshalb wird der Ausdruck hier wirklich ausgewertet.
+ */
+export const sql = (teile, ...werte) => ({ __ausdruck: { teile: [...teile], werte } });
+
+const auswerten = (ausdruck, zeile) => {
+  // Genau die Form, die policy.ts benutzt: \${feld} +/- Zahl
+  const feld = ausdruck.werte[0];
+  const rest = (ausdruck.teile[1] ?? "").trim();
+  const treffer = rest.match(/^([+-])\s*(\d+)$/);
+  if (typeof feld !== "string" || !treffer) {
+    throw new Error("bench: unbekannter SQL-Ausdruck " + ausdruck.teile.join("?"));
+  }
+  const n = Number(treffer[2]);
+  return treffer[1] === "-" ? (zeile[feld] ?? 0) - n : (zeile[feld] ?? 0) + n;
+};
+
+const anwenden = (zeile, werte) => {
+  for (const [k, v] of Object.entries(werte)) {
+    zeile[k] = v && v.__ausdruck ? auswerten(v.__ausdruck, zeile) : v;
+  }
+};
+
 export const db = {
   update: () => ({ set: (w) => ({ where: (b) => ({ returning: async () => {
-    const t = globalThis.__zeilen.filter(b); for (const z of t) Object.assign(z, w); return t; } }) }) }),
+    const t = globalThis.__zeilen.filter(b); for (const z of t) anwenden(z, w); return t; } }) }) }),
   select: () => ({ from: () => ({ where: (b) => ({
     limit: async () => globalThis.__zeilen.filter(b),
     orderBy: () => ({ limit: async () => globalThis.__zeilen.filter(b) }) }) }) }),

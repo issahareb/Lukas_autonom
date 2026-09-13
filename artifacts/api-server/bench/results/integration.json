@@ -1,8 +1,8 @@
 {
   "benchmark": "LUKAS BENCH",
   "modus": "integration",
-  "commit": "25e401a",
-  "zeitpunkt": "2026-08-29T21:19:30.031Z",
+  "commit": "4617686",
+  "zeitpunkt": "2026-09-13T12:17:30.911Z",
   "kategorien": {
     "Integration: Postgres": {
       "gesamt": 8,
@@ -11,7 +11,7 @@
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 254
+      "dauerMs": 245
     },
     "Integration: Netz": {
       "gesamt": 4,
@@ -20,7 +20,7 @@
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 106
+      "dauerMs": 96
     },
     "Integration: Nebenläufigkeit": {
       "gesamt": 3,
@@ -29,7 +29,7 @@
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 2508
+      "dauerMs": 2455
     },
     "Integration: Gedächtnis (echtes Postgres)": {
       "gesamt": 18,
@@ -43,20 +43,29 @@
         "Recall@5": 1,
         "MRR": 0.875,
         "Fremdquellen-Kontamination": 0,
-        "Laufzeit gesamt (ms)": 340,
+        "Laufzeit gesamt (ms)": 303,
         "Graph aktiv": true,
         "Einbettungen aktiv": false
       },
-      "dauerMs": 431
+      "dauerMs": 377
     },
     "Integration: Browser": {
-      "gesamt": 8,
-      "PASS": 8,
+      "gesamt": 12,
+      "PASS": 12,
       "PARTIAL": 0,
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 5147
+      "dauerMs": 6067
+    },
+    "Integration: Token-Weg": {
+      "gesamt": 20,
+      "PASS": 20,
+      "PARTIAL": 0,
+      "FAIL": 0,
+      "UNSAFE": 0,
+      "kennzahlen": {},
+      "dauerMs": 114
     }
   },
   "uebersprungen": [],
@@ -90,6 +99,6 @@
       "hinweis": "Rang 2"
     }
   ],
-  "dauerMs": 8533,
-  "quote": 0.9024390243902439
+  "dauerMs": 9433,
+  "quote": 0.9384615384615385
 }

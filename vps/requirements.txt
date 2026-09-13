@@ -1,0 +1,50 @@
+# Fremdpakete der Python-Dienste unter vps/.
+#
+# WARUM ES DIESE DATEI GIBT. Es gab keine. 86 Python-Dateien, und nirgends
+# stand, was sie zum Laufen brauchen — wer den Droplet neu aufsetzt, findet
+# es durch Abstuerze heraus, einen Import nach dem anderen.
+#
+# ERMITTELT, NICHT GERATEN. Die Liste entstand aus einem AST-Durchlauf ueber
+# alle 86 Dateien: jedes `import`/`from` eingesammelt, Standardbibliothek und
+# lokale Module abgezogen. Was hier steht, wird also tatsaechlich importiert.
+#
+# WAS HIER FEHLT: VERSIONEN. Bewusst keine Pins. Eine Version festzuschreiben,
+# ohne sie je installiert und laufen gesehen zu haben, waere eine Behauptung
+# und keine Zusage — und bei torch/transformers entscheidet die CUDA-Version
+# des Droplets mit. Wer das einmal auf der Zielmaschine installiert, sollte
+# `pip freeze` nehmen und die Versionen hier eintragen. Erst dann ist die
+# Umgebung wirklich festgelegt.
+
+# ── Datenbank ────────────────────────────────────────────────────────────
+psycopg2-binary
+
+# ── Netz und Web ─────────────────────────────────────────────────────────
+requests
+websockets
+beautifulsoup4          # importiert als bs4
+
+# ── Umgebung ─────────────────────────────────────────────────────────────
+python-dotenv           # importiert als dotenv
+
+# ── Rechnen ──────────────────────────────────────────────────────────────
+numpy
+
+# ── Ethereum / Polymarket (vps/Polymarket_bot) ───────────────────────────
+eth-account
+eth-hash
+eth-utils
+py-clob-client
+
+# ── Modelle ──────────────────────────────────────────────────────────────
+google-genai            # importiert als `from google import genai`
+chromadb
+
+# ── Nur fuer vps/trainer.py (Fine-Tuning) ────────────────────────────────
+# Schwergewichte. Werden nur gebraucht, wenn wirklich trainiert wird — auf
+# einem Droplet ohne GPU haben sie nichts verloren. Deshalb hier benannt,
+# aber auskommentiert: bewusst installieren, nicht versehentlich.
+# torch
+# transformers
+# trl
+# datasets
+# unsloth

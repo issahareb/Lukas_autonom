@@ -14,8 +14,11 @@ echo "→ Postgres starten"
 URL="$("$HIER/start-postgres.sh")"
 export BENCH_DATABASE_URL="$URL"
 
-echo "→ Schema einspielen"
-DATABASE_URL="$URL" npx drizzle-kit push --config ../../lib/db/drizzle.config.ts --force >/dev/null
+# Denselben Weg wie der Deploy, nicht `push`. Sonst prueft der
+# Integrationslauf ein Schema, das so nie ausgeliefert wird — und genau dort
+# hat sich die unvollstaendige Migrationskette versteckt.
+echo "→ Schema einspielen (Deploy-Pfad)"
+DATABASE_URL="$URL" npm run db:deploy --prefix "$API/../.." >/dev/null
 
 echo "→ Bündel bauen"
 npx esbuild src/lib/netzschutz.ts --bundle --format=esm --platform=node --external:undici --outfile=dist/netzschutz-bench.mjs --log-level=error

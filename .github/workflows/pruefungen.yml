@@ -92,3 +92,23 @@ jobs:
       - name: LUKAS BENCH (offline)
         working-directory: artifacts/api-server
         run: npm run bench
+
+      # Der Integrationslauf misst gegen ECHTE Abhängigkeiten: eigenes
+      # Postgres, zwei echte Prozesse, ein echter Browser, der ganze
+      # Token-Weg. Er startet sein Postgres selbst (nicht der Service oben)
+      # und spielt das Schema über denselben Deploy-Pfad ein wie die
+      # Produktion. Lief bisher nur, wenn jemand daran dachte.
+      - name: Browser für den Integrationslauf
+        run: npx playwright install --with-deps chromium
+
+      - name: Integrationslauf (echtes Postgres, echter Browser)
+        working-directory: artifacts/api-server
+        run: npm run bench:integration
+
+      # Die Python-Dienste unter vps/ hingen bisher gar nicht an der Pipeline.
+      # compileall ist der ehrliche erste Schritt: es beweist, dass alle 86
+      # Dateien parsen. Dass ihre Importe aufgehen, beweist es NICHT — dafür
+      # müssten die Abhängigkeiten installiert sein, und torch gehört nicht in
+      # diesen Lauf. Siehe vps/requirements.txt.
+      - name: Python-Dienste (Syntax)
+        run: python3 -m compileall -q vps/
