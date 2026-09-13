@@ -9,6 +9,7 @@ import { anlass, laufNotiert } from "./autonomie-anlass";
 import { mitSperre } from "./lauf-sperre";
 import { budgetTor } from "./tagesbudget";
 import { kennzahlenHinweis, meldeAuffaelligkeiten } from "./kennzahlen";
+import { abgerisseneLaeufeAbschliessen, unterbrechungsHinweis } from "./lauf-wiederaufnahme";
 
 /*
  * Lukas arbeitet an Issas Zielen.
@@ -211,8 +212,25 @@ export async function runAutonomyCycle(): Promise<void> {
     return;
   }
 
+  /*
+   * VOR der Anlass-Pruefung: abgerissene Laeufe aufraeumen.
+   *
+   * Die Reihenfolge ist nicht beliebig. Wird der Lauf gleich uebersprungen,
+   * weil sich nichts bewegt hat, bliebe die abgerissene Episode sonst weiter
+   * offen — moeglicherweise Stunden, bis zufaellig ein Lauf durchkommt. Und
+   * die Unterbrechung selbst IST eine Bewegung: dass Arbeit abgeschnitten
+   * wurde, ist ein Grund zu laufen, auch wenn sich sonst nichts geaendert hat.
+   *
+   * Das hier laeuft bereits unter mitSperre("autonomie") — solange irgendwo
+   * ein Lauf arbeitet, kommt es gar nicht dran. Zusammen mit der
+   * Altersgrenze in lauf-wiederaufnahme.ts sind das zwei Riegel gegen den
+   * Fall, dass ein noch laufender Zug faelschlich abgeschlossen wird.
+   */
+  const abgebrochen = await abgerisseneLaeufeAbschliessen();
+  const unterbrechung = unterbrechungsHinweis(abgebrochen);
+
   const grund = await anlass();
-  if (!grund.starten) {
+  if (!grund.starten && !unterbrechung) {
     logger.info({ grund: grund.grund }, "Autonomie: übersprungen");
     return;
   }
@@ -222,13 +240,24 @@ export async function runAutonomyCycle(): Promise<void> {
     logger.info("Autonomie: keine aktiven Ziele — nichts zu tun");
     return;
   }
-  logger.info({ grund: grund.grund }, "Autonomie: Lauf startet");
+  logger.info(
+    { grund: unterbrechung ? "unterbrochene Arbeit" : grund.grund },
+    "Autonomie: Lauf startet",
+  );
+
+  /*
+   * Der Hinweis steht GANZ OBEN im Auftrag, nicht am Ende. Er ist das
+   * Wichtigste, was Lukas in diesem Lauf wissen muss: dass Arbeit von ihm
+   * angefangen und nie abgeschlossen wurde. Unten haette er zwischen Zielen
+   * und Freigaben gestanden und waere untergegangen.
+   */
+  const auftrag = unterbrechung ? `${unterbrechung}\n\n${brief}` : brief;
 
   const episode = await openEpisode("autonomer_lauf");
   try {
     const result = await runLukasTurn({
-      history: [{ role: "user", content: brief }],
-      userText: brief,
+      history: [{ role: "user", content: auftrag }],
+      userText: auftrag,
       // Ziele und Tagebuch stehen oben im Auftrag — nicht noch einmal.
       ohneZieleUndTagebuch: true,
     });
