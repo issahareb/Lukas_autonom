@@ -58,10 +58,22 @@ async function fuehreAus(skriptDatei, profil, planDatei) {
        * es im Container neben seinen Abhaengigkeiten — hier muss der Pfad
        * ausdruecklich mit.
        */
+      /*
+       * KEIN Ersatzwert fuer PLAYWRIGHT_BROWSERS_PATH.
+       *
+       * Hier stand `?? "/opt/pw-browsers"` — der Pfad EINER Umgebung. Auf dem
+       * CI-Laeufer gibt es ihn nicht: dort liegen die Browser nach
+       * `playwright install` unter ~/.cache/ms-playwright. Der erfundene
+       * Ersatzwert zeigte auf ein leeres Verzeichnis, Playwright fand nichts,
+       * und der Browser-Teil fiel um (3 von 12) — waehrend er lokal gruen war,
+       * weil es das Verzeichnis hier gibt.
+       *
+       * Ist die Variable gesetzt, wird sie durch `...process.env` ohnehin
+       * weitergereicht. Ist sie es nicht, soll Playwright selbst entscheiden.
+       */
       env: {
         ...process.env,
         NODE_PATH: new URL("../../node_modules", import.meta.url).pathname,
-        PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? "/opt/pw-browsers",
         LUKAS_WEB_BENUTZER: "issa@example.com",
         LUKAS_WEB_PASSWORT: "richtig-geheim",
       },

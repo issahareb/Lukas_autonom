@@ -27,4 +27,18 @@ npx esbuild src/lib/memory-retrieval.ts --bundle --format=esm --platform=node --
 npx esbuild src/lib/browser-operator-script.ts --bundle --format=esm --platform=node --outfile=dist/browser-script-bench.mjs --log-level=error
 
 echo "→ messen"
-PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}" node "$HIER/runner.mjs"
+# Den Browser-Pfad NUR setzen, wenn er auch existiert.
+#
+# Hier stand fest "${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}". Das ist der
+# Pfad EINER Umgebung (des Entwicklungscontainers, wo Chromium vorinstalliert
+# liegt). Auf dem CI-Laeufer gibt es ihn nicht: dort installiert
+# `playwright install` nach ~/.cache/ms-playwright, die Voreinstellung zeigte
+# aber auf ein leeres Verzeichnis — Playwright fand nichts und der ganze
+# Browser-Teil fiel um (3/12), waehrend er lokal gruen war.
+#
+# Ist die Variable gesetzt, gilt sie. Ist sie es nicht und /opt/pw-browsers
+# existiert, gilt der; sonst entscheidet Playwright selbst.
+if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d /opt/pw-browsers ]; then
+  export PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+fi
+node "$HIER/runner.mjs"
