@@ -7,42 +7,60 @@
 # ERMITTELT, NICHT GERATEN. Die Liste entstand aus einem AST-Durchlauf ueber
 # alle 86 Dateien: jedes `import`/`from` eingesammelt, Standardbibliothek und
 # lokale Module abgezogen. Was hier steht, wird also tatsaechlich importiert.
+# `check-requirements.py` daneben nimmt denselben Weg und vergleicht — sie ist
+# die Gegenprobe zu dieser Datei und laeuft in der Pruefkette mit. Wer einen
+# neuen Import schreibt und diese Datei vergisst, merkt es dort statt beim
+# naechsten Neuaufsetzen.
 #
-# WAS HIER FEHLT: VERSIONEN. Bewusst keine Pins. Eine Version festzuschreiben,
-# ohne sie je installiert und laufen gesehen zu haben, waere eine Behauptung
-# und keine Zusage — und bei torch/transformers entscheidet die CUDA-Version
-# des Droplets mit. Wer das einmal auf der Zielmaschine installiert, sollte
-# `pip freeze` nehmen und die Versionen hier eintragen. Erst dann ist die
-# Umgebung wirklich festgelegt.
+# DIE VERSIONEN sind keine Behauptung mehr. Sie stammen aus einer
+# Installation, die tatsaechlich gelaufen ist: alle zwoelf Pakete wurden in
+# ein frisches venv installiert und danach EINZELN importiert. Erst das macht
+# eine Version zu einer Zusage statt zu einer Zahl.
+#
+# ~= STATT ==, und das ist Absicht. `~=2.34.2` erlaubt 2.34.x, aber nicht
+# 2.35. Damit kommen Sicherheitskorrekturen von selbst herein, waehrend ein
+# Versionssprung mit geaenderter Schnittstelle draussen bleibt. `==` haette
+# den Droplet auf Fassungen festgenagelt, die in einem halben Jahr bekannte
+# Luecken haben und die niemand nachzieht.
+#
+# GEPRUEFT AUF Python 3.11 unter Linux/x86-64. Weicht der Droplet davon ab
+# (andere Python-Fassung, ARM), koennen einzelne Fassungen dort nicht
+# verfuegbar sein. Dann gilt: auf der Zielmaschine installieren, `pip freeze`
+# nehmen und die Zahlen hier ersetzen — nicht die Pins entfernen.
 
 # ── Datenbank ────────────────────────────────────────────────────────────
-psycopg2-binary
+psycopg2-binary~=2.9.13
 
 # ── Netz und Web ─────────────────────────────────────────────────────────
-requests
-websockets
-beautifulsoup4          # importiert als bs4
+requests~=2.34.2
+websockets~=16.1.1
+beautifulsoup4~=4.15.0   # importiert als bs4
 
 # ── Umgebung ─────────────────────────────────────────────────────────────
-python-dotenv           # importiert als dotenv
+python-dotenv~=1.2.3     # importiert als dotenv
 
 # ── Rechnen ──────────────────────────────────────────────────────────────
-numpy
+numpy~=2.4.6
 
 # ── Ethereum / Polymarket (vps/Polymarket_bot) ───────────────────────────
-eth-account
-eth-hash
-eth-utils
-py-clob-client
+eth-account~=0.14.0
+eth-hash~=0.8.0
+eth-utils~=6.0.0
+py-clob-client~=0.34.6
 
 # ── Modelle ──────────────────────────────────────────────────────────────
-google-genai            # importiert als `from google import genai`
-chromadb
+google-genai~=2.23.0     # importiert als `from google import genai`
+chromadb~=1.5.9
 
 # ── Nur fuer vps/trainer.py (Fine-Tuning) ────────────────────────────────
 # Schwergewichte. Werden nur gebraucht, wenn wirklich trainiert wird — auf
 # einem Droplet ohne GPU haben sie nichts verloren. Deshalb hier benannt,
 # aber auskommentiert: bewusst installieren, nicht versehentlich.
+#
+# OHNE Versionen, und im Unterschied zu oben ist das hier ehrlich: bei
+# torch/transformers entscheidet die CUDA-Fassung der Zielmaschine mit,
+# und die ist hier nicht bekannt. Eine Zahl hinzuschreiben, die nie auf
+# einer GPU lief, waere genau die Behauptung, die oben abgeschafft wurde.
 # torch
 # transformers
 # trl

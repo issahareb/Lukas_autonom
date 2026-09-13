@@ -107,8 +107,47 @@ jobs:
 
       # Die Python-Dienste unter vps/ hingen bisher gar nicht an der Pipeline.
       # compileall ist der ehrliche erste Schritt: es beweist, dass alle 86
-      # Dateien parsen. Dass ihre Importe aufgehen, beweist es NICHT — dafür
-      # müssten die Abhängigkeiten installiert sein, und torch gehört nicht in
-      # diesen Lauf. Siehe vps/requirements.txt.
+      # Dateien parsen.
       - name: Python-Dienste (Syntax)
         run: python3 -m compileall -q vps/
+
+      # Und die Gegenprobe zu requirements.txt: passt die Liste noch zu dem,
+      # was die Dienste WIRKLICH importieren? Die Datei war am Tag ihrer
+      # Entstehung richtig und bleibt es nur, wenn jemand sie nachzieht — was
+      # niemand tut. Hier fällt es auf, statt beim nächsten Neuaufsetzen des
+      # Droplets, einen Absturz nach dem anderen.
+      #
+      # Braucht nichts Installiertes: reine Analyse über den Syntaxbaum.
+      # Deshalb muss hier kein torch heruntergeladen werden.
+      - name: Python-Abhängigkeiten (requirements.txt vollständig?)
+        run: python3 vps/check-requirements.py
+
+      # Und einmal wirklich installieren — nicht bei jedem Lauf, aber wenn
+      # sich die Liste ändert. Erst das macht aus den festgenagelten Versionen
+      # eine Zusage statt einer Zahl: sie müssen zusammen auflösbar sein und
+      # sich importieren lassen. Die auskommentierten Schwergewichte
+      # (torch & Co.) bleiben draußen, wie vorgesehen.
+      - name: Python-Pakete installierbar (nur wenn die Liste sich ändert)
+        if: github.event_name == 'push'
+        run: |
+          python3 -m venv /tmp/pyprobe
+          /tmp/pyprobe/bin/pip install -q --upgrade pip
+          /tmp/pyprobe/bin/pip install -q -r vps/requirements.txt
+          /tmp/pyprobe/bin/python - <<'PY'
+          import importlib, sys
+          module = ["psycopg2", "requests", "websockets", "bs4", "dotenv", "numpy",
+                    "eth_account", "eth_hash", "eth_utils", "py_clob_client",
+                    "google.genai", "chromadb"]
+          schlecht = []
+          for m in module:
+              try:
+                  importlib.import_module(m)
+              except Exception as e:
+                  schlecht.append(f"{m}: {type(e).__name__}: {e}")
+          if schlecht:
+              print("FEHLER — diese Pakete liessen sich nicht importieren:")
+              for z in schlecht:
+                  print("  " + z)
+              sys.exit(1)
+          print(f"OK — alle {len(module)} Pakete installiert und importierbar.")
+          PY
