@@ -43,6 +43,34 @@ vi.mock("@/hooks/use-audio-pegel", () => ({
   useAudioPegel: () => ({ current: 0 }),
 }));
 
+// Die Kacheln zeigen echte Werte. Hier stehen feste, damit der Test prüft,
+// dass sie ANKOMMEN — nicht, was der Server gerade zufällig liefert.
+const dashboardStand = {
+  data: {
+    status: {
+      mood: "wach",
+      energy: "hoch",
+      obsession: "Die Migrationskette",
+      note: "",
+      activeGoalsCount: 3,
+      memoriesCount: 128,
+      lastActive: new Date().toISOString(),
+    },
+    recentDiary: [{ id: 1, content: "Heute lief der Umstieg.", createdAt: new Date().toISOString() }],
+    recentMemories: [{ id: 1, content: "Issa mag kurze Antworten.", createdAt: new Date().toISOString() }],
+    activeGoals: [],
+    mediaJobs: [],
+    recentEmotions: [],
+    character: null,
+  } as unknown,
+};
+vi.mock("@workspace/api-client-react", () => ({
+  useGetLukasDashboard: () => dashboardStand,
+}));
+// Der Block "Wartet auf dich" holt sich eigene Daten; er hat hier nichts zu
+// prüfen und wird deshalb stillgelegt.
+vi.mock("@/components/wartet-auf-dich", () => ({ WartetAufDich: () => null }));
+
 import Dashboard from "./dashboard";
 
 beforeEach(() => {
@@ -134,5 +162,22 @@ describe("Startseite", () => {
     sprachStand.fehler = "Mikrofon nicht erlaubt";
     render(<Dashboard />);
     expect(screen.getByText("Mikrofon nicht erlaubt")).toBeTruthy();
+  });
+
+  it("zeigt in den Kacheln, was Lukas wirklich gerade hat", () => {
+    render(<Dashboard />);
+    // Ohne diese Werte wäre die Seite hübsch und leer — genau das war der
+    // Grund, die alte Übersicht zurückzuholen.
+    expect(screen.getByText("wach")).toBeTruthy();
+    expect(screen.getByText("Die Migrationskette")).toBeTruthy();
+    expect(screen.getByText("128 Erinnerungen")).toBeTruthy();
+    expect(screen.getByText("3 aktive Ziele")).toBeTruthy();
+  });
+
+  it("führt von einer Kachel dorthin, wo mehr davon steht", async () => {
+    const nutzer = userEvent.setup();
+    render(<Dashboard />);
+    await nutzer.click(screen.getByText("128 Erinnerungen"));
+    expect(navigiert).toContain("/memory");
   });
 });

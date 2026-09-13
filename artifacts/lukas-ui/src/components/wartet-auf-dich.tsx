@@ -106,7 +106,19 @@ export function WartetAufDich() {
 
   if (!daten) return null;
 
-  const nichtsOffen = daten.meldungen.length === 0 && daten.freigaben.length === 0;
+  /*
+   * Gegen eine Antwort, die nicht so aussieht wie erwartet.
+   *
+   * Vorher stand hier `daten.meldungen.length` direkt. Liefert die
+   * Schnittstelle einmal etwas anderes — ein Fehlerobjekt, eine halbe
+   * Antwort, ein Proxy dazwischen —, wirft das, und weil diese Komponente
+   * auf der STARTSEITE steht, reisst sie die ganze Seite mit: schwarzer
+   * Bildschirm statt einer fehlenden Kachel. Genau so ist es beim
+   * Nachstellen passiert.
+   */
+  const meldungen = Array.isArray(daten.meldungen) ? daten.meldungen : [];
+  const freigaben = Array.isArray(daten.freigaben) ? daten.freigaben : [];
+  const nichtsOffen = meldungen.length === 0 && freigaben.length === 0;
 
   if (nichtsOffen) {
     return (
@@ -126,7 +138,7 @@ export function WartetAufDich() {
       </h2>
 
       {/* ── Freigaben zuerst: sie laufen ab, Meldungen nicht ─────────── */}
-      {daten.freigaben.map((f) => (
+      {freigaben.map((f) => (
         <div
           key={f.id}
           className="space-y-3 rounded-lg border border-amber-500/25 bg-card p-4"
@@ -195,7 +207,7 @@ export function WartetAufDich() {
       ))}
 
       {/* ── Meldungen mit Antwortfeld ────────────────────────────────── */}
-      {daten.meldungen.map((m) => (
+      {meldungen.map((m) => (
         <div
           key={m.id}
           className={`space-y-3 rounded-lg border bg-card p-4 ${m.dringend ? "border-amber-400/40" : ""}`}
@@ -242,9 +254,9 @@ export function WartetAufDich() {
 
       <div className="text-xs text-muted-foreground">
         {daten.gesamt.freigaben} Freigabe(n)
-        {mehr(daten.freigaben.length, daten.gesamt.freigaben)} ·{" "}
+        {mehr(freigaben.length, daten.gesamt?.freigaben)} ·{" "}
         {daten.gesamt.meldungen} Meldung(en)
-        {mehr(daten.meldungen.length, daten.gesamt.meldungen)}
+        {mehr(meldungen.length, daten.gesamt?.meldungen)}
       </div>
     </section>
   );

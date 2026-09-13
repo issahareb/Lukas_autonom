@@ -1,44 +1,109 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowUp, AudioLines, Image as BildIcon, Paperclip, Sparkles, FileText, X } from "lucide-react";
+import { useGetLukasDashboard } from "@workspace/api-client-react";
+import { formatDistanceToNow } from "date-fns";
+import { de } from "date-fns/locale";
+import {
+  ArrowUp,
+  AudioLines,
+  BookOpen,
+  Brain,
+  Paperclip,
+  Target,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { Orb, type OrbZustand } from "@/components/orb";
+import { WartetAufDich } from "@/components/wartet-auf-dich";
 import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import { useAudioPegel } from "@/hooks/use-audio-pegel";
 
 /*
  * Die Startseite.
  *
- * Eine Frage, eine Antwortmöglichkeit, sonst nichts. Alles andere hat seinen
- * eigenen Tab — hier steht Lukas selbst im Mittelpunkt, nicht seine
- * Verwaltung.
+ * Der Aufbau ist bewusst in dieser Reihenfolge:
  *
- * DREI ZUSTÄNDE, DIE DER ORB ERZÄHLT:
- *   nichts los  -> er ist groß und atmet in der Mitte.
- *   du tippst   -> er rückt nach oben und wird kleiner. Der Platz gehört
- *                  jetzt dem, was du schreibst.
- *   ihr redet   -> er wird groß und folgt der Stimme, die gerade dran ist.
+ *   1. Der Orb, ganz oben. Er ist das Erste, was man sieht, und er sagt
+ *      ohne ein Wort, ob gerade etwas läuft.
+ *   2. Was Lukas beschäftigt — vier Kacheln mit dem, was er WIRKLICH gerade
+ *      hat: Stimmung, Thema, Gedächtnis, Tagebuch. Nicht Zierde, sondern
+ *      der Grund, warum man überhaupt hier landet.
+ *   3. Die Frage, unten. Sie steht dort, weil man sie stellt, NACHDEM man
+ *      gesehen hat, wie es ihm geht — nicht davor.
  *
- * Die Bewegung beim Tippen ist kein Effekt: sie beantwortet die Frage "hört
- * er mich gerade?" ohne ein einziges Wort. Und weil der Pegel aus der echten
- * Audiospur kommt (use-audio-pegel), stimmt sie auch dann, wenn jemand
- * mitten im Satz Luft holt.
+ * Zwischen Orb und Begrüßung liegt der Platz, in dem die Kacheln stehen.
+ * Ohne sie war die Seite hübsch und leer; alles, was Lukas über sich zu
+ * sagen hat, lag einen Klick entfernt und wurde damit nie gesehen.
  */
 
-const VORSCHLAEGE = [
-  { icon: Sparkles, titel: "Überrasch mich", text: "Was ist dir zuletzt aufgefallen?" },
-  { icon: BildIcon, titel: "Bild erstellen", text: "Erstelle ein Bild von " },
-  { icon: FileText, titel: "Zusammenfassen", text: "Fass mir kurz zusammen: " },
-];
+/** Eine der vier großen Kacheln. Sie zeigt eine Sache, groß genug zum Lesen. */
+function Kachel({
+  icon: Icon,
+  label,
+  wert,
+  zusatz,
+  ziel,
+  verzoegerung = 0,
+  navigate,
+}: {
+  icon: LucideIcon;
+  label: string;
+  wert: string;
+  zusatz?: string;
+  ziel: string;
+  verzoegerung?: number;
+  navigate: (ziel: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(ziel)}
+      style={{ animationDelay: `${verzoegerung}ms` }}
+      className="card-soft rise flex min-h-[7.5rem] flex-col justify-between rounded-3xl p-4 text-left sm:min-h-[8.5rem] sm:p-5"
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-[13px] text-muted-foreground">{label}</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+          <Icon className="h-4 w-4 text-primary" />
+        </span>
+      </span>
+      <span className="mt-2 block">
+        {/*
+          Zwei Zeilen, dann Schluss. Ein Tagebucheintrag ist ein Satz, keine
+          Kennzahl — ohne Begrenzung sprengt er die Kachel und schiebt den
+          Zusatz heraus. Genau das war im ersten Screenshot zu sehen.
+        */}
+        {/*
+          KEIN `block` hinter `line-clamp-2`: die Begrenzung braucht
+          `display:-webkit-box`, und `block` setzt das zurueck — dann laeuft
+          der Text ueber vier Zeilen weiter, als waere nichts gesetzt. Genau
+          so stand es im Screenshot.
+          `break-words` fuer den zweiten Fall: ein langes Wort wie
+          "Migrationskette" bricht sonst nicht und schiebt sich seitlich aus
+          der Kachel heraus.
+        */}
+        <span className="line-clamp-2 break-words text-[1.02rem] font-semibold leading-snug tracking-tight sm:text-lg">
+          {wert}
+        </span>
+        {zusatz && (
+          <span className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground">
+            {zusatz}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [text, setText] = useState("");
   const eingabe = useRef<HTMLTextAreaElement>(null);
   const sprache = useSprachsitzung();
+  const { data } = useGetLukasDashboard();
 
   const pegel = useAudioPegel({
-    // Beim Sprechen zählt SEINE Stimme, beim Zuhören DEINE. Beide Quellen
-    // hängen dran; die lautere gewinnt, und still ist immer nur eine.
+    // Beim Sprechen zählt SEINE Stimme, beim Zuhören DEINE.
     stream: sprache.status === "hoert" ? sprache.mikro : null,
     element: sprache.aktiv ? sprache.ausgabe : null,
     aktiv: sprache.aktiv,
@@ -55,11 +120,6 @@ export default function Dashboard() {
           ? "denkt"
           : "ruhe";
 
-  // Groß im Gespräch, klein beim Tippen, sonst dazwischen.
-  const groesse = sprache.aktiv ? "gross" : tippt ? "klein" : "mittel";
-
-  // Das Textfeld wächst mit, bis zu einer Grenze — ein Feld, das endlos
-  // wächst, schiebt die Eingabe irgendwann aus dem Bild.
   useEffect(() => {
     const el = eingabe.current;
     if (!el) return;
@@ -70,80 +130,127 @@ export default function Dashboard() {
   function absenden() {
     const frage = text.trim();
     if (!frage) return;
-    /*
-     * Die Frage wird im sessionStorage übergeben, nicht in der Adresszeile.
-     * Zwei Gründe: sie kann beliebig lang sein, und sie hat in einem Link,
-     * den jemand teilt oder der im Verlauf stehen bleibt, nichts verloren.
-     */
     sessionStorage.setItem("lukas_startfrage", frage);
     setText("");
     navigate("/chat");
   }
 
+  const status = data?.status;
+  const tagebuch = data?.recentDiary?.[0];
+  const erinnerung = data?.recentMemories?.[0];
   const letzteZeile = sprache.zeilen[sprache.zeilen.length - 1];
 
+  const seit = (d: Date | string | null | undefined) =>
+    d ? formatDistanceToNow(new Date(d), { addSuffix: true, locale: de }) : undefined;
+
   return (
-    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
-      {/* Der Schein von unten — er ist in den Vorlagen das, was die Seite aus
-          dem reinen Schwarz heraushebt. Rein dekorativ, daher aria-hidden. */}
+    <div className="relative">
+      {/* Der Schein von unten. `fixed`, nicht `absolute`: die Seite scrollt
+          jetzt, und ein mitscrollender Verlauf reißt beim Scrollen sichtbar
+          ab — genau der schwarze Balken, der vorher unten auftauchte. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] opacity-70"
+        className="pointer-events-none fixed inset-x-0 bottom-0 h-[45vh] opacity-60"
         style={{
           background:
-            "radial-gradient(120% 100% at 50% 115%, color-mix(in oklch, var(--primary) 55%, transparent) 0%, transparent 70%)",
+            "radial-gradient(120% 100% at 50% 120%, color-mix(in oklch, var(--primary) 50%, transparent) 0%, transparent 70%)",
         }}
       />
 
-      <div className="relative flex min-h-[calc(100dvh-4rem)] flex-col items-center px-5 pb-6 pt-4 sm:px-8">
-        {/* ── Orb + Begrüßung ─────────────────────────────────────────── */}
-        {/*
-          Beim Tippen rueckt der Orb nach OBEN, er schrumpft nicht bloss in der
-          Mitte. Das ist der Unterschied zwischen "er macht Platz" und "er
-          verschwindet": der Blick wandert mit ihm hoch, und darunter entsteht
-          der Raum fuer das, was gleich kommt.
-        */}
-        <div
-          className={`flex w-full flex-1 flex-col items-center transition-all duration-500 ${
-            tippt ? "justify-start gap-3 pt-2" : "justify-center gap-6"
-          }`}
-        >
-          <Orb zustand={zustand} pegel={pegel} groesse={groesse} />
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col px-5 pb-8 pt-6 sm:px-8">
+        {/* ── 1. Der Orb, oben ──────────────────────────────────────────── */}
+        <div className="flex justify-center">
+          <Orb zustand={zustand} pegel={pegel} groesse={sprache.aktiv ? "gross" : "mittel"} />
+        </div>
 
-          {/* Beim Tippen tritt die Begrüßung zurück — du weißt ja schon, was
-              du willst. Sie verschwindet nicht, sie wird nur leise. */}
-          <div
-            className={`text-center transition-all duration-500 ${
-              tippt ? "max-h-0 scale-95 opacity-0" : "max-h-40 opacity-100"
-            }`}
-          >
-            <p className="text-sm text-muted-foreground sm:text-base">Hallo Issa</p>
-            <h1 className="mt-1 text-[1.75rem] font-semibold leading-tight tracking-tight text-pretty sm:text-4xl">
-              {sprache.aktiv ? "Ich höre." : "Wie kann ich dir helfen?"}
-            </h1>
-            {!sprache.aktiv && (
-              <p className="mx-auto mt-3 hidden max-w-sm text-sm text-muted-foreground sm:block">
-                Von der schnellen Frage bis zur Arbeit, die von allein weiterläuft.
-              </p>
-            )}
+        {/* ── 2. Was ihn beschäftigt ────────────────────────────────────── */}
+        <div className="mt-7 space-y-4 sm:mt-9">
+          {/* Steht vor den Kacheln, weil es das Einzige auf dieser Seite ist,
+              das eine Aufgabe ist statt einer Information. Ist nichts offen,
+              zeigt die Komponente von sich aus nichts. */}
+          <WartetAufDich />
+
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Kachel
+              navigate={navigate}
+              icon={AudioLines}
+              label="Stimmung"
+              wert={status?.mood ?? "—"}
+              zusatz={status?.note || (status ? `Energie: ${status.energy}` : "lädt…")}
+              ziel="/diary"
+            />
+            <Kachel
+              navigate={navigate}
+              icon={Target}
+              label="Thema"
+              wert={status?.obsession || "Nichts Bestimmtes"}
+              zusatz={
+                status ? `${status.activeGoalsCount} aktive Ziele` : undefined
+              }
+              ziel="/goals"
+              verzoegerung={60}
+            />
+            <Kachel
+              navigate={navigate}
+              icon={Brain}
+              label="Gedächtnis"
+              wert={status ? `${status.memoriesCount} Erinnerungen` : "—"}
+              zusatz={
+                erinnerung?.content
+                  ? `Zuletzt: ${erinnerung.content}`
+                  : undefined
+              }
+              ziel="/memory"
+              verzoegerung={120}
+            />
+            <Kachel
+              navigate={navigate}
+              icon={BookOpen}
+              label="Tagebuch"
+              /* Nicht zusaetzlich per slice kuerzen: line-clamp schneidet an
+                 der Zeile ab und laesst dadurch mehr Lesbares stehen. Beides
+                 zusammen hat vom Eintrag nur "Der Umstieg auf…" uebrig
+                 gelassen. */
+              wert={tagebuch?.content || "Noch nichts geschrieben"}
+              zusatz={seit(tagebuch?.createdAt) ?? seit(status?.lastActive)}
+              ziel="/diary"
+              verzoegerung={180}
+            />
           </div>
+        </div>
 
-          {/* Im Gespräch: die letzte Zeile, damit man mitlesen kann. */}
+        {/* ── 3. Die Begrüßung, darunter ────────────────────────────────── */}
+        {/*
+          Der Abstand nach unten ist kein Geschmack, sondern Pflicht: die
+          Eingabe klebt am unteren Rand und wuerde sonst genau ueber diesem
+          Text liegen. Im ersten Anlauf tat sie das auch.
+        */}
+        <div className="mt-10 pb-24 text-center sm:mt-12">
+          <p className="text-sm text-muted-foreground">Hey Issa</p>
+          <h1 className="mt-1 text-[1.6rem] font-semibold leading-tight tracking-tight text-pretty sm:text-3xl">
+            {sprache.aktiv ? "Ich höre." : "Wie kann ich dir heute helfen?"}
+          </h1>
+
           {sprache.aktiv && letzteZeile && (
-            <p className="mx-auto max-w-md text-center text-sm text-muted-foreground">
+            <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
               <span className="opacity-60">{letzteZeile.role === "user" ? "Du: " : "Lukas: "}</span>
               {letzteZeile.text}
             </p>
           )}
-
           {sprache.fehler && (
-            <p className="max-w-md text-center text-sm text-destructive">{sprache.fehler}</p>
+            <p className="mt-3 text-sm text-destructive">{sprache.fehler}</p>
           )}
         </div>
 
-        {/* ── Eingabe ─────────────────────────────────────────────────── */}
-        <div className="w-full max-w-2xl shrink-0">
-          <div className="glass flex items-end gap-2 rounded-[1.75rem] px-3 py-2 shadow-lg shadow-black/20">
+        {/* ── 4. Die Eingabe ───────────────────────────────────────────── */}
+        {/* Klebt unten, damit sie beim Scrollen erreichbar bleibt. Der
+            Sicherheitsabstand unten ist die Home-Leiste des iPhones — ohne
+            ihn liegt die Taste darunter. */}
+        <div
+          className="sticky bottom-0 z-10 mt-6 pt-3"
+          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="glass flex items-end gap-2 rounded-[1.75rem] px-3 py-2 shadow-lg shadow-black/30">
             <button
               type="button"
               onClick={() => navigate("/chat")}
@@ -169,9 +276,7 @@ export default function Dashboard() {
               className="max-h-40 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60"
             />
 
-            {/* Die Taste wechselt mit dem, was du tust: schreibst du, ist es
-                Senden. Schreibst du nicht, ist es die Stimme. Zwei Tasten
-                nebeneinander hätten hier nur die Frage gestellt, welche. */}
+            {/* Schreibst du, ist es Senden. Schreibst du nicht, die Stimme. */}
             {tippt ? (
               <button
                 type="button"
@@ -200,32 +305,6 @@ export default function Dashboard() {
                 )}
               </button>
             )}
-          </div>
-
-          {/* ── Vorschläge ────────────────────────────────────────────── */}
-          {/* Auf dem Handy nur, solange nichts los ist: dort ist der Platz
-              knapp, und sie stehen sonst der Tastatur im Weg. */}
-          <div
-            className={`mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 ${
-              tippt || sprache.aktiv ? "hidden" : "hidden sm:grid"
-            }`}
-          >
-            {VORSCHLAEGE.map(({ icon: Icon, titel, text: vorlage }) => (
-              <button
-                key={titel}
-                type="button"
-                onClick={() => {
-                  setText(vorlage);
-                  eingabe.current?.focus();
-                }}
-                className="card-soft rounded-2xl px-3.5 py-3 text-left"
-              >
-                <span className="flex items-center gap-2 text-[13px] font-medium">
-                  <Icon className="h-4 w-4 text-primary" />
-                  {titel}
-                </span>
-              </button>
-            ))}
           </div>
         </div>
       </div>
