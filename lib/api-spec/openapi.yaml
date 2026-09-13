@@ -292,6 +292,273 @@ paths:
               schema:
                 $ref: "#/components/schemas/LukasDashboard"
 
+  # ── BETRIEBSBEREITSCHAFT ─────────────────────────────────────────────────
+  /readyz:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Bereit, Anfragen anzunehmen?
+      description: >
+        Anders als /healthz sagt das hier nicht nur "der Prozess lebt", sondern
+        "die Datenbank antwortet auch". Beim Herunterfahren antwortet es 503,
+        damit der Lastverteiler keine neuen Anfragen mehr schickt.
+      responses:
+        "200":
+          description: Bereit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bereitschaft"
+        "503":
+          description: Nicht bereit (Abschied oder Datenbank weg)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bereitschaft"
+
+  # ── FREIGABEN ────────────────────────────────────────────────────────────
+  # Aktionen, die Lukas nur mit Issas ausdruecklicher Zustimmung ausfuehren
+  # darf. Die Oberflaeche rief sie bisher mit handgeschriebenem fetch auf —
+  # ungetypt, und genau deshalb fiel `rows.filter is not a function` erst zur
+  # Laufzeit auf und riss die ganze Seite mit.
+  /lukas/approvals:
+    get:
+      operationId: getApprovals
+      tags: [lukas]
+      summary: Offene und zuletzt entschiedene Freigaben
+      responses:
+        "200":
+          description: Die letzten 50 Freigaben, neueste zuerst
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Approval"
+
+  /lukas/approvals/{id}/allow:
+    post:
+      operationId: allowApproval
+      tags: [lukas]
+      summary: Diesen einen Aufruf erlauben
+      description: >
+        Gilt nur fuer genau diese Argumente und nur einmal. Aendert Lukas ein
+        Zeichen, passt die Freigabe nicht mehr.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Die aktualisierte Freigabe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "404":
+          description: Es gibt keine offene Freigabe mit dieser Nummer
+
+  /lukas/approvals/{id}/allow-auftrag:
+    post:
+      operationId: allowApprovalForTask
+      tags: [lukas]
+      summary: Dieses Werkzeug fuer die laufende Aufgabe erlauben
+      description: >
+        Gilt fuer dieses Werkzeug in DIESER Unterhaltung, befristet und
+        gezaehlt. Nie fuer R3 — Geld, Zugangsdaten und Unumkehrbares bleiben
+        Einzelentscheidungen.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Die aktualisierte Freigabe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "400":
+          description: Nicht erlaubt fuer diese Risikostufe
+        "404":
+          description: Es gibt keine offene Freigabe mit dieser Nummer
+
+  /lukas/approvals/{id}/deny:
+    post:
+      operationId: denyApproval
+      tags: [lukas]
+      summary: Freigabe ablehnen
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Die aktualisierte Freigabe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Approval"
+        "404":
+          description: Es gibt keine offene Freigabe mit dieser Nummer
+
+  # ── MELDUNGEN ────────────────────────────────────────────────────────────
+  /lukas/meldungen:
+    get:
+      operationId: getMeldungen
+      tags: [lukas]
+      summary: Was Lukas von Issa braucht
+      responses:
+        "200":
+          description: Meldungen, offene zuerst
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Meldung"
+
+  /lukas/meldungen/{id}/antwort:
+    post:
+      operationId: answerMeldung
+      tags: [lukas]
+      summary: Auf eine Meldung antworten
+      description: >
+        Die Antwort ist kein Abhaken: sie wird Lukas beim naechsten autonomen
+        Lauf vorgelegt und ist der Grund, warum er weiterarbeiten kann.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeldungAntwort"
+      responses:
+        "200":
+          description: Die beantwortete Meldung
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meldung"
+        "400":
+          description: Ungueltige Nummer
+
+  # ── WARTET AUF DICH ──────────────────────────────────────────────────────
+  /lukas/wartet:
+    get:
+      operationId: getWartendes
+      tags: [lukas]
+      summary: Alles, was gerade auf eine Entscheidung von Issa wartet
+      responses:
+        "200":
+          description: Offene Meldungen und Freigaben, zusammengefasst
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wartendes"
+
+  # ── VORSCHLAEGE ──────────────────────────────────────────────────────────
+  /lukas/proposals:
+    get:
+      operationId: getProposals
+      tags: [lukas]
+      summary: Aenderungen, die Lukas an seinem eigenen Code vorschlaegt
+      responses:
+        "200":
+          description: Vorschlaege, neueste zuerst
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CodeProposal"
+
+  # ── ZUGAENGE ─────────────────────────────────────────────────────────────
+  # Der WERT taucht in keiner Antwort auf, auch nicht gekuerzt. Das ist keine
+  # Nachlaessigkeit der Spec, sondern der Punkt: Lukas bekommt nur
+  # {{PLATZHALTER}} zu sehen, und was nie hinausgeht, kann auch keine
+  # praeparierte Webseite abfragen.
+  /lukas/zugaenge:
+    get:
+      operationId: getZugaenge
+      tags: [lukas]
+      summary: Welche Anmeldedaten hinterlegt sind (ohne die Werte)
+      responses:
+        "200":
+          description: Uebersicht
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZugangsListe"
+    put:
+      operationId: setZugang
+      tags: [lukas]
+      summary: Einen Zugang hinterlegen oder ersetzen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ZugangEingabe"
+      responses:
+        "200":
+          description: Der hinterlegte Zugang, ohne den Wert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Zugang"
+        "400":
+          description: Feldname, Sitzung oder Wert unbrauchbar — der Grund steht dabei, der Wert nie
+
+  /lukas/zugaenge/{sitzung}/{feld}:
+    delete:
+      operationId: deleteZugang
+      tags: [lukas]
+      summary: Einen Zugang loeschen
+      parameters:
+        - name: sitzung
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: feld
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Geloescht
+        "404":
+          description: Gibt es nicht
+
+  # ── DIAGNOSE ─────────────────────────────────────────────────────────────
+  /lukas/debug-log:
+    get:
+      operationId: getDebugLog
+      tags: [lukas]
+      summary: Was zuletzt schiefgegangen ist
+      responses:
+        "200":
+          description: Die letzten 50 Fehler, neueste zuerst
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DebugLogEintrag"
+
   # ── HIGGSFIELD ───────────────────────────────────────────────────────────
   /higgsfield/generate-prompt:
     post:
@@ -587,6 +854,321 @@ components:
           type: string
       required:
         - status
+
+    Bereitschaft:
+      type: object
+      properties:
+        status:
+          type: string
+          description: ok | shutting_down | error
+        datenbankMs:
+          type: integer
+          description: Wie lange die Datenbank fuer eine triviale Abfrage brauchte
+      required:
+        - status
+
+    # ── FREIGABEN ───────────────────────────────────────────────────────────
+    Approval:
+      type: object
+      description: >
+        Eine Aktion, die Lukas nur mit Issas Zustimmung ausfuehren darf.
+        `argumentsHash` steht bewusst NICHT drin: die Oberflaeche braucht ihn
+        nicht, und was nicht hinausgeht, kann auch nicht missbraucht werden.
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: ["integer", "null"]
+        tool:
+          type: string
+        riskTier:
+          type: string
+          description: R0 | R1 | R2 | R3 — harmlos bis riskant
+        argumentsPreview:
+          type: string
+          description: Lesbare, gekuerzte Fassung der Argumente. Ohne Geheimnisse.
+        reason:
+          type: ["string", "null"]
+        status:
+          type: string
+          description: pending | allowed | denied | used | expired
+        geltung:
+          type: string
+          description: einmal | auftrag
+        verbleibend:
+          type: integer
+          description: Wie viele Aufrufe eine Auftragsfreigabe noch deckt
+        expired:
+          type: boolean
+          description: >
+            Vom Server gerechnet, nicht von der Oberflaeche. Dieselbe Regel an
+            zwei Orten ist irgendwann an einem davon falsch.
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tool
+        - riskTier
+        - argumentsPreview
+        - status
+        - geltung
+        - verbleibend
+        - expired
+        - createdAt
+        - expiresAt
+
+    # ── MELDUNGEN ───────────────────────────────────────────────────────────
+    MeldungAntwort:
+      type: object
+      properties:
+        antwort:
+          type: string
+      required:
+        - antwort
+
+    Meldung:
+      type: object
+      description: Was Lukas von Issa braucht, um weiterzuarbeiten.
+      properties:
+        id:
+          type: integer
+        betreff:
+          type: string
+        text:
+          type: string
+        dringend:
+          type: boolean
+        status:
+          type: string
+          description: offen | erledigt
+        antwort:
+          type: ["string", "null"]
+        gelesen:
+          type: boolean
+          description: Ob Lukas die Antwort schon vorgelegt bekommen hat
+        createdAt:
+          type: string
+          format: date-time
+        erledigtAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - id
+        - betreff
+        - text
+        - dringend
+        - status
+        - gelesen
+        - createdAt
+
+    # ── WARTET AUF DICH ─────────────────────────────────────────────────────
+    Wartendes:
+      type: object
+      description: >
+        Bewusst gekuerzte Fassungen, nicht die vollen Objekte: das hier ist die
+        Vorschau auf der Startseite, nicht die Freigabe-Seite.
+      properties:
+        meldungen:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              betreff:
+                type: string
+              text:
+                type: string
+              dringend:
+                type: boolean
+              createdAt:
+                type: string
+                format: date-time
+            required: [id, betreff, text, dringend, createdAt]
+        freigaben:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              tool:
+                type: string
+              riskTier:
+                type: string
+              argumentsPreview:
+                type: string
+              expiresAt:
+                type: string
+                format: date-time
+            required: [id, tool, riskTier, argumentsPreview, expiresAt]
+        gesamt:
+          type: object
+          description: >
+            Getrennt von den gezeigten: "und 3 weitere" ist ehrlicher als eine
+            Liste, die stillschweigend endet.
+          properties:
+            meldungen:
+              type: integer
+            freigaben:
+              type: integer
+          required: [meldungen, freigaben]
+      required:
+        - meldungen
+        - freigaben
+        - gesamt
+
+    # ── VORSCHLAEGE ─────────────────────────────────────────────────────────
+    ProposalDatei:
+      type: object
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+          description: Immer der VOLLSTAENDIGE neue Dateiinhalt, kein Patch
+      required: [path, content]
+
+    CodeProposal:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: ["integer", "null"]
+        repo:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+          description: In normaler Sprache, was beim Annehmen passiert
+        reasoning:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProposalDatei"
+        baseCommit:
+          type: ["string", "null"]
+          description: >
+            Der Commit, gegen den der Vorschlag geschrieben ist. Ist der
+            Zielbranch weitergelaufen, meldet der Pull Request einen
+            Konflikt — sichtbar, statt still zu ueberschreiben.
+        branchName:
+          type: ["string", "null"]
+        pullRequestUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          description: pending | accepted | rejected | revision
+        comment:
+          type: ["string", "null"]
+        appliedResult:
+          type: ["string", "null"]
+        targetBranch:
+          type: ["string", "null"]
+          description: >
+            Wohin "Annehmen" schreibt. Geht mit raus, damit der Knopf keine
+            Blackbox ist.
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - id
+        - repo
+        - title
+        - summary
+        - reasoning
+        - files
+        - status
+        - createdAt
+
+    # ── ZUGAENGE ────────────────────────────────────────────────────────────
+    Zugang:
+      type: object
+      description: >
+        Ohne den Wert. Der verlaesst den Server nur im Moment einer Anmeldung
+        und taucht in keiner Antwort auf, auch nicht gekuerzt.
+      properties:
+        sitzung:
+          type: string
+        feld:
+          type: string
+        notiz:
+          type: ["string", "null"]
+        zuletztBenutzt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - sitzung
+        - feld
+        - createdAt
+
+    ZugangEingabe:
+      type: object
+      properties:
+        sitzung:
+          type: string
+          description: Der Dienst, z. B. "higgsfield"
+        feld:
+          type: string
+          description: Grossbuchstaben, Ziffern und _ — wird zu {{FELD}}
+        wert:
+          type: string
+          description: Wird verschluesselt abgelegt und nie zurueckgegeben
+        notiz:
+          type: ["string", "null"]
+      required:
+        - sitzung
+        - feld
+        - wert
+
+    ZugangsListe:
+      type: object
+      properties:
+        bereit:
+          type: boolean
+          description: >
+            Ob LUKAS_TRESOR_SCHLUESSEL gesetzt ist. Ohne ihn wird nichts
+            gespeichert — ein Passwort im Klartext waere schlimmer als keins.
+        zugaenge:
+          type: array
+          items:
+            $ref: "#/components/schemas/Zugang"
+      required:
+        - bereit
+        - zugaenge
+
+    # ── DIAGNOSE ────────────────────────────────────────────────────────────
+    DebugLogEintrag:
+      type: object
+      properties:
+        time:
+          type: string
+          format: date-time
+        scope:
+          type: string
+          description: Woher der Fehler kam — chat, widget, elevenlabs, …
+        message:
+          type: string
+      required:
+        - time
+        - scope
+        - message
 
     # ── LUKAS ───────────────────────────────────────────────────────────────
     LukasStatus:

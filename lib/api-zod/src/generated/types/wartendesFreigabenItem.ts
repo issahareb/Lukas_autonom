@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetTradesSummaryParams = {
-/**
- * Filter by bot name
- */
-bot?: string;
+export type WartendesFreigabenItem = {
+  id: number;
+  tool: string;
+  riskTier: string;
+  argumentsPreview: string;
+  expiresAt: Date;
 };

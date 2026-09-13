@@ -6,9 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetTradesSummaryParams = {
-/**
- * Filter by bot name
- */
-bot?: string;
-};
+export interface ProposalDatei {
+  path: string;
+  /** Immer der VOLLSTAENDIGE neue Dateiinhalt, kein Patch */
+  content: string;
+}

@@ -6,7 +6,16 @@
     "emitDeclarationOnly": true,
     "outDir": "dist",
     "rootDir": "src",
-    "lib": ["dom", "es2022"]
+    /*
+       "dom.iterable" ist hier keine Zierde, sondern Pflicht.
+
+       Der erzeugte Client ruft `Headers.entries()` auf — das ist ein Iterator,
+       und den kennt TypeScript nur mit dieser Bibliothek. Ohne sie erzeugt
+       `npm run codegen` Code, der NICHT compiliert. Der eingecheckte Client
+       war offenbar von Hand nachgebessert worden, sodass es niemandem auffiel:
+       wer den dokumentierten Weg ging, bekam zehn Fehler und musste raten.
+    */
+    "lib": ["dom", "dom.iterable", "es2022"]
   },
   "include": ["src"]
 }

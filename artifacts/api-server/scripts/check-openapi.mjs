@@ -41,7 +41,7 @@ import { join } from "node:path";
  * aufnimmt, senkt sie. Wer eine neue Route ohne Spec hinzufuegt, muss sie
  * bewusst erhoehen — und genau dieser bewusste Schritt ist der Zweck.
  */
-const UNDOKUMENTIERT_ERWARTET = 48;
+const UNDOKUMENTIERT_ERWARTET = 35;
 
 const WURZEL = new URL("..", import.meta.url).pathname;
 const ROUTEN_DIR = join(WURZEL, "src/routes");

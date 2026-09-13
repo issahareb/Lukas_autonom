@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetTradesSummaryParams = {
-/**
- * Filter by bot name
- */
-bot?: string;
-};
+export interface MeldungAntwort {
+  antwort: string;
+}
