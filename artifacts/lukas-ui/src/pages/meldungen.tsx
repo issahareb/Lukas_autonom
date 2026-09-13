@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PageHeader } from "@/components/page-header";
 import { Inbox, AlertTriangle, Check, Loader2, Send } from "lucide-react";
+import { Seite, Chip, Leer, Laedt, staffel } from "@/components/seite";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 
@@ -77,38 +76,39 @@ export default function Meldungen() {
   const erledigt = rows.filter((m) => m.status !== "offen");
 
   return (
-    <div>
-      <PageHeader
-        icon={Inbox}
-        title="Meldungen"
-        subtitle="Was Lukas von dir braucht, um weiterzuarbeiten"
-        actions={
-          <div className="text-xs text-muted-foreground">
-            {offen.length > 0 ? `${offen.length} offen` : "nichts offen"}
-          </div>
-        }
-      />
-
-      <div className="p-5 sm:p-6 space-y-8 max-w-3xl">
-        {laedt && <div className="text-sm text-muted-foreground">Lädt…</div>}
+    <Seite
+      icon={Inbox}
+      titel="Meldungen"
+      unterzeile="Was Lukas von dir braucht, um weiterzuarbeiten."
+      aktionen={
+        <Chip ton={offen.length > 0 ? "warnung" : "neutral"}>
+          {offen.length > 0 ? `${offen.length} offen` : "nichts offen"}
+        </Chip>
+      }
+    >
+      <div className="space-y-9">
+        {laedt && <Laedt />}
 
         {!laedt && rows.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border/70 px-4 py-10 text-sm text-muted-foreground text-center text-pretty">
-            Lukas hat sich noch nicht gemeldet. Hier landet, was er von dir braucht, um
-            weiterzukommen — eine Entscheidung, ein Zugang, eine Antwort.
-          </div>
+          <Leer
+            icon={Inbox}
+            titel="Lukas hat sich noch nicht gemeldet"
+            hinweis="Hier landet, was er von dir braucht, um weiterzukommen — eine Entscheidung, ein Zugang, eine Antwort."
+          />
         )}
 
         {offen.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">
+            <h2 className="px-1 text-[11px] tracking-wide text-muted-foreground">
               Wartet auf dich ({offen.length})
             </h2>
             {offen.map((m, i) => (
               <div
                 key={m.id}
-                className={`card-soft rise p-5 space-y-3 ${m.dringend ? "border-amber-400/40" : ""}`}
-                style={{ animationDelay: `${i * 50}ms` }}
+                className={`card-soft rise space-y-3 rounded-3xl p-5 ${
+                  m.dringend ? "ring-1 ring-amber-400/30" : ""
+                }`}
+                style={{ animationDelay: `${staffel(i)}ms` }}
               >
                 <div className="space-y-1">
                   <div className="font-medium flex items-start gap-2">
@@ -134,22 +134,22 @@ export default function Meldungen() {
                     value={entwuerfe[m.id] ?? ""}
                     onChange={(e) => setEntwuerfe((v) => ({ ...v, [m.id]: e.target.value }))}
                     placeholder="Deine Antwort — ein Satz reicht meistens."
-                    className="min-h-[80px] text-sm resize-none"
+                    className="min-h-[80px] resize-none rounded-2xl border-0 bg-white/[0.05] text-sm"
                   />
                   <div className="flex justify-end">
-                    <Button
+                    <button
+                      type="button"
                       onClick={() => antworten(m.id)}
                       disabled={!(entwuerfe[m.id] ?? "").trim() || sendet === m.id}
-                      className="gap-2"
-                      size="sm"
+                      className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03] disabled:opacity-40 disabled:hover:scale-100"
                     >
                       {sendet === m.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4" />
+                        <Send className="h-4 w-4" />
                       )}
                       Antworten
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -159,9 +159,9 @@ export default function Meldungen() {
 
         {erledigt.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">Erledigt</h2>
+            <h2 className="px-1 text-[11px] tracking-wide text-muted-foreground">Erledigt</h2>
             {erledigt.map((m) => (
-              <div key={m.id} className="card-soft p-4 space-y-2 opacity-80">
+              <div key={m.id} className="card-soft space-y-2 rounded-3xl p-4 opacity-80">
                 <div className="flex items-start justify-between gap-3">
                   <div className="font-medium flex items-start gap-2 min-w-0">
                     <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-1" />
@@ -175,7 +175,7 @@ export default function Meldungen() {
                 </div>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.text}</p>
                 {m.antwort && (
-                  <div className="text-sm rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 whitespace-pre-wrap">
+                  <div className="rounded-2xl bg-primary/10 px-3.5 py-2.5 text-sm whitespace-pre-wrap">
                     <span className="text-xs text-muted-foreground block mb-0.5">Deine Antwort</span>
                     {m.antwort}
                   </div>
@@ -185,6 +185,6 @@ export default function Meldungen() {
           </section>
         )}
       </div>
-    </div>
+    </Seite>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Fehlergrenze } from "@/components/fehlergrenze";
 import {
   Activity,
   BarChart3,
@@ -57,8 +58,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const sidebarContent = (
     <>
-      <div className="h-16 px-5 border-b border-border flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
+      <div className="flex h-16 items-center gap-3 px-5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/12">
           <span className="text-sm font-semibold text-primary">L</span>
         </div>
         <div className="flex flex-col min-w-0">
@@ -96,7 +97,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                 isActive
                   ? "bg-primary/10 text-foreground font-medium"
-                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                  : "text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
               }`}
             >
               {isActive && (
@@ -111,10 +112,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm w-full text-muted-foreground hover:bg-secondary hover:text-secondary-foreground transition-colors duration-200"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition-colors duration-200 hover:bg-white/[0.05] hover:text-foreground"
           data-testid="button-logout"
         >
           <LogOut className="w-4 h-4 shrink-0" />
@@ -129,7 +130,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {isMobile ? (
         <>
           {/* Mobile: schmale Top-Bar mit Menü-Button statt fixer Sidebar */}
-          <div className="fixed inset-x-0 top-0 z-30 h-14 border-b border-border bg-card flex items-center gap-3 px-4">
+          <div className="glass fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-x-0 border-t-0 px-4">
             <button
               onClick={() => setNavOpen(true)}
               className="text-foreground"
@@ -150,7 +151,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           )}
           <aside
-            className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-border bg-card flex flex-col transition-transform duration-200 ${
+            className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-sidebar transition-transform duration-200 ${
               navOpen ? "translate-x-0" : "-translate-x-full"
             }`}
           >
@@ -158,17 +159,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </aside>
 
           <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative pt-14">
-            <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">{children}</div>
+            <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+              <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
+            </div>
           </main>
         </>
       ) : (
         <>
-          <aside className="w-64 flex-shrink-0 border-r border-border bg-card flex flex-col">
+          <aside className="flex w-64 flex-shrink-0 flex-col bg-sidebar">
             {sidebarContent}
           </aside>
 
           <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
-            <div className="flex-1 min-w-0 overflow-y-auto">{children}</div>
+            <div className="flex-1 min-w-0 overflow-y-auto">
+              <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
+            </div>
           </main>
         </>
       )}

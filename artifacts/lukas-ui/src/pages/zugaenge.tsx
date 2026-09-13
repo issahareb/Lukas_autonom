@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageHeader } from "@/components/page-header";
+import { Seite, Leer, Laedt } from "@/components/seite";
 import { KeyRound, Trash2, AlertTriangle, Plus, Eye } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -95,16 +95,14 @@ export default function Zugaenge() {
   }, {});
 
   return (
-    <div>
-      <PageHeader
-        icon={KeyRound}
-        title="Zugänge"
-        subtitle="Anmeldedaten, die Lukas benutzt — und nie zu sehen bekommt"
-      />
-
-      <div className="max-w-3xl space-y-6 p-5 sm:p-6">
+    <Seite
+      icon={KeyRound}
+      titel="Zugänge"
+      unterzeile="Anmeldedaten, die Lukas benutzt — und nie zu sehen bekommt."
+    >
+      <div className="space-y-5">
         {!bereit && (
-          <div className="flex gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <div className="flex gap-3 rounded-3xl bg-destructive/10 p-4 text-sm ring-1 ring-destructive/25">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
             <div>
               <div className="font-medium">Kein Schlüssel gesetzt</div>
@@ -118,7 +116,7 @@ export default function Zugaenge() {
         )}
 
         {/* ── Wie es funktioniert ─────────────────────────────────────── */}
-        <div className="flex gap-3 rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+        <div className="card-soft flex gap-3 rounded-3xl p-5 text-sm text-muted-foreground">
           <Eye className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             Der Wert wird verschlüsselt abgelegt und nur im Moment der Anmeldung in den
@@ -131,8 +129,8 @@ export default function Zugaenge() {
         </div>
 
         {/* ── Neuer Zugang ────────────────────────────────────────────── */}
-        <section className="space-y-3 rounded-lg border bg-card p-4">
-          <h2 className="text-sm font-medium">Zugang hinterlegen</h2>
+        <section className="card-soft space-y-4 rounded-3xl p-5">
+          <h2 className="font-medium">Zugang hinterlegen</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground" htmlFor="z-sitzung">
@@ -185,35 +183,39 @@ export default function Zugaenge() {
           {fehler && <div className="text-sm text-destructive">{fehler}</div>}
 
           <div className="flex justify-end">
-            <Button
-              size="sm"
-              className="gap-2"
+            <button
+              type="button"
               onClick={speichern}
               disabled={!sitzung.trim() || !feld.trim() || !wert || sendet}
+              className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03] disabled:opacity-40 disabled:hover:scale-100"
             >
               <Plus className="h-4 w-4" /> Speichern
-            </Button>
+            </button>
           </div>
         </section>
 
         {/* ── Was hinterlegt ist ──────────────────────────────────────── */}
-        {laedt && <div className="text-sm text-muted-foreground">Lädt…</div>}
+        {laedt && <Laedt />}
 
         {!laedt && rows.length === 0 && (
-          <div className="rounded-xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-            Noch nichts hinterlegt. Fehlt Lukas ein Zugang, meldet er sich — er rät nicht
-            und tippt nichts Falsches ein.
-          </div>
+          <Leer
+            icon={KeyRound}
+            titel="Noch nichts hinterlegt"
+            hinweis="Fehlt Lukas ein Zugang, meldet er sich — er rät nicht und tippt nichts Falsches ein."
+          />
         )}
 
         {Object.entries(nachSitzung).map(([name, felder]) => (
           <section key={name} className="space-y-2">
-            <h2 className="font-mono text-sm font-medium">{name}</h2>
-            <div className="overflow-hidden rounded-lg border bg-card">
-              {felder.map((z) => (
+            {/* Mono: der Sitzungsname ist ein Bezeichner, kein Wort. */}
+            <h2 className="px-1 font-mono text-sm font-medium">{name}</h2>
+            <div className="overflow-hidden rounded-3xl bg-white/[0.03]">
+              {felder.map((z, i) => (
                 <div
                   key={z.feld}
-                  className="flex items-center justify-between gap-3 border-b px-4 py-2.5 text-sm last:border-0"
+                  className={`flex items-center justify-between gap-3 px-4 py-3 text-sm ${
+                    i > 0 ? "border-t border-white/[0.04]" : ""
+                  }`}
                 >
                   <div className="min-w-0">
                     <span className="font-mono">{`{{${z.feld}}}`}</span>
@@ -227,14 +229,14 @@ export default function Zugaenge() {
                         ? `benutzt ${new Date(z.zuletztBenutzt).toLocaleDateString("de-DE")}`
                         : "nie benutzt"}
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <button
+                      type="button"
                       aria-label={`${z.feld} löschen`}
                       onClick={() => loeschen(z)}
+                      className="rounded-full p-1.5 text-muted-foreground transition-colors hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -242,6 +244,6 @@ export default function Zugaenge() {
           </section>
         ))}
       </div>
-    </div>
+    </Seite>
   );
 }

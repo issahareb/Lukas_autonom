@@ -53,7 +53,12 @@ describe("Freigaben", () => {
     render(<Approvals />);
 
     expect(await screen.findByText("email_send")).toBeInTheDocument();
-    expect(screen.getByText("R3")).toBeInTheDocument();
+    /*
+     * Geprueft wird das WORT, nicht der Code: in der Oberflaeche steht jetzt
+     * "riskant" statt "R3". Wer eine Freigabe erteilt, soll lesen koennen,
+     * worauf er sich einlaesst, ohne eine Stufentabelle im Kopf zu haben.
+     */
+    expect(screen.getByText("riskant")).toBeInTheDocument();
     /*
      * Die Argumente muessen SICHTBAR sein. Eine Freigabe, bei der man nur den
      * Werkzeugnamen sieht, ist eine Unterschrift auf einem leeren Blatt.
@@ -130,7 +135,7 @@ describe("Freigaben", () => {
 
     await screen.findByText("email_send");
     expect(screen.queryByRole("button", { name: /Erlauben/ })).not.toBeInTheDocument();
-    expect(screen.getByText("ABGELAUFEN")).toBeInTheDocument();
+    expect(screen.getByText("abgelaufen")).toBeInTheDocument();
   });
 
   it("sagt deutlich, wenn nichts offen ist", async () => {
@@ -142,6 +147,6 @@ describe("Freigaben", () => {
   it("verschweigt einen Ladefehler nicht", async () => {
     vi.stubGlobal("fetch", () => Promise.resolve(new Response("nope", { status: 500 })));
     render(<Approvals />);
-    expect(await screen.findByText(/Fehler beim Laden/)).toBeInTheDocument();
+    expect(await screen.findByText(/liessen sich nicht laden/)).toBeInTheDocument();
   });
 });

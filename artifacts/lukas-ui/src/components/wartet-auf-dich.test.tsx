@@ -61,7 +61,8 @@ describe("Wartet auf dich", () => {
 
     expect(await screen.findByText("Zugang zum Kundenpostfach fehlt")).toBeInTheDocument();
     expect(screen.getByText("email_send")).toBeInTheDocument();
-    expect(screen.getByText("R2")).toBeInTheDocument();
+    // Das WORT, nicht der Code: in der Oberflaeche steht "heikel" statt "R2".
+    expect(screen.getByText("heikel")).toBeInTheDocument();
     /* Man gibt frei, was man sieht — der Werkzeugname allein ist eine
        Unterschrift auf einem leeren Blatt. */
     expect(screen.getByText(/kunde@example\.com/)).toBeInTheDocument();

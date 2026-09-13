@@ -34,11 +34,23 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/*
+ * Dieselben Toene wie auf der Freigaben-Seite — und dieselben Worte. "R2"
+ * sagt niemandem etwas, der nicht die Stufentabelle im Kopf hat; wer eine
+ * Freigabe erteilt, soll lesen koennen, worauf er sich einlaesst.
+ */
 const TIER_STYLE: Record<string, string> = {
-  R0: "bg-secondary text-muted-foreground",
-  R1: "bg-secondary text-muted-foreground",
-  R2: "bg-amber-500/15 text-amber-300 border border-amber-500/25",
-  R3: "bg-red-500/15 text-red-300 border border-red-500/25",
+  R0: "bg-white/[0.06] text-muted-foreground",
+  R1: "bg-white/[0.06] text-muted-foreground",
+  R2: "bg-amber-400/10 text-amber-300",
+  R3: "bg-destructive/15 text-red-300",
+};
+
+const TIER_WORT: Record<string, string> = {
+  R0: "harmlos",
+  R1: "harmlos",
+  R2: "heikel",
+  R3: "riskant",
 };
 
 /*
@@ -122,7 +134,7 @@ export function WartetAufDich() {
 
   if (nichtsOffen) {
     return (
-      <section className="rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
+      <section className="card-soft rounded-3xl px-5 py-4 text-sm text-muted-foreground">
         Nichts offen — Lukas wartet gerade auf keine Antwort und auf keine Freigabe.
       </section>
     );
@@ -141,7 +153,7 @@ export function WartetAufDich() {
       {freigaben.map((f) => (
         <div
           key={f.id}
-          className="space-y-3 rounded-lg border border-amber-500/25 bg-card p-4"
+          className="card-soft space-y-3 rounded-3xl p-5 ring-1 ring-amber-400/25"
           data-testid={`wartet-freigabe-${f.id}`}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -150,9 +162,9 @@ export function WartetAufDich() {
                 <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-mono font-medium">{f.tool}</span>
                 <span
-                  className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${TIER_STYLE[f.riskTier] ?? ""}`}
+                  className={`rounded-full px-2.5 py-[3px] text-[11px] font-medium leading-none ${TIER_STYLE[f.riskTier] ?? ""}`}
                 >
-                  {f.riskTier}
+                  {TIER_WORT[f.riskTier] ?? f.riskTier}
                 </span>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
@@ -200,7 +212,7 @@ export function WartetAufDich() {
             </div>
           </div>
           {/* Man gibt frei, was man SIEHT — nie nur einen Werkzeugnamen. */}
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md border bg-background/60 p-3 text-xs">
+          <pre className="overflow-x-auto rounded-2xl bg-black/30 p-3.5 text-xs break-words whitespace-pre-wrap">
             {f.argumentsPreview}
           </pre>
         </div>
@@ -210,7 +222,7 @@ export function WartetAufDich() {
       {meldungen.map((m) => (
         <div
           key={m.id}
-          className={`space-y-3 rounded-lg border bg-card p-4 ${m.dringend ? "border-amber-400/40" : ""}`}
+          className={`card-soft space-y-3 rounded-3xl p-5 ${m.dringend ? "ring-1 ring-amber-400/30" : ""}`}
           data-testid={`wartet-meldung-${m.id}`}
         >
           <div className="flex items-start justify-between gap-3">

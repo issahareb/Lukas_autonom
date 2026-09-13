@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plug, RefreshCw, Plus, Trash2, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { Seite, Leer, Laedt, Fehler } from "@/components/seite";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -114,7 +113,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
   const s = STATUS[server.status];
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 space-y-3" data-testid={`mcp-${server.id}`}>
+    <div className="card-soft rise space-y-3 rounded-3xl p-5" data-testid={`mcp-${server.id}`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -140,7 +139,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
       </div>
 
       {server.lastError && server.status === "error" && (
-        <pre className="text-xs text-destructive bg-background/60 border border-border rounded-md p-2 whitespace-pre-wrap break-words">
+        <pre className="rounded-2xl bg-destructive/10 p-3 text-xs break-words whitespace-pre-wrap text-red-300">
           {server.lastError}
         </pre>
       )}
@@ -160,7 +159,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
               {server.tools.map((t) => {
                 const an = proposalSelection().includes(t.name);
                 return (
-                  <li key={t.name} className="text-xs border border-border rounded px-2 py-1.5">
+                  <li key={t.name} className="rounded-xl bg-white/[0.04] px-2.5 py-1.5 text-xs">
                     <label className="flex items-start gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -184,14 +183,14 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
         </div>
       )}
 
-      <div className="border-t border-border pt-3 flex items-center gap-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-3 pt-1">
         <label className="text-xs text-muted-foreground">
           Freigabe:{" "}
           <select
             value={server.riskTier}
             disabled={busy}
             onChange={(e) => patch({ riskTier: e.target.value as McpServer["riskTier"] })}
-            className="bg-background border border-border rounded px-2 py-1 text-xs ml-1"
+            className="ml-1 rounded-lg bg-white/[0.06] px-2 py-1 text-xs outline-none"
           >
             <option value="R1">R1 — ohne Rückfrage</option>
             <option value="R2">R2 — Freigabe nötig</option>
@@ -225,8 +224,15 @@ export default function Mcp() {
   const load = useCallback(async () => {
     try {
       const data = await api("");
-      setServers(data.servers);
-      setCallback(data.callbackUrl);
+      /*
+       * Geprueft, statt blind uebernommen. `data.servers` war ungeprueft; kam
+       * etwas anderes zurueck als erwartet — ein Fehlerobjekt mit 200, die
+       * HTML-Seite eines Proxys —, warf `servers.length` weiter unten, und
+       * React riss die GANZE Seite mit: schwarzer Bildschirm statt einer
+       * leeren Liste. Beim Durchsehen der Seiten ist genau das passiert.
+       */
+      setServers(Array.isArray(data?.servers) ? data.servers : []);
+      setCallback(typeof data?.callbackUrl === "string" ? data.callbackUrl : "");
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
@@ -256,72 +262,76 @@ export default function Mcp() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader
-        icon={Plug}
-        title="MCP"
-        subtitle="Fremde Werkzeuge, die Lukas mitbenutzen darf"
-        actions={
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="w-4 h-4" /> Aktualisieren
-          </Button>
-        }
-      />
-
-      <ScrollArea className="flex-1 p-5 sm:p-6">
-        <div className="max-w-3xl space-y-6">
-          <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-            <h2 className="text-sm text-muted-foreground">Server hinzufügen</h2>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Name, z.B. Kalender"
-                className="flex-1 text-sm bg-background border border-border rounded-md px-3 py-2"
-                data-testid="input-mcp-name"
-              />
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://…/mcp"
-                className="flex-[2] text-sm bg-background border border-border rounded-md px-3 py-2"
-                data-testid="input-mcp-url"
-              />
-              <Button onClick={add} disabled={adding || !name.trim() || !url.trim()} className="gap-1.5">
-                <Plus className="w-4 h-4" /> Anlegen
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Nach dem Anlegen auf „Verbinden“ — du wirst zum Anbieter geschickt, meldest dich dort
-              an, und landest wieder hier. Danach kennt Lukas dessen Werkzeuge.
-            </p>
-            {callback && (
-              <p className="text-[11px] text-muted-foreground break-all">
-                Falls ein Anbieter nach einer Redirect-URL fragt:{" "}
-                <span className="font-mono">{callback}</span>
-              </p>
-            )}
+    <Seite
+      icon={Plug}
+      titel="MCP"
+      unterzeile="Fremde Werkzeuge, die Lukas mitbenutzen darf."
+      aktionen={
+        <button
+          type="button"
+          onClick={load}
+          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+        >
+          <RefreshCw className="h-4 w-4" /> Aktualisieren
+        </button>
+      }
+    >
+      <div className="space-y-5">
+        <div className="card-soft space-y-3 rounded-3xl p-5">
+          <h2 className="font-medium">Server hinzufügen</h2>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name, z.B. Kalender"
+              aria-label="Name des Servers"
+              className="h-11 flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              data-testid="input-mcp-name"
+            />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://…/mcp"
+              aria-label="Adresse des Servers"
+              className="h-11 flex-[2] rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              data-testid="input-mcp-url"
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={adding || !name.trim() || !url.trim()}
+              className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03] disabled:opacity-40 disabled:hover:scale-100"
+            >
+              <Plus className="h-4 w-4" /> Anlegen
+            </button>
           </div>
-
-          {error && <div className="text-destructive text-sm">{error}</div>}
-          {loading && servers.length === 0 && (
-            <div className="text-center text-muted-foreground py-12">Lädt…</div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Nach dem Anlegen auf „Verbinden“ — du wirst zum Anbieter geschickt, meldest dich dort
+            an, und landest wieder hier. Danach kennt Lukas dessen Werkzeuge.
+          </p>
+          {callback && (
+            <p className="text-[11px] break-all text-muted-foreground">
+              Falls ein Anbieter nach einer Redirect-URL fragt:{" "}
+              <span className="font-mono">{callback}</span>
+            </p>
           )}
-
-          {!loading && servers.length === 0 && (
-            <div className="text-center py-10">
-              <Plug className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Noch kein MCP-Server eingetragen.
-              </p>
-            </div>
-          )}
-
-          {servers.map((s) => (
-            <ServerCard key={s.id} server={s} onChange={load} />
-          ))}
         </div>
-      </ScrollArea>
-    </div>
+
+        {error && <Fehler text={error} />}
+        {loading && servers.length === 0 && <Laedt />}
+
+        {!loading && servers.length === 0 && (
+          <Leer
+            icon={Plug}
+            titel="Noch kein MCP-Server eingetragen"
+            hinweis="Über MCP kann Lukas Werkzeuge fremder Dienste mitbenutzen — einen Kalender etwa, oder eine Ablage."
+          />
+        )}
+
+        {servers.map((s) => (
+          <ServerCard key={s.id} server={s} onChange={load} />
+        ))}
+      </div>
+    </Seite>
   );
 }

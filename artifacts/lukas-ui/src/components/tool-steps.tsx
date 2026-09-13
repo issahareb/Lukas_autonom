@@ -87,7 +87,7 @@ function Block({ titel, text }: { titel: string; text: string }) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{titel}</div>
-      <pre className="text-xs leading-relaxed bg-secondary/40 border border-border/60 rounded-xl p-3.5 overflow-x-auto whitespace-pre-wrap break-words max-h-[40vh] overflow-y-auto">
+      <pre className="max-h-[40vh] overflow-auto rounded-2xl bg-black/25 p-3.5 text-xs leading-relaxed break-words whitespace-pre-wrap">
         {text || "—"}
       </pre>
     </div>
@@ -116,12 +116,12 @@ function Argumente({ input }: { input: string }) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground">Womit</div>
-      <div className="rounded-xl border border-border/60 bg-secondary/40 divide-y divide-border/60">
+      <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-white/[0.04]">
         {eintraege.map(([schluessel, wert]) => {
           const einfach = typeof wert !== "object" || wert === null;
           return (
             <div key={schluessel} className="p-3.5 space-y-1">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70">
+              <div className="text-[11px] tracking-wide text-muted-foreground/70">
                 {schluessel}
               </div>
               <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">

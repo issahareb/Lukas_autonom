@@ -10,26 +10,23 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, CheckCircle2, Target, Clock, AlertCircle } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { Plus, Trash2, CheckCircle2, Target, Clock, AlertCircle, RotateCcw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
+import { prioritaet, zielstand } from "@/lib/worte";
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: "bg-red-500/10 text-red-400 border-red-500/20",
-  medium: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  low: "bg-green-500/10 text-green-400 border-green-500/20",
+const PRIO_TON = { high: "schlecht", medium: "warnung", low: "gut" } as const;
+
+const STAND_SYMBOL: Record<string, React.ReactNode> = {
+  active: <Clock className="h-4 w-4 text-sky-300" />,
+  completed: <CheckCircle2 className="h-4 w-4 text-emerald-300" />,
+  failed: <AlertCircle className="h-4 w-4 text-red-300" />,
 };
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  active: <Clock className="w-4 h-4 text-blue-400" />,
-  completed: <CheckCircle2 className="w-4 h-4 text-green-400" />,
-  failed: <AlertCircle className="w-4 h-4 text-red-400" />,
-};
+const FILTER = ["all", "active", "completed", "failed"];
 
 export default function Goals() {
   const qc = useQueryClient();
@@ -65,125 +62,174 @@ export default function Goals() {
     qc.invalidateQueries({ queryKey: getGetGoalsQueryKey() });
   };
 
-  const activeCount = goals.filter((g) => g.status === "active").length;
-  const completedCount = goals.filter((g) => g.status === "completed").length;
+  const aktiv = goals.filter((g) => g.status === "active").length;
+  const erledigt = goals.filter((g) => g.status === "completed").length;
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader
-        icon={Target}
-        title="Ziele"
-        subtitle={`${activeCount} aktiv — ${completedCount} abgeschlossen`}
-        actions={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2"><Plus className="w-4 h-4" /> Neues Ziel</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Ziel anlegen</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <Input placeholder="Ziel-Titel" value={title} onChange={(e) => setTitle(e.target.value)} />
-                <Textarea
-                  placeholder="Was genau ist das Ziel? Warum ist es wichtig?"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="min-h-[100px] text-sm"
-                />
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Priorität</label>
-                  <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">Hoch</SelectItem>
-                      <SelectItem value="medium">Mittel</SelectItem>
-                      <SelectItem value="low">Niedrig</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleCreate} className="w-full" disabled={!title.trim() || !description.trim() || createGoal.isPending}>
-                  Direktive aktivieren
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        }
-      >
-        <div className="flex flex-wrap gap-2">
-          {["all", "active", "completed", "failed"].map((s) => (
-            <Button
-              key={s}
-              variant={filter === s ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilter(s)}
-              className="text-xs"
-            >
-              {s.toUpperCase()}
+    <Seite
+      icon={Target}
+      titel="Ziele"
+      unterzeile={`${aktiv} aktiv, ${erledigt} erledigt`}
+      aktionen={
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2 rounded-full">
+              <Plus className="h-4 w-4" /> Neues Ziel
             </Button>
-          ))}
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Ziel anlegen</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <Input placeholder="Worum geht es?" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Textarea
+                placeholder="Was genau ist das Ziel? Warum ist es wichtig?"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="min-h-[100px] text-sm"
+              />
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Wie wichtig?</label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">Wichtig</SelectItem>
+                    <SelectItem value="medium">Mittel</SelectItem>
+                    <SelectItem value="low">Nebenbei</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleCreate}
+                className="w-full rounded-full"
+                disabled={!title.trim() || !description.trim() || createGoal.isPending}
+              >
+                Ziel setzen
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      }
+      unterKopf={
+        /*
+         * Vorher standen hier vier umrandete Kaesten mit ALL / ACTIVE /
+         * COMPLETED / FAILED — englische Datenbankwerte in Grossbuchstaben.
+         * Jetzt Pillen in Satzschrift, und der gewaehlte ist gefuellt statt
+         * umrandet.
+         */
+        <div className="flex flex-wrap gap-2">
+          {FILTER.map((s) => {
+            const gewaehlt = filter === s;
+            const anzahl = s === "all" ? goals.length : goals.filter((g) => g.status === s).length;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setFilter(s)}
+                aria-pressed={gewaehlt}
+                className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
+                  gewaehlt
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white/[0.06] text-muted-foreground hover:bg-white/[0.1] hover:text-foreground"
+                }`}
+              >
+                {zielstand(s)}
+                <span className="ml-1.5 opacity-60">{anzahl}</span>
+              </button>
+            );
+          })}
         </div>
-      </PageHeader>
+      }
+    >
+      {isLoading && <Laedt was="Ziele werden geladen…" />}
 
-      <ScrollArea className="flex-1 p-5 sm:p-6">
-        {isLoading && <div className="text-center text-muted-foreground py-12">Lädt…</div>}
-        <div className="space-y-4 max-w-3xl">
-          {filtered.map((g) => (
-            <div key={g.id} className="group bg-card border border-border rounded-lg p-5 hover:border-primary/30 transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="mt-0.5">{STATUS_ICONS[g.status] ?? <Clock className="w-4 h-4" />}</div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold">{g.title}</h3>
-                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{g.description}</p>
-                    <div className="mt-3 p-3 bg-background rounded border border-border/50">
-                      <div className="text-xs text-muted-foreground mb-1">Fortschritt:</div>
-                      <div className="text-sm">{g.progress}</div>
-                    </div>
-                  </div>
+      <div className="space-y-4">
+        {filtered.map((g, idx) => (
+          <Karte key={g.id} verzoegerung={staffel(idx)} className="group">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 shrink-0">{STAND_SYMBOL[g.status] ?? <Clock className="h-4 w-4" />}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="text-[1.05rem] font-semibold leading-snug tracking-tight break-words">
+                    {g.title}
+                  </h2>
+                  <Chip ton={PRIO_TON[g.priority as keyof typeof PRIO_TON] ?? "neutral"}>
+                    {prioritaet(g.priority)}
+                  </Chip>
                 </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
+                <p className="mt-1.5 text-sm leading-relaxed break-words text-muted-foreground">
+                  {g.description}
+                </p>
+
+                {g.progress && (
+                  <div className="mt-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] text-muted-foreground">Wie weit er ist</p>
+                    <p className="mt-1 text-sm leading-relaxed break-words">{g.progress}</p>
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {g.status === "active" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange(g.id, "completed")}
+                        className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-1.5 text-xs text-emerald-300 transition-colors hover:bg-emerald-400/20"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Erledigt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange(g.id, "failed")}
+                        className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-3.5 py-1.5 text-xs text-red-300 transition-colors hover:bg-destructive/20"
+                      >
+                        <AlertCircle className="h-3.5 w-3.5" /> Gescheitert
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(g.id, "active")}
+                      className="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3.5 py-1.5 text-xs transition-colors hover:bg-white/[0.1]"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Wieder aufnehmen
+                    </button>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleDelete(g.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    aria-label={`Ziel „${g.title}“ löschen`}
+                    /*
+                     * Auf dem Handy gibt es kein Hover — mit opacity-0 waere
+                     * der Knopf dort nie erreichbar. Sichtbar, und erst ab sm
+                     * versteckt er sich bis zum Zeigen.
+                     */
+                    className="rounded-full p-1.5 text-muted-foreground transition-all hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${PRIORITY_COLORS[g.priority] ?? ""}`}>
-                    {g.priority}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {formatDistanceToNow(new Date(g.createdAt), { addSuffix: true, locale: de })}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-3 mt-4 pt-3 border-t border-border/50">
-                {g.status === "active" && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => handleStatusChange(g.id, "completed")} className="gap-1 text-xs text-green-400 border-green-400/20 hover:bg-green-400/10">
-                      <CheckCircle2 className="w-3 h-3" /> Erledigt
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleStatusChange(g.id, "failed")} className="gap-1 text-xs text-red-400 border-red-400/20 hover:bg-red-400/10">
-                      <AlertCircle className="w-3 h-3" /> Gescheitert
-                    </Button>
-                  </>
-                )}
-                {g.status !== "active" && (
-                  <Button size="sm" variant="outline" onClick={() => handleStatusChange(g.id, "active")} className="gap-1 text-xs">
-                    REAKTIVIEREN
-                  </Button>
-                )}
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {formatDistanceToNow(new Date(g.createdAt), { addSuffix: true, locale: de })}
-                </span>
-              </div>
             </div>
-          ))}
-          {!isLoading && filtered.length === 0 && (
-            <div className="text-center py-16">
-              <Target className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground">Noch keine Ziele</p>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+          </Karte>
+        ))}
+      </div>
+
+      {!isLoading && filtered.length === 0 && (
+        <Leer
+          icon={Target}
+          titel={filter === "all" ? "Noch keine Ziele" : `Nichts unter „${zielstand(filter)}“`}
+          hinweis={
+            filter === "all"
+              ? "Ein Ziel sagt Lukas, woran er zwischen euren Gesprächen arbeiten soll."
+              : undefined
+          }
+        />
+      )}
+    </Seite>
   );
 }

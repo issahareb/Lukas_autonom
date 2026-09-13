@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader } from "@/components/page-header";
+import { Seite, Fehler } from "@/components/seite";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, AlertTriangle, Info, Inbox, ShieldCheck, Wrench } from "lucide-react";
 
@@ -79,7 +79,7 @@ function Verlauf({
 
   return (
     <div
-      className="rounded-lg border bg-card p-4"
+      className="card-soft rounded-3xl p-4"
       onMouseLeave={() => setUeber(null)}
     >
       <div className="text-xs font-medium text-muted-foreground">{titel}</div>
@@ -179,19 +179,17 @@ export default function KennzahlenSeite() {
     v === null ? "–" : v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)} M` : v.toLocaleString("de-DE");
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <PageHeader
-        icon={Activity}
-        title="Kennzahlen"
-        subtitle="Vierzehn Tage, verglichen gegen den Median der Vortage"
-      />
-
+    <Seite
+      icon={Activity}
+      titel="Kennzahlen"
+      breit
+      unterzeile="Vierzehn Tage, verglichen gegen den Median der Vortage."
+    >
+      <div className="space-y-6">
       {laedt && <Skeleton className="h-24 w-full" />}
 
       {!laedt && !daten && (
-        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-          Die Kennzahlen konnten nicht geladen werden.
-        </div>
+        <Fehler text="Die Kennzahlen konnten nicht geladen werden." />
       )}
 
       {daten && (
@@ -199,7 +197,7 @@ export default function KennzahlenSeite() {
           {/* ── Was heute anders läuft ────────────────────────────────── */}
           <section className="space-y-2">
             {daten.auffaelligkeiten.length === 0 ? (
-              <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              <div className="card-soft rounded-3xl p-5 text-sm text-muted-foreground">
                 Nichts Auffälliges. Alle Größen liegen im Rahmen der letzten
                 vierzehn Tage — das ist der Normalfall und keine leere Seite.
               </div>
@@ -208,10 +206,8 @@ export default function KennzahlenSeite() {
                 <div
                   key={a.kennzahl}
                   className={
-                    "flex gap-3 rounded-lg border p-4 text-sm " +
-                    (a.schwere === "warnung"
-                      ? "border-destructive/40 bg-destructive/5"
-                      : "bg-card")
+                    "card-soft flex gap-3 rounded-3xl p-4 text-sm " +
+                    (a.schwere === "warnung" ? "ring-1 ring-destructive/30" : "")
                   }
                 >
                   {a.schwere === "warnung" ? (
@@ -233,7 +229,7 @@ export default function KennzahlenSeite() {
 
           {/* ── Was gerade offen ist ──────────────────────────────────── */}
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border bg-card p-4">
+            <div className="card-soft rounded-3xl p-5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <ShieldCheck className="h-3.5 w-3.5" /> Freigaben offen
               </div>
@@ -241,7 +237,7 @@ export default function KennzahlenSeite() {
                 {daten.jetzt.freigabenOffen}
               </div>
             </div>
-            <div className="rounded-lg border bg-card p-4">
+            <div className="card-soft rounded-3xl p-5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Inbox className="h-3.5 w-3.5" /> Meldungen offen
               </div>
@@ -296,21 +292,21 @@ export default function KennzahlenSeite() {
           {/* ── Was heute scheitert ───────────────────────────────────── */}
           {daten.schlechtesteWerkzeuge.length > 0 && (
             <section>
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 px-1 text-[11px] tracking-wide text-muted-foreground">
                 <Wrench className="h-4 w-4" /> Was heute am häufigsten scheitert
               </h2>
-              <div className="overflow-x-auto rounded-lg border bg-card">
+              <div className="card-soft overflow-x-auto rounded-3xl">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">Werkzeug</th>
-                      <th className="px-4 py-2 font-medium tabular-nums">Fehler</th>
-                      <th className="px-4 py-2 font-medium">Häufigster Grund</th>
+                    <tr className="text-left text-[11px] text-muted-foreground">
+                      <th className="px-4 pb-1 pt-3.5 font-normal">Werkzeug</th>
+                      <th className="px-4 pb-1 pt-3.5 font-normal tabular-nums">Fehler</th>
+                      <th className="px-4 pb-1 pt-3.5 font-normal">Häufigster Grund</th>
                     </tr>
                   </thead>
                   <tbody>
                     {daten.schlechtesteWerkzeuge.map((w) => (
-                      <tr key={w.schluessel} className="border-b last:border-0">
+                      <tr key={w.schluessel} className="border-t border-white/[0.04]">
                         <td className="px-4 py-2 font-mono text-xs">{w.schluessel}</td>
                         <td className="px-4 py-2 tabular-nums">{w.fehler}</td>
                         <td className="px-4 py-2 text-muted-foreground">{w.grund}</td>
@@ -323,6 +319,7 @@ export default function KennzahlenSeite() {
           )}
         </>
       )}
-    </div>
+      </div>
+    </Seite>
   );
 }

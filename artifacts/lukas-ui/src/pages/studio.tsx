@@ -86,7 +86,7 @@ function JobCard({ job }: { job: { id: number; requestId?: string | null; status
   const resultUrl = statusData?.resultUrl ?? job.resultUrl;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 hover:border-primary/20 transition-colors">
+    <div className="bg-card card-soft rounded-3xl p-4 hover:border-primary/20 transition-colors">
       {resultUrl && displayStatus === "completed" && (
         <div className="mb-3 rounded-md overflow-hidden bg-black aspect-video relative">
           {job.mediaType === "image" ? (
@@ -237,7 +237,7 @@ export default function Studio() {
     // nichts uebrig und die Inhalte schoben sich ineinander.
     <div className="flex flex-col lg:flex-row lg:h-full">
       {/* Left: Studio */}
-      <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-border min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col border-b border-white/[0.05] lg:border-b-0 lg:border-r">
         <PageHeader
           icon={Wand2}
           title="Studio"
@@ -370,7 +370,7 @@ export default function Studio() {
                     <select
                       value={chosenModel}
                       onChange={(e) => setChosenModel(e.target.value)}
-                      className="w-full bg-secondary/50 border border-border rounded-md px-3 py-2 text-sm"
+                      className="w-full bg-secondary/50 rounded-full bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
                     >
                       {modelle.map((m) => (
                         <option key={m.id} value={m.id}>
@@ -385,7 +385,7 @@ export default function Studio() {
                     <select
                       value={aspectRatio}
                       onChange={(e) => setAspectRatio(e.target.value)}
-                      className="w-full bg-secondary/50 border border-border rounded-md px-3 py-2 text-sm"
+                      className="w-full bg-secondary/50 rounded-full bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
                     >
                       {["16:9", "9:16", "1:1", "4:3", "3:4"].map((r) => (
                         <option key={r} value={r}>

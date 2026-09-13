@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, RefreshCw } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { AlertTriangle, RefreshCw, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
+import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 
 interface DebugLogEntry {
   time: string;
@@ -17,7 +15,15 @@ async function fetchDebugLog(): Promise<DebugLogEntry[]> {
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
   const res = await fetch("/api/lukas/debug-log", { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const daten = await res.json();
+  /*
+   * Nicht ungeprueft weiterreichen. Antwortet etwas anderes als erwartet —
+   * ein Fehlerobjekt mit 200, eine HTML-Seite eines Proxys —, wirft der
+   * .map() weiter unten, und React reisst die GANZE Seite mit: schwarzer
+   * Bildschirm statt einer leeren Liste. Genau so ist es auf der Startseite
+   * schon einmal passiert.
+   */
+  return Array.isArray(daten) ? daten : [];
 }
 
 export default function Diagnostics() {
@@ -42,54 +48,57 @@ export default function Diagnostics() {
   }, [load]);
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader
-        icon={AlertTriangle}
-        title="Diagnose"
-        subtitle="Letzte Fehler aus Chat, Widget und ElevenLabs-Anbindung — aktualisiert alle 5s"
-        actions={
-          <Button variant="outline" size="sm" onClick={load} data-testid="button-refresh-debug-log">
-            <RefreshCw className="w-4 h-4" />
-            Aktualisieren
-          </Button>
-        }
-      />
+    <Seite
+      icon={AlertTriangle}
+      titel="Diagnose"
+      unterzeile="Was zuletzt schiefgegangen ist — aus Chat, Widget und der ElevenLabs-Anbindung. Aktualisiert sich alle fünf Sekunden von selbst."
+      aktionen={
+        <button
+          type="button"
+          onClick={load}
+          data-testid="button-refresh-debug-log"
+          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+        >
+          <RefreshCw className="h-4 w-4" /> Aktualisieren
+        </button>
+      }
+    >
+      {loading && <Laedt />}
+      {error && <Fehler text={`Die Liste liess sich nicht laden: ${error}`} />}
 
-      <ScrollArea className="flex-1 p-5 sm:p-6">
-        {loading && <div className="text-center text-muted-foreground py-12">Lädt…</div>}
-        {error && (
-          <div className="text-center text-destructive py-4">Fehler beim Laden: {error}</div>
-        )}
-        <div className="max-w-3xl space-y-3">
-          {entries.map((entry, idx) => (
-            <div
-              key={`${entry.time}-${idx}`}
-              className="bg-card border border-border rounded-lg p-4 flex gap-3"
-              data-testid={`debug-entry-${idx}`}
-            >
-              <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                  <span>{format(new Date(entry.time), "PPpp", { locale: de })}</span>
-                  <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
-                    {entry.scope}
+      <div className="space-y-3">
+        {entries.map((entry, idx) => (
+          <Karte key={`${entry.time}-${idx}`} verzoegerung={staffel(idx)}>
+            <div className="flex gap-3" data-testid={`debug-entry-${idx}`}>
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Chip ton="schlecht">{entry.scope}</Chip>
+                  <span className="text-[11px] text-muted-foreground">
+                    {format(new Date(entry.time), "d. MMMM, HH:mm:ss", { locale: de })}
                   </span>
                 </div>
-                <div className="text-sm font-mono break-words">{entry.message}</div>
+                {/*
+                  Mono bleibt hier absichtlich: das ist eine Fehlermeldung aus
+                  dem Server, oft mit Pfaden und Codes. Sie zu proportionaler
+                  Schrift zu machen, macht sie huebscher und schlechter lesbar.
+                */}
+                <p className="mt-2 font-mono text-[13px] leading-relaxed break-words text-foreground/90">
+                  {entry.message}
+                </p>
               </div>
             </div>
-          ))}
-          {!loading && !error && entries.length === 0 && (
-            <div className="text-center py-16">
-              <AlertTriangle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-              <p className="text-muted-foreground">Keine Fehler</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Seit dem letzten Neustart des Servers ist nichts fehlgeschlagen.
-              </p>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+          </Karte>
+        ))}
+      </div>
+
+      {!loading && !error && entries.length === 0 && (
+        <Leer
+          icon={ShieldCheck}
+          titel="Nichts fehlgeschlagen"
+          hinweis="Seit dem letzten Neustart des Servers ist kein Fehler aufgelaufen."
+        />
+      )}
+    </Seite>
   );
 }

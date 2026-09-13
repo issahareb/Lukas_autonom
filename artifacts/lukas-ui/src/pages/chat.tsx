@@ -107,7 +107,7 @@ function Bubble({
         className={`max-w-[85%] min-w-0 px-4 py-3 border shadow-sm transition-colors ${
           own
             ? "bg-primary/20 border-primary/25 rounded-2xl rounded-br-sm"
-            : "bg-card border-border/70 rounded-2xl rounded-bl-sm"
+            : "card-soft rounded-3xl rounded-bl-md"
         }`}
       >
         {children}
@@ -580,7 +580,7 @@ export default function Chat() {
           <div className="flex-1 flex flex-col min-w-0 relative">
             {activeId ? (
               <>
-                <div className="h-14 border-b border-border px-4 flex items-center gap-3 shrink-0">
+                <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.05] px-4">
                   {isMobile && (
                     <button onClick={() => setActiveId(null)} className="text-muted-foreground hover:text-foreground shrink-0" aria-label="Zurück zur Liste" data-testid="button-back-to-list">
                       <ArrowLeft className="w-5 h-5" />
@@ -609,7 +609,7 @@ export default function Chat() {
                                     <img
                                       src={`${BASE}${a.url}`}
                                       alt={a.filename}
-                                      className="max-h-52 rounded-xl border border-border transition-transform duration-200 hover:scale-[1.02]"
+                                      className="max-h-52 rounded-2xl transition-transform duration-200 hover:scale-[1.02]"
                                     />
                                   </a>
                                 ) : (
@@ -618,7 +618,7 @@ export default function Chat() {
                                     href={`${BASE}${a.url}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="flex items-center gap-2 rounded-xl border border-border bg-card/80 px-3 py-2 text-sm hover:border-primary/40 transition-colors"
+                                    className="flex items-center gap-2 rounded-2xl bg-white/[0.05] px-3.5 py-2 text-sm transition-colors hover:bg-white/[0.09]"
                                   >
                                     <Icon className="w-4 h-4 text-primary shrink-0" />
                                     <span className="truncate max-w-[180px]">{a.filename}</span>
@@ -685,7 +685,7 @@ export default function Chat() {
                 </div>
 
                 {!atBottom && (
-                  <button onClick={() => { setAtBottom(true); scrollToBottom(); }} className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow-lg hover:border-primary/40 transition-colors">
+                  <button onClick={() => { setAtBottom(true); scrollToBottom(); }} className="glass absolute bottom-32 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs shadow-lg transition-transform hover:scale-105">
                     <ArrowDown className="w-3.5 h-3.5" /> Neueste
                   </button>
                 )}
@@ -697,7 +697,7 @@ export default function Chat() {
                         {pending.map((a) => {
                           const Icon = attachmentIcon(a.kind);
                           return (
-                            <div key={a.id} className="flex items-center gap-2 bg-card border border-border rounded-xl pl-2 pr-1 py-1.5 max-w-[240px]">
+                            <div key={a.id} className="flex max-w-[240px] items-center gap-2 rounded-2xl bg-white/[0.06] py-1.5 pl-2 pr-1">
                               {a.kind === "image" ? <img src={`${BASE}${a.url}`} alt={a.filename} className="w-8 h-8 rounded-lg object-cover shrink-0" /> : <Icon className="w-4 h-4 text-primary shrink-0" />}
                               <div className="min-w-0"><div className="text-xs truncate">{a.filename}</div><div className="text-[10px] text-muted-foreground">{formatSize(a.sizeBytes)}</div></div>
                               <button onClick={() => removePending(a.id)} className="text-muted-foreground hover:text-destructive shrink-0 p-1" aria-label={`${a.filename} entfernen`}><X className="w-3.5 h-3.5" /></button>
@@ -709,18 +709,18 @@ export default function Chat() {
                       </div>
                     )}
 
-                    <div className="flex items-end gap-2 rounded-2xl border border-border bg-card px-2 py-2 focus-within:border-primary/40 transition-colors">
+                    <div className="glass flex items-end gap-2 rounded-[1.75rem] px-2.5 py-2 shadow-lg shadow-black/30">
                       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-                      <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-40 shrink-0" aria-label="Datei anhängen" data-testid="button-attach">
+                      <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading} className="shrink-0 rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-40" aria-label="Datei anhängen" data-testid="button-attach">
                         <Paperclip className="w-5 h-5" />
                       </button>
                       <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Schreibe Lukas…" rows={1} disabled={streaming} className="flex-1 bg-transparent resize-none py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60 disabled:opacity-50 max-h-[200px]" />
                       {streaming ? (
-                        <button onClick={handleCancel} className="p-2 rounded-lg bg-primary text-primary-foreground transition-colors shrink-0 hover:opacity-90" aria-label="Antwort stoppen" data-testid="button-stop-response">
+                        <button onClick={handleCancel} className="shrink-0 rounded-full bg-primary p-2.5 text-primary-foreground transition-transform hover:scale-105" aria-label="Antwort stoppen" data-testid="button-stop-response">
                           <Square className="w-5 h-5 fill-current" />
                         </button>
                       ) : (
-                        <button onClick={handleSend} disabled={(!input.trim() && pending.length === 0)} className="p-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-30 disabled:bg-secondary disabled:text-muted-foreground transition-colors shrink-0" aria-label="Senden">
+                        <button onClick={handleSend} disabled={(!input.trim() && pending.length === 0)} className="shrink-0 rounded-full bg-primary p-2.5 text-primary-foreground transition-transform hover:scale-105 disabled:bg-white/[0.06] disabled:text-muted-foreground disabled:hover:scale-100" aria-label="Senden">
                           <ArrowUp className="w-5 h-5" />
                         </button>
                       )}

@@ -1,8 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Lightbulb, RefreshCw, Check, X, Undo2, ChevronDown, ChevronRight } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import {
+  Lightbulb,
+  RefreshCw,
+  Check,
+  X,
+  Undo2,
+  ChevronDown,
+  ChevronRight,
+  GitPullRequest,
+} from "lucide-react";
+import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -19,23 +26,30 @@ type Proposal = {
   comment: string | null;
   appliedResult: string | null;
   targetBranch: string | null;
+  /*
+   * Branch und Pull Request entstehen erst beim Annehmen. Sie stehen hier,
+   * weil ein uebernommener Vorschlag sonst nur ein Haken waere: mit dem Link
+   * kann man nachsehen, WAS tatsaechlich hinausgegangen ist.
+   */
+  branchName: string | null;
+  pullRequestUrl: string | null;
   createdAt: string;
   decidedAt: string | null;
 };
 
-const STATUS_LABEL: Record<Proposal["status"], string> = {
-  pending: "OFFEN",
-  accepted: "ÜBERNOMMEN",
-  rejected: "ABGELEHNT",
-  revision: "ZURÜCKGESCHICKT",
+const STATUS_WORT: Record<Proposal["status"], string> = {
+  pending: "offen",
+  accepted: "übernommen",
+  rejected: "abgelehnt",
+  revision: "zurückgeschickt",
 };
 
-const STATUS_STYLE: Record<Proposal["status"], string> = {
-  pending: "bg-amber-500/15 text-amber-300",
-  accepted: "bg-emerald-500/15 text-emerald-300",
-  rejected: "bg-red-500/15 text-red-300",
-  revision: "bg-sky-500/15 text-sky-300",
-};
+const STATUS_TON = {
+  pending: "warnung",
+  accepted: "gut",
+  rejected: "schlecht",
+  revision: "info",
+} as const;
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem("lukas_token");
@@ -83,16 +97,16 @@ function OpenProposal({
 
   return (
     <div
-      className="bg-card border border-amber-500/25 rounded-lg p-4 sm:p-5 space-y-4"
+      className="card-soft rise space-y-4 rounded-3xl p-5 ring-1 ring-amber-400/25"
       data-testid={`proposal-${proposal.id}`}
     >
       <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Lightbulb className="w-4 h-4 text-amber-300 shrink-0" />
-          <span className="font-medium">{proposal.title}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Lightbulb className="h-4 w-4 shrink-0 text-amber-300" />
+          <span className="text-[1.05rem] font-semibold tracking-tight">{proposal.title}</span>
           <span className="text-[11px] text-muted-foreground">#{proposal.id}</span>
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <p className="mt-1 text-xs text-muted-foreground">
           {proposal.repo} ·{" "}
           {new Date(proposal.createdAt).toLocaleString("de-DE", {
             day: "2-digit",
@@ -120,31 +134,32 @@ function OpenProposal({
         )}
       </div>
 
-      <div className="border-t border-border pt-3">
+      <div>
         <button
           onClick={() => setShowFiles((v) => !v)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           {showFiles ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          {proposal.files.length} {proposal.files.length === 1 ? "DATEI" : "DATEIEN"}
+          {proposal.files.length} {proposal.files.length === 1 ? "Datei" : "Dateien"}
           {!showFiles && " — ansehen"}
         </button>
 
         {showFiles && (
           <div className="mt-2 space-y-1.5">
             {proposal.files.map((f) => (
-              <div key={f.path} className="border border-border rounded-md overflow-hidden">
+              <div key={f.path} className="overflow-hidden rounded-2xl bg-white/[0.04]">
                 <button
                   onClick={() => setOpenFile(openFile === f.path ? null : f.path)}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-secondary/50 flex items-center justify-between gap-2"
+                  className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs transition-colors hover:bg-white/[0.04]"
                 >
-                  <span className="truncate">{f.path}</span>
-                  <span className="text-muted-foreground shrink-0">
+                  {/* Mono: das ist ein Dateipfad. */}
+                  <span className="truncate font-mono">{f.path}</span>
+                  <span className="shrink-0 text-muted-foreground">
                     {f.content.split("\n").length} Zeilen
                   </span>
                 </button>
                 {openFile === f.path && (
-                  <pre className="text-[11px] bg-background/60 border-t border-border p-3 overflow-x-auto max-h-80 overflow-y-auto">
+                  <pre className="max-h-80 overflow-auto bg-black/30 p-3.5 text-[11px] leading-relaxed">
                     {f.content}
                   </pre>
                 )}
@@ -160,32 +175,35 @@ function OpenProposal({
           onChange={(e) => setComment(e.target.value)}
           placeholder="Kommentar (nötig zum Zurückschicken, sonst optional)…"
           rows={2}
-          className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-primary"
+          className="w-full resize-y rounded-2xl bg-white/[0.05] px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
           data-testid={`proposal-comment-${proposal.id}`}
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={busy} onClick={() => decide("accept")} className="gap-1.5">
-            <Check className="w-4 h-4" /> Annehmen
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => decide("accept")}
+            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03] disabled:opacity-40 disabled:hover:scale-100"
+          >
+            <Check className="h-4 w-4" /> Annehmen
+          </button>
+          <button
+            type="button"
             disabled={busy}
             onClick={() => decide("revise")}
-            className="gap-1.5"
+            className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-4 py-2 text-sm transition-colors hover:bg-white/[0.12] disabled:opacity-40"
           >
-            <Undo2 className="w-4 h-4" /> Mit Kommentar zurück
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+            <Undo2 className="h-4 w-4" /> Mit Kommentar zurück
+          </button>
+          <button
+            type="button"
             disabled={busy}
             onClick={() => decide("reject")}
-            className="gap-1.5"
+            className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-300 transition-colors hover:bg-destructive/20 disabled:opacity-40"
           >
-            <X className="w-4 h-4" /> Ablehnen
-          </Button>
+            <X className="h-4 w-4" /> Ablehnen
+          </button>
         </div>
         <p className="text-[11px] text-muted-foreground">
           {proposal.targetBranch ? (
@@ -215,7 +233,11 @@ export default function Proposals() {
     try {
       const res = await fetch(`${BASE}/api/lukas/proposals`, { headers: authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setRows(await res.json());
+      const daten = await res.json();
+      // Geprueft statt blind uebernommen: eine unerwartete Antwort wuerde im
+      // .filter() werfen und die ganze Seite schwarz machen.
+      if (!Array.isArray(daten)) throw new Error("unerwartete Antwort vom Server");
+      setRows(daten);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
@@ -235,63 +257,78 @@ export default function Proposals() {
   const rest = rows.filter((r) => r.status !== "pending");
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader
-        icon={Lightbulb}
-        title="VORSCHLÄGE"
-        subtitle="Änderungen, die Lukas an seinem eigenen Code vornehmen möchte"
-        actions={
-          <Button variant="outline" size="sm" onClick={load}>
-            <RefreshCw className="w-4 h-4" /> Aktualisieren
-          </Button>
-        }
-      />
+    <Seite
+      icon={Lightbulb}
+      titel="Vorschläge"
+      unterzeile="Änderungen, die Lukas an seinem eigenen Code vornehmen möchte."
+      aktionen={
+        <button
+          type="button"
+          onClick={load}
+          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+        >
+          <RefreshCw className="h-4 w-4" /> Aktualisieren
+        </button>
+      }
+    >
+      {loading && rows.length === 0 && <Laedt was="Vorschläge werden geladen…" />}
+      {error && <Fehler text={`Die Vorschläge liessen sich nicht laden: ${error}`} />}
 
-      <ScrollArea className="flex-1 p-5 sm:p-6">
-        <div className="max-w-3xl space-y-6">
-          {loading && rows.length === 0 && (
-            <div className="text-center text-muted-foreground py-12">Lädt…</div>
-          )}
-          {error && <div className="text-destructive text-sm">Fehler beim Laden: {error}</div>}
+      {!loading && !error && open.length === 0 && (
+        <Leer
+          icon={Lightbulb}
+          titel="Nichts offen"
+          hinweis="Lukas hat gerade keinen Vorschlag für dich. Fällt ihm beim Arbeiten etwas an seinem Code auf, landet es hier."
+        />
+      )}
 
-          {!loading && open.length === 0 && (
-            <div className="text-center py-10">
-              <Lightbulb className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Nichts offen — Lukas hat gerade keinen Vorschlag für dich.
-              </p>
-            </div>
-          )}
+      <div className="space-y-5">
+        {open.map((p) => (
+          <OpenProposal key={p.id} proposal={p} onDone={load} />
+        ))}
+      </div>
 
-          {open.map((p) => (
-            <OpenProposal key={p.id} proposal={p} onDone={load} />
-          ))}
-
-          {rest.length > 0 && (
-            <div className="space-y-2 pt-2">
-              <h2 className="text-sm text-muted-foreground">Verlauf</h2>
-              {rest.map((r) => (
-                <div key={r.id} className="bg-card/50 border border-border rounded-md px-3 py-2.5 space-y-1">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="truncate">{r.title}</span>
-                    <span
-                      className={`text-[11px] font-mono px-1.5 py-0.5 rounded shrink-0 ${STATUS_STYLE[r.status]}`}
-                    >
-                      {STATUS_LABEL[r.status]}
-                    </span>
-                  </div>
-                  {r.comment && (
-                    <p className="text-xs text-muted-foreground break-words">Dein Kommentar: {r.comment}</p>
-                  )}
-                  {r.appliedResult && (
-                    <p className="text-xs text-muted-foreground break-words">{r.appliedResult}</p>
-                  )}
+      {rest.length > 0 && (
+        <div className="mt-9">
+          <h2 className="px-1 text-[11px] tracking-wide text-muted-foreground">Verlauf</h2>
+          <div className="mt-2.5 space-y-2.5">
+            {rest.map((r, idx) => (
+              <Karte key={r.id} verzoegerung={staffel(idx)} className="!p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm">{r.title}</span>
+                  <Chip ton={STATUS_TON[r.status] ?? "neutral"}>{STATUS_WORT[r.status]}</Chip>
                 </div>
-              ))}
-            </div>
-          )}
+                {r.comment && (
+                  <p className="mt-1.5 text-xs break-words text-muted-foreground">
+                    Dein Kommentar: {r.comment}
+                  </p>
+                )}
+                {r.appliedResult && (
+                  <p className="mt-1.5 text-xs break-words text-muted-foreground">
+                    {r.appliedResult}
+                  </p>
+                )}
+                {/*
+                  Der Link zum Pull Request. Ohne ihn waere ein uebernommener
+                  Vorschlag nur ein Haken — hier kann man nachsehen, was
+                  tatsaechlich hinausgegangen ist, Zeile fuer Zeile.
+                */}
+                {r.pullRequestUrl && (
+                  <a
+                    href={r.pullRequestUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.1]"
+                  >
+                    <GitPullRequest className="h-3.5 w-3.5" />
+                    Pull Request ansehen
+                  </a>
+                )}
+              </Karte>
+            ))}
+          </div>
         </div>
-      </ScrollArea>
-    </div>
+      )}
+    </Seite>
   );
 }

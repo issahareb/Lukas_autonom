@@ -727,7 +727,7 @@ export default function GehirnSeite() {
             value={suche}
             onChange={(e) => setSuche(e.target.value)}
             placeholder="Im Gehirn suchen…"
-            className="w-full h-9 pl-9 pr-3 rounded-xl bg-secondary/60 border border-border text-sm outline-none focus:border-primary/50"
+            className="h-10 w-full rounded-full bg-white/[0.05] pl-10 pr-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
           />
         </div>
 
@@ -763,7 +763,7 @@ export default function GehirnSeite() {
         </div>
       </div>
 
-      <div className="relative flex-1 min-h-[440px] m-5 sm:m-6 mt-4 rounded-2xl border border-border overflow-hidden">
+      <div className="relative m-5 mt-4 min-h-[440px] flex-1 overflow-hidden rounded-3xl bg-white/[0.02] ring-1 ring-white/[0.06] sm:m-6">
         <div ref={huelle} className="absolute inset-0" />
         <div ref={schilder} className="absolute inset-0 overflow-hidden pointer-events-none" />
 
@@ -785,7 +785,7 @@ export default function GehirnSeite() {
           <div className="absolute left-3 bottom-3 flex items-center gap-2">
             <button
               onClick={zuruecksetzen}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950/70 border border-border/60 text-xs text-muted-foreground hover:text-foreground"
+              className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Ansicht zurück

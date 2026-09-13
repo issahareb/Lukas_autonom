@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Phone, PhoneIncoming, PhoneOutgoing, Plus, Trash2, ShieldAlert, MessageSquare, Send } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { Seite } from "@/components/seite";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -136,7 +135,7 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
   };
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="card-soft rounded-3xl p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -237,7 +236,7 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
 
   if (fehler && !stand) {
     return (
-      <div className="rounded-lg border border-border p-4 text-sm">
+      <div className="card-soft rounded-3xl p-5 text-sm">
         <p className="font-medium">Twilio</p>
         <p className="mt-1 text-muted-foreground">{fehler}</p>
       </div>
@@ -248,7 +247,7 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
   const fertig = stand.ziel !== null && stand.origination.includes(stand.ziel) && stand.amTrunk.length > 0;
 
   return (
-    <div className="rounded-lg border border-border p-4">
+    <div className="card-soft rounded-3xl p-5">
       <h2 className="flex items-center gap-2 font-medium">
         <PhoneIncoming className="size-4" /> Eingehende Anrufe
       </h2>
@@ -274,7 +273,7 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
         {stand.nummern.map((n) => {
           const dran = stand.amTrunk.includes(n.nummer);
           return (
-            <div key={n.nummer} className="flex items-center gap-3 rounded-md border border-border px-3 py-2">
+            <div key={n.nummer} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3.5 py-2.5">
               <span className="font-mono text-sm">{n.nummer}</span>
               {dran && <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[0.65rem] text-emerald-300">AM TRUNK</span>}
               <Button
@@ -397,7 +396,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
       </div>
 
       {!bereit && (
-        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+        <div className="mb-3 rounded-2xl bg-amber-400/10 p-3.5 text-sm ring-1 ring-amber-400/25">
           <p className="font-medium text-amber-200">Noch keine Zugangsdaten</p>
           <p className="mt-1 text-muted-foreground">
             Setz <code>CLICKSEND_USERNAME</code> und <code>CLICKSEND_API_KEY</code>, optional{" "}
@@ -412,7 +411,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
           onChange={(e) => setAn(e.target.value)}
           list="bekannte-nummern"
           placeholder="+49…"
-          className="h-9 w-full rounded-xl border border-border bg-secondary/60 px-3 font-mono text-sm outline-none focus:border-primary/50"
+          className="h-10 w-full rounded-full bg-white/[0.05] px-4 font-mono text-sm outline-none transition-colors focus:bg-white/[0.08]"
         />
         {/* Die eingetragenen Kontakte als Vorschlag — Nummern tippt niemand gern ab. */}
         <datalist id="bekannte-nummern">
@@ -428,7 +427,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
           onChange={(e) => setText(e.target.value)}
           rows={3}
           placeholder="Kurz und direkt — eine SMS ist kein Brief."
-          className="w-full resize-none rounded-xl border border-border bg-secondary/60 px-3 py-2 text-sm outline-none focus:border-primary/50"
+          className="w-full resize-none rounded-2xl bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
         />
 
         <div className="flex items-center gap-3">
@@ -486,7 +485,18 @@ export default function Telefon() {
 
   const laden = useCallback(async () => {
     try {
-      setDaten(await api(""));
+      const antwort = await api("");
+      /*
+       * `daten.bereit.webhook` und `daten.anrufe.length` greifen zwei Ebenen
+       * tief. Fehlt eine davon — unerwartete Antwort, halbe Antwort, Proxy
+       * dazwischen —, wirft der Zugriff und React raeumt die GANZE Seite ab:
+       * schwarzer Bildschirm statt einer unvollstaendigen Liste. Beim
+       * Durchsehen ist genau das passiert.
+       */
+      if (!antwort || typeof antwort !== "object" || !antwort.bereit) {
+        throw new Error("unerwartete Antwort vom Server");
+      }
+      setDaten({ ...antwort, anrufe: Array.isArray(antwort.anrufe) ? antwort.anrufe : [] });
       setFehler(null);
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Laden fehlgeschlagen");
@@ -513,14 +523,15 @@ export default function Telefon() {
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader icon={Phone} title="Telefon" subtitle="Wer mit Lukas sprechen darf — und wen er anrufen darf" />
-
-      <ScrollArea className="flex-1">
-        <div className="mx-auto max-w-3xl space-y-6 p-4 pb-16">
+    <Seite
+      icon={Phone}
+      titel="Telefon"
+      unterzeile="Wer mit Lukas sprechen darf — und wen er anrufen darf."
+    >
+      <div className="space-y-6">
           {/* Was noch fehlt, gehoert sichtbar hierher — sonst passiert schlicht nichts. */}
           {daten && !daten.bereit.webhook && (
-            <div className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+            <div className="flex gap-3 rounded-3xl bg-amber-400/10 p-4 text-sm ring-1 ring-amber-400/25">
               <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-300" />
               <div>
                 <p className="font-medium text-amber-200">Anrufe kommen noch nicht an</p>
@@ -532,7 +543,7 @@ export default function Telefon() {
             </div>
           )}
           {daten && daten.bereit.webhook && !daten.bereit.anrufen && (
-            <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+            <div className="card-soft rounded-3xl p-5 text-sm text-muted-foreground">
               Eingehende Anrufe funktionieren. Damit Lukas selbst anrufen kann, fehlen noch
               <code className="mx-1">TWILIO_ACCOUNT_SID</code>,<code className="mx-1">TWILIO_AUTH_TOKEN</code>,
               <code className="mx-1">TWILIO_NUMMER</code> und <code className="mx-1">OPENAI_PROJECT_ID</code>.
@@ -541,7 +552,7 @@ export default function Telefon() {
 
           <Einrichtung onChange={laden} />
 
-          <div className="rounded-lg border border-border p-4">
+          <div className="card-soft rounded-3xl p-5">
             <h2 className="mb-3 flex items-center gap-2 font-medium">
               <Plus className="size-4" /> Nummer hinzufügen
             </h2>
@@ -550,18 +561,18 @@ export default function Telefon() {
                 value={neu.nummer}
                 onChange={(e) => setNeu({ ...neu, nummer: e.target.value })}
                 placeholder="+49 151 12345678"
-                className="flex-1 rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                className="h-10 flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
               />
               <input
                 value={neu.name}
                 onChange={(e) => setNeu({ ...neu, name: e.target.value })}
                 placeholder="Name"
-                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm sm:w-40"
+                className="h-10 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08] sm:w-40"
               />
               <select
                 value={neu.stufe}
                 onChange={(e) => setNeu({ ...neu, stufe: e.target.value as Stufe })}
-                className="rounded-md border border-border bg-transparent px-3 py-2 text-sm"
+                className="h-10 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
               >
                 <option value="privat">Privat</option>
                 <option value="oeffentlich">Öffentlich</option>
@@ -615,8 +626,7 @@ export default function Telefon() {
               </div>
             </div>
           )}
-        </div>
-      </ScrollArea>
-    </div>
+      </div>
+    </Seite>
   );
 }
