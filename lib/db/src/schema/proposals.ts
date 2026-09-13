@@ -5,12 +5,24 @@ import { z } from "zod";
 /*
  * Code-Vorschlaege von Lukas.
  *
- * Bewusst KEIN Branch und kein Pull Request: Issa will nicht fuer jede
- * Kleinigkeit auf GitHub wechseln. Der Vorschlag liegt im Dashboard, in
- * verstaendlicher Sprache, und wird dort entschieden.
+ * ENTSCHIEDEN WIRD IM DASHBOARD, nicht auf GitHub: der Vorschlag liegt dort
+ * in verstaendlicher Sprache, und Issa muss fuer eine Kleinigkeit nicht die
+ * Oberflaeche wechseln. Das war und bleibt der Punkt.
+ *
+ * GESCHRIEBEN wird seit dem Umbau anders. Vorher ging jede Datei einzeln ueber
+ * die Contents-API auf den Zielbranch. Zwei Dinge gingen dabei schief, beide
+ * nachgestellt: scheiterte Datei zwei, war Datei eins schon geschrieben — das
+ * Repository stand in einem Zustand, den niemand beschlossen hatte. Und wer
+ * zwischen Pruefung und Schreiben etwas an derselben Datei aenderte, wurde
+ * stillschweigend ueberschrieben.
+ *
+ * Jetzt: EIN Commit mit allen Dateien, auf dem festgehaltenen Basiscommit als
+ * Elternteil, auf einem eigenen Branch, plus ein Pull Request. Entweder es
+ * steht alles, oder nichts. Und ist der Zielbranch weitergelaufen, meldet der
+ * Pull Request den Konflikt — sichtbar, statt still.
  *
  * Drei Wege raus:
- *   accepted   -> die Aenderung wird geschrieben (Commit auf den Zielbranch)
+ *   accepted   -> ein Commit auf eigenem Branch + Pull Request
  *   rejected   -> erledigt, Lukas erfaehrt es
  *   revision   -> geht mit Issas Kommentar zurueck an Lukas
  *
@@ -51,6 +63,22 @@ export const codeProposals = pgTable("lukas_code_proposals", {
   reasoning: text("reasoning").notNull().default(""),
   // [{ path, content }] — content ist immer der VOLLSTAENDIGE neue Dateiinhalt.
   files: jsonb("files").$type<ProposalFile[]>().notNull(),
+  /*
+   * Der Commit, gegen den dieser Vorschlag geschrieben ist.
+   *
+   * Die Blob-SHA je Datei sagt, ob sich EINE Datei geaendert hat. Sie reicht
+   * nicht, um die Aenderung als Ganzes einzuordnen: angewendet wurde bisher
+   * gegen den jeweils aktuellen Stand, Datei fuer Datei. Wer zwischen Pruefung
+   * und Schreiben etwas aenderte, wurde ueberschrieben.
+   *
+   * Mit einem festen Basiscommit wird daraus EIN Commit mit genau diesem
+   * Elternteil. Ist der Zielbranch weitergelaufen, meldet der Pull Request
+   * einen Konflikt — sichtbar, statt still.
+   */
+  baseCommit: text("base_commit"),
+  // Branch und Pull Request, die beim Annehmen entstanden sind.
+  branchName: text("branch_name"),
+  pullRequestUrl: text("pull_request_url"),
   // pending | accepted | rejected | revision
   status: text("status").notNull().default("pending"),
   // Issas Kommentar beim Zurueckschicken (oder beim Ablehnen).

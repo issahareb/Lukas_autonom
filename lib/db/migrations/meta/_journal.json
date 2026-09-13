@@ -15,6 +15,13 @@
       "when": 1789301072059,
       "tag": "0001_supreme_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789302056698,
+      "tag": "0002_friendly_midnight",
+      "breakpoints": true
     }
   ]
 }

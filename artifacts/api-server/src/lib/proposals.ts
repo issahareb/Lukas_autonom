@@ -71,6 +71,22 @@ export async function createProposal(args: {
     });
   }
 
+  /*
+   * Den Stand des ganzen Branches festhalten, nicht nur den je Datei.
+   *
+   * Die Blob-SHA sagt, ob EINE Datei sich geaendert hat. Der Basiscommit sagt,
+   * gegen welchen Gesamtstand der Vorschlag geschrieben ist — und genau der
+   * wird beim Annehmen der Elternteil des Commits. Laesst er sich nicht
+   * ermitteln, wird der Vorschlag trotzdem angelegt: ein Vorschlag ohne Basis
+   * ist besser als gar keiner, das Annehmen sagt dann Bescheid.
+   */
+  let baseCommit: string | null = null;
+  try {
+    baseCommit = await kopfCommit(owner, repo, branch);
+  } catch (err) {
+    logger.warn({ err }, "Basiscommit nicht ermittelbar — Vorschlag ohne Basis");
+  }
+
   const [row] = await db
     .insert(codeProposals)
     .values({
@@ -80,6 +96,7 @@ export async function createProposal(args: {
       summary: args.summary,
       reasoning: args.reasoning,
       files,
+      baseCommit,
       status: "pending",
     })
     .returning();
@@ -138,60 +155,146 @@ async function pruefeAktualitaet(proposal: CodeProposal): Promise<Konflikt[]> {
   return konflikte;
 }
 
+/** Der Commit, auf dem der Zielbranch gerade steht. */
+async function kopfCommit(owner: string, repo: string, branch: string | null): Promise<string> {
+  if (branch) {
+    const ref = (await githubRequest(
+      `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+    )) as { object?: { sha?: string } };
+    if (!ref?.object?.sha) throw new Error(`Branch ${branch} hat keinen Kopf-Commit.`);
+    return ref.object.sha;
+  }
+  const info = (await githubRequest(`/repos/${owner}/${repo}`)) as { default_branch?: string };
+  const ref = (await githubRequest(
+    `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(info.default_branch ?? "main")}`,
+  )) as { object?: { sha?: string } };
+  if (!ref?.object?.sha) throw new Error("Default-Branch hat keinen Kopf-Commit.");
+  return ref.object.sha;
+}
+
 /*
- * Angenommenen Vorschlag anwenden: jede Datei einzeln ueber die Contents-API
- * schreiben. Bestehende Dateien brauchen ihre Blob-SHA, sonst lehnt GitHub den
- * Schreibvorgang ab; fehlt die Datei, ist es ein Neuanlegen.
+ * Angenommenen Vorschlag anwenden: EIN Commit, eigener Branch, Pull Request.
  *
- * Geschrieben wird erst, wenn ALLE Dateien geprueft sind. Vorher lief die
- * Schleife Datei fuer Datei — scheiterte die dritte, waren die ersten beiden
- * schon geschrieben und das Repository in einem Zustand, den niemand so
- * beschlossen hat.
+ * WARUM NICHT MEHR DATEI FUER DATEI. Die Contents-API schreibt je Aufruf eine
+ * Datei und damit einen Commit. Scheiterte die dritte, waren die ersten beiden
+ * schon geschrieben — ein Zustand, den niemand beschlossen hat, und keiner, aus
+ * dem man sauber zurueckkommt. Nachgestellt und bestaetigt.
+ *
+ * WARUM GEGEN DEN BASISCOMMIT. Vorher holte das Schreiben die AKTUELLE Blob-SHA
+ * und schrieb dagegen. Wer zwischen Pruefung und Schreiben etwas aenderte, war
+ * damit ueberschrieben — die Pruefung davor half nichts, weil zwischen ihr und
+ * dem Schreiben ein Fenster lag. Jetzt ist der Elternteil des Commits fest:
+ * `baseCommit`. Ist der Zielbranch weitergelaufen, kann der Pull Request nicht
+ * ohne Weiteres mergen und sagt das.
+ *
+ * WARUM EIN PULL REQUEST STATT DIREKT AUF DEN ZIELBRANCH. Weil ein Konflikt
+ * dort sichtbar wird, statt beim Schreiben entweder zu scheitern oder etwas zu
+ * ueberfahren. Entschieden wird weiterhin im Dashboard; der Pull Request ist
+ * der Beleg, nicht der Entscheidungsweg.
+ *
+ * Die vier Schritte der Git-Data-API bauen nacheinander aufeinander auf. Bricht
+ * einer ab, ist nichts am Zielbranch passiert: Baum und Commit haengen an
+ * keinem Branch, solange die Referenz nicht steht.
  */
 async function applyProposal(proposal: CodeProposal): Promise<string> {
   const { owner, repo } = await resolveGithubOwner(proposal.repo);
   const branch = targetBranch();
 
-  const written: string[] = [];
-  const ohnePruefung: string[] = [];
+  const basis = proposal.baseCommit ?? (await kopfCommit(owner, repo, branch));
+  const ohneBasis = !proposal.baseCommit;
 
-  for (const file of proposal.files) {
-    const cleanPath = file.path.replace(/^\/+/, "");
-    if (file.baseSha === undefined) ohnePruefung.push(cleanPath);
-
-    const apiPath = `/repos/${owner}/${repo}/contents/${cleanPath
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/")}`;
-
-    const sha = await aktuelleSha(owner, repo, cleanPath, branch);
-
-    const result = (await githubRequest(apiPath, {
-      method: "PUT",
-      body: {
-        message: `${proposal.title}\n\nVorschlag #${proposal.id} von Lukas, angenommen von Issa.`,
-        content: Buffer.from(file.content, "utf-8").toString("base64"),
-        ...(branch ? { branch } : {}),
-        ...(sha ? { sha } : {}),
-      },
-    })) as { commit?: { html_url?: string } };
-
-    written.push(cleanPath);
-    if (result?.commit?.html_url) {
-      logger.info({ proposalId: proposal.id, url: result.commit.html_url }, "Vorschlag geschrieben");
-    }
+  // 1. Baum mit ALLEN Dateien auf einmal, auf dem Baum des Basiscommits.
+  const basisCommit = (await githubRequest(`/repos/${owner}/${repo}/git/commits/${basis}`)) as {
+    tree?: { sha?: string };
+  };
+  if (!basisCommit?.tree?.sha) {
+    throw new Error(
+      `Der Basiscommit ${basis.slice(0, 7)} ist nicht mehr auffindbar. ` +
+        "Der Vorschlag muss neu erstellt werden.",
+    );
   }
 
-  const hinweis = ohnePruefung.length
-    ? `\n\nHinweis: ${ohnePruefung.join(", ")} stammt aus einem Vorschlag von vor der ` +
-      `Aktualitätsprüfung — hier konnte nicht geprüft werden, ob sich zwischenzeitlich etwas ` +
-      `geändert hat. Bitte den Commit kurz ansehen.`
+  const baum = (await githubRequest(`/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    body: {
+      base_tree: basisCommit.tree.sha,
+      tree: proposal.files.map((f) => ({
+        path: f.path.replace(/^\/+/, ""),
+        mode: "100644",
+        type: "blob",
+        content: f.content,
+      })),
+    },
+  })) as { sha?: string };
+  if (!baum?.sha) throw new Error("GitHub hat keinen Baum zurueckgegeben.");
+
+  // 2. Ein Commit, Elternteil ist genau der Basiscommit.
+  const commit = (await githubRequest(`/repos/${owner}/${repo}/git/commits`, {
+    method: "POST",
+    body: {
+      message:
+        `${proposal.title}\n\n${proposal.summary}\n\n` +
+        `Vorschlag #${proposal.id} von Lukas, angenommen von Issa.`,
+      tree: baum.sha,
+      parents: [basis],
+    },
+  })) as { sha?: string; html_url?: string };
+  if (!commit?.sha) throw new Error("GitHub hat keinen Commit zurueckgegeben.");
+
+  // 3. Eigener Branch. Erst hier wird die Aenderung ueberhaupt sichtbar.
+  const vorschlagsBranch = `lukas/vorschlag-${proposal.id}`;
+  await githubRequest(`/repos/${owner}/${repo}/git/refs`, {
+    method: "POST",
+    body: { ref: `refs/heads/${vorschlagsBranch}`, sha: commit.sha },
+  });
+
+  // 4. Pull Request. Schlaegt das fehl (fehlende Rechte, Branch-Regel), bleibt
+  //    der Branch trotzdem stehen — die Arbeit ist nicht verloren, sie braucht
+  //    nur einen Handgriff. Deshalb ist das hier kein harter Abbruch.
+  const ziel = branch ?? undefined;
+  let prUrl: string | null = null;
+  let prHinweis = "";
+  try {
+    const pr = (await githubRequest(`/repos/${owner}/${repo}/pulls`, {
+      method: "POST",
+      body: {
+        title: proposal.title,
+        head: vorschlagsBranch,
+        ...(ziel ? { base: ziel } : {}),
+        body:
+          `${proposal.summary}\n\n**Warum:** ${proposal.reasoning}\n\n` +
+          `Vorschlag #${proposal.id}, im Dashboard angenommen.\n` +
+          `Basis: \`${basis.slice(0, 7)}\``,
+      },
+    })) as { html_url?: string; mergeable?: boolean };
+    prUrl = pr?.html_url ?? null;
+  } catch (err) {
+    prHinweis =
+      `\n\nDer Pull Request liess sich nicht anlegen (${(err as Error).message}). ` +
+      `Der Branch \`${vorschlagsBranch}\` steht aber — von dort aus ist alles erhalten.`;
+  }
+
+  await db
+    .update(codeProposals)
+    .set({ branchName: vorschlagsBranch, pullRequestUrl: prUrl })
+    .where(eq(codeProposals.id, proposal.id));
+
+  logger.info(
+    { proposalId: proposal.id, commit: commit.sha, branch: vorschlagsBranch, pr: prUrl },
+    "Vorschlag als ein Commit abgelegt",
+  );
+
+  const basisHinweis = ohneBasis
+    ? "\n\nHinweis: Dieser Vorschlag stammt von vor der Einführung des Basiscommits — " +
+      "er wurde gegen den aktuellen Stand gebaut. Bitte den Commit kurz ansehen."
     : "";
 
+  const dateien = proposal.files.map((f) => f.path).join(", ");
   return (
-    (branch
-      ? `Übernommen auf ${branch}: ${written.join(", ")}. Railway baut den Branch neu — in ein paar Minuten ist es live.`
-      : `Übernommen (Default-Branch): ${written.join(", ")}`) + hinweis
+    `Übernommen als **ein** Commit auf \`${vorschlagsBranch}\` (${proposal.files.length} Datei(en): ${dateien}).` +
+    (prUrl ? `\n\nPull Request: ${prUrl}` : "") +
+    basisHinweis +
+    prHinweis
   );
 }
 
