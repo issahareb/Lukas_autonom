@@ -18,7 +18,22 @@ export default defineConfig({
    * Nummer und einem Journal. `migrate` spielt sie in Reihenfolge ein und
    * merkt sich in __drizzle_migrations, was schon lief.
    */
-  out: path.join(__dirname, "./migrations"),
+  /*
+   * RELATIV, nicht absolut — und das ist kein Schoenheitsfehler.
+   *
+   * Hier stand `path.join(__dirname, "./migrations")`. `migrate` kam damit
+   * zurecht, `generate` nicht: es stellt dem Wert ein "./" voran und sucht
+   * dann unter `.//home/user/.../meta/0000_snapshot.json` — einem relativen
+   * Pfad, den es nie gibt. `generate` brach also jedes Mal ab.
+   *
+   * Die Folge war nicht nur eine Fehlermeldung: es ist der Grund, warum der
+   * Migrationskette drei Tabellen und zwei Spalten fehlten. Wer nichts
+   * generieren kann, schiebt die Schemaaenderung eben per `push` nach — und
+   * weil `push` funktionierte, fiel es bis zur Umstellung des Deploys nicht
+   * auf. Bleibt relativ; die npm-Skripte laufen ohnehin mit diesem Ordner
+   * als Arbeitsverzeichnis.
+   */
+  out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
     url: process.env.DATABASE_URL,

@@ -8,6 +8,13 @@
       "when": 1788038432074,
       "tag": "0000_vengeful_lord_tyger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789301072059,
+      "tag": "0001_supreme_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

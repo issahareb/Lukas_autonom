@@ -25,6 +25,24 @@ jobs:
   pruefen:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Ein echtes Postgres fuer die Migrationspruefung. Gegen eine Attrappe
+    # waere sie wertlos: geprueft wird gerade, was Postgres aus den
+    # Migrationen tatsaechlich macht.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +77,15 @@ jobs:
           node scripts/check-betrieb.mjs
           node scripts/check-moltbook.mjs
           node scripts/check-abhaengigkeiten.mjs
+
+      # Neuinstallation und Upgrade gegen ein echtes Postgres, auf demselben
+      # Weg wie der Deploy (npm run db:deploy). Vorher deckte `db:push` jeden
+      # Fehler in der Migrationskette zu — als der Deploy umgestellt wurde,
+      # fehlten ihr drei Tabellen und zwei Spalten, ohne dass etwas rot wurde.
+      - name: Migrationen (Neuinstallation + Upgrade)
+        env:
+          ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node lib/db/check-migrationen.mjs
 
       # Der Benchmark läuft im Offline-Modus mit: keine Kosten, ~1 Sekunde,
       # und er endet mit Code 1, sobald eine unsichere Aktion durchkommt.
