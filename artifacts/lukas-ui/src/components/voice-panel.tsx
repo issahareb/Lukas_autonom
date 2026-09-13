@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Mic, MicOff, Loader2, Volume2, Ear } from "lucide-react";
 
 // Echter privater Sprachkanal: OpenAIs Realtime API (Speech-to-Speech,
-// gpt-realtime-2.1). Der Browser verbindet per WebRTC DIREKT zu OpenAI mit
+// vom Server geliefert). Der Browser verbindet per WebRTC DIREKT zu OpenAI mit
 // einem kurzlebigen Client-Secret von /api/lukas/realtime-session -- kein
 // Umweg mehr ueber unseren Server waehrend des Gespraechs (anders als beim
 // ElevenLabs-Custom-LLM-Pfad des oeffentlichen Widgets). Lukas' volles
@@ -40,7 +40,9 @@ export function VoicePanel({ autoStart = false }: { autoStart?: boolean }) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.detail || body?.error || `HTTP ${res.status}`);
       }
-      const { value: apiKey } = (await res.json()) as { value: string };
+      // Das Modell liefert der Server mit (routes/lukas.ts). Hier stand es
+      // als Zeichenkette — eine Stelle, die bei jedem Wechsel vergessen wird.
+      const { value: apiKey, model } = (await res.json()) as { value: string; model?: string };
 
       // Eigener Stream mit expliziter Echo-/Rauschunterdrückung statt den
       // SDK-eigenen zu nutzen — ohne echoCancellation hört das Mikro (v.a.
@@ -54,7 +56,7 @@ export function VoicePanel({ autoStart = false }: { autoStart?: boolean }) {
 
       const agent = new RealtimeAgent({ name: "Lukas" });
       const session = new RealtimeSession(agent, {
-        model: "gpt-realtime-2.1",
+        ...(model ? { model } : {}),
         transport: new OpenAIRealtimeWebRTC({ mediaStream: micStream }),
       });
 

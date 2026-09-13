@@ -513,6 +513,27 @@ export default function Chat() {
     }
   }, [input, activeId, streaming, qc, pending.length]);
 
+  /*
+   * Die Frage von der Startseite uebernehmen.
+   *
+   * Dort steht das Eingabefeld, hier laeuft das Gespraech — die Frage wird
+   * ueber sessionStorage gereicht und beim ersten Rendern eingesetzt. Der
+   * Schluessel wird SOFORT geloescht: sonst taucht dieselbe Frage bei jedem
+   * Zurueckblaettern erneut auf.
+   *
+   * Abgeschickt wird nicht automatisch. Sie steht im Feld, der Cursor
+   * dahinter — wer sich vertippt hat, kann es hier noch sehen. Ein Zug, der
+   * ohne Zutun losgeht, ist bei einem Agenten mit Werkzeugen die falsche
+   * Voreinstellung.
+   */
+  useEffect(() => {
+    const frage = sessionStorage.getItem("lukas_startfrage");
+    if (!frage) return;
+    sessionStorage.removeItem("lukas_startfrage");
+    setInput(frage);
+    textareaRef.current?.focus();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

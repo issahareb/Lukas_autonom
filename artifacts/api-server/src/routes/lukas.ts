@@ -585,10 +585,17 @@ auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfär
 Ruhiger, männlicher, conversational-natürlicher Tonfall.
 
 ${basePrompt}`;
+    /*
+     * Das Modell steht in ai/sprach-sitzung.ts und wird MITGELIEFERT.
+     * Vorher schrieb der Browser es sich selbst hin (voice-panel.tsx) — eine
+     * siebte Stelle, die bei jedem Modellwechsel vergessen wird. Der Client
+     * soll nicht wissen muessen, womit er spricht.
+     */
+    const model = sprachModell();
     const clientSecret = await openai.realtime.clientSecrets.create({
       session: {
         type: "realtime",
-        model: sprachModell(),
+        model,
         instructions,
         // Stimme, Rauschfilter, Transkription und Sprecherkennung stehen
         // gemeinsam in ai/sprach-sitzung.ts — siehe dort fuer die Begruendungen.
@@ -596,7 +603,7 @@ ${basePrompt}`;
       },
       expires_after: { anchor: "created_at", seconds: 600 },
     });
-    res.json({ value: clientSecret.value, expiresAt: clientSecret.expires_at });
+    res.json({ value: clientSecret.value, expiresAt: clientSecret.expires_at, model });
   } catch (err) {
     logger.error({ err }, "Realtime-Session error");
     recordDebugEvent("realtime-session", err);

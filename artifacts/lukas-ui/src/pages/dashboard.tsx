@@ -1,320 +1,232 @@
-import { useGetLukasDashboard } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Activity,
-  Brain,
-  Target,
-  Film,
-  BookOpen,
-  Clock,
-  Heart,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  type LucideIcon,
-} from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { de } from "date-fns/locale";
-import { PageHeader } from "@/components/page-header";
-import { WartetAufDich } from "@/components/wartet-auf-dich";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { ArrowUp, AudioLines, Image as BildIcon, Paperclip, Sparkles, FileText, X } from "lucide-react";
+import { Orb, type OrbZustand } from "@/components/orb";
+import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
+import { useAudioPegel } from "@/hooks/use-audio-pegel";
 
 /*
- * Ein Abschnitt der Uebersicht.
+ * Die Startseite.
  *
- * Vorher hatte jede Ueberschrift eine Linie darunter — das ergab optisch ein
- * gegliedertes Dokument, kein Produkt. Die Trennung machen jetzt Abstand und
- * die Karten selbst.
+ * Eine Frage, eine Antwortmöglichkeit, sonst nichts. Alles andere hat seinen
+ * eigenen Tab — hier steht Lukas selbst im Mittelpunkt, nicht seine
+ * Verwaltung.
+ *
+ * DREI ZUSTÄNDE, DIE DER ORB ERZÄHLT:
+ *   nichts los  -> er ist groß und atmet in der Mitte.
+ *   du tippst   -> er rückt nach oben und wird kleiner. Der Platz gehört
+ *                  jetzt dem, was du schreibst.
+ *   ihr redet   -> er wird groß und folgt der Stimme, die gerade dran ist.
+ *
+ * Die Bewegung beim Tippen ist kein Effekt: sie beantwortet die Frage "hört
+ * er mich gerade?" ohne ein einziges Wort. Und weil der Pegel aus der echten
+ * Audiospur kommt (use-audio-pegel), stimmt sie auch dann, wenn jemand
+ * mitten im Satz Luft holt.
  */
-function Abschnitt({
-  icon: Icon,
-  titel,
-  verzoegerung = 0,
-  children,
-}: {
-  icon: LucideIcon;
-  titel: string;
-  verzoegerung?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rise" style={{ animationDelay: `${verzoegerung}ms` }}>
-      <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-        <Icon className="w-4 h-4" /> {titel}
-      </h2>
-      {children}
-    </section>
-  );
-}
 
-function Kennzahl({
-  icon: Icon,
-  label,
-  wert,
-  zusatz,
-  verzoegerung = 0,
-}: {
-  icon: LucideIcon;
-  label: string;
-  wert: string;
-  zusatz?: string;
-  verzoegerung?: number;
-}) {
-  return (
-    <div className="card-soft rise p-5" style={{ animationDelay: `${verzoegerung}ms` }}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <span className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Icon className="w-4 h-4 text-primary" />
-        </span>
-      </div>
-      <div className="text-2xl font-semibold tracking-tight leading-tight text-balance">{wert}</div>
-      {zusatz && <p className="text-xs text-muted-foreground mt-1.5">{zusatz}</p>}
-    </div>
-  );
-}
-
-/** Leerer Zustand — sagt, was fehlt, nicht "No data". */
-function Leer({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground text-center text-pretty">
-      {text}
-    </div>
-  );
-}
+const VORSCHLAEGE = [
+  { icon: Sparkles, titel: "Überrasch mich", text: "Was ist dir zuletzt aufgefallen?" },
+  { icon: BildIcon, titel: "Bild erstellen", text: "Erstelle ein Bild von " },
+  { icon: FileText, titel: "Zusammenfassen", text: "Fass mir kurz zusammen: " },
+];
 
 export default function Dashboard() {
-  const { data, isLoading } = useGetLukasDashboard();
+  const [, navigate] = useLocation();
+  const [text, setText] = useState("");
+  const eingabe = useRef<HTMLTextAreaElement>(null);
+  const sprache = useSprachsitzung();
 
-  if (isLoading || !data) {
-    return (
-      <div className="flex flex-col h-full">
-        <PageHeader icon={Activity} title="Übersicht" subtitle="Lädt…" />
-        <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
-          <Skeleton className="h-32 w-full rounded-2xl" />
-          <Skeleton className="h-32 w-full rounded-2xl" />
-          <Skeleton className="h-32 w-full rounded-2xl" />
-        </div>
-      </div>
-    );
+  const pegel = useAudioPegel({
+    // Beim Sprechen zählt SEINE Stimme, beim Zuhören DEINE. Beide Quellen
+    // hängen dran; die lautere gewinnt, und still ist immer nur eine.
+    stream: sprache.status === "hoert" ? sprache.mikro : null,
+    element: sprache.aktiv ? sprache.ausgabe : null,
+    aktiv: sprache.aktiv,
+  });
+
+  const tippt = text.trim().length > 0;
+
+  const zustand: OrbZustand =
+    sprache.status === "spricht"
+      ? "spricht"
+      : sprache.status === "hoert"
+        ? "hoert"
+        : sprache.status === "verbindet"
+          ? "denkt"
+          : "ruhe";
+
+  // Groß im Gespräch, klein beim Tippen, sonst dazwischen.
+  const groesse = sprache.aktiv ? "gross" : tippt ? "klein" : "mittel";
+
+  // Das Textfeld wächst mit, bis zu einer Grenze — ein Feld, das endlos
+  // wächst, schiebt die Eingabe irgendwann aus dem Bild.
+  useEffect(() => {
+    const el = eingabe.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
+  function absenden() {
+    const frage = text.trim();
+    if (!frage) return;
+    /*
+     * Die Frage wird im sessionStorage übergeben, nicht in der Adresszeile.
+     * Zwei Gründe: sie kann beliebig lang sein, und sie hat in einem Link,
+     * den jemand teilt oder der im Verlauf stehen bleibt, nichts verloren.
+     */
+    sessionStorage.setItem("lukas_startfrage", frage);
+    setText("");
+    navigate("/chat");
   }
 
-  const { status, activeGoals, recentDiary, mediaJobs, recentEmotions, character } = data;
-
-  /*
-   * Gefuehle mit Richtung statt mit ASCII-Zeichen.
-   *
-   * Dort standen ▲ ▼ ◆ — genau die Sorte Zeichen, die eine Oberflaeche nach
-   * Terminal aussehen laesst. Ein Pfeil-Icon sagt dasselbe und gehoert in eine
-   * Anwendung.
-   */
-  const stimmung = (v: number) =>
-    v >= 0.3
-      ? { Icon: TrendingUp, farbe: "text-emerald-400", hg: "bg-emerald-400/10" }
-      : v <= -0.3
-        ? { Icon: TrendingDown, farbe: "text-red-400", hg: "bg-red-400/10" }
-        : { Icon: Minus, farbe: "text-amber-300", hg: "bg-amber-300/10" };
-
-  const zustandText: Record<string, string> = {
-    active: "läuft",
-    paused: "pausiert",
-    done: "erledigt",
-    completed: "erledigt",
-    pending: "wartet",
-    processing: "läuft",
-    failed: "fehlgeschlagen",
-  };
+  const letzteZeile = sprache.zeilen[sprache.zeilen.length - 1];
 
   return (
-    <div>
-      <PageHeader
-        icon={Activity}
-        title="Übersicht"
-        subtitle="Wie es Lukas gerade geht und woran er arbeitet"
-        actions={
-          <div className="text-xs text-muted-foreground">
-            Zuletzt aktiv:{" "}
-            {status.lastActive
-              ? formatDistanceToNow(new Date(status.lastActive), { addSuffix: true, locale: de })
-              : "unbekannt"}
-          </div>
-        }
+    <div className="relative min-h-[calc(100dvh-4rem)] overflow-hidden">
+      {/* Der Schein von unten — er ist in den Vorlagen das, was die Seite aus
+          dem reinen Schwarz heraushebt. Rein dekorativ, daher aria-hidden. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] opacity-70"
+        style={{
+          background:
+            "radial-gradient(120% 100% at 50% 115%, color-mix(in oklch, var(--primary) 55%, transparent) 0%, transparent 70%)",
+        }}
       />
 
-      <div className="p-5 sm:p-6 space-y-8 max-w-6xl">
-        {/* Ganz oben, vor allem anderen: was von Issa gebraucht wird. Alles
-            Übrige auf dieser Seite ist Information, nur das hier ist eine
-            Aufgabe. */}
-        <WartetAufDich />
+      <div className="relative flex min-h-[calc(100dvh-4rem)] flex-col items-center px-5 pb-6 pt-4 sm:px-8">
+        {/* ── Orb + Begrüßung ─────────────────────────────────────────── */}
+        {/*
+          Beim Tippen rueckt der Orb nach OBEN, er schrumpft nicht bloss in der
+          Mitte. Das ist der Unterschied zwischen "er macht Platz" und "er
+          verschwindet": der Blick wandert mit ihm hoch, und darunter entsteht
+          der Raum fuer das, was gleich kommt.
+        */}
+        <div
+          className={`flex w-full flex-1 flex-col items-center transition-all duration-500 ${
+            tippt ? "justify-start gap-3 pt-2" : "justify-center gap-6"
+          }`}
+        >
+          <Orb zustand={zustand} pegel={pegel} groesse={groesse} />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Kennzahl
-            icon={Activity}
-            label="Stimmung"
-            wert={status.mood}
-            zusatz={status.note ? status.note : `Energie: ${status.energy}`}
-          />
-          <Kennzahl
-            icon={Target}
-            label="Beschäftigt ihn"
-            wert={status.obsession || "Nichts Bestimmtes"}
-            verzoegerung={60}
-          />
-          <Kennzahl
-            icon={Brain}
-            label="Gedächtnis"
-            wert={`${status.memoriesCount} Erinnerungen`}
-            zusatz={`${status.activeGoalsCount} aktive Ziele`}
-            verzoegerung={120}
-          />
-        </div>
-
-        <Abschnitt icon={Heart} titel="Gefühlslage" verzoegerung={180}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-2.5">
-              {recentEmotions.length > 0 ? (
-                recentEmotions.map((e, i) => {
-                  const { Icon, farbe, hg } = stimmung(e.valence);
-                  return (
-                    <div
-                      key={e.id}
-                      className="card-soft rise p-3.5 flex items-start gap-3"
-                      style={{ animationDelay: `${200 + i * 50}ms` }}
-                    >
-                      <span
-                        className={`w-8 h-8 rounded-xl ${hg} flex items-center justify-center shrink-0`}
-                      >
-                        <Icon className={`w-4 h-4 ${farbe}`} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="font-medium capitalize">{e.emotion}</span>
-                          <span className="text-xs text-muted-foreground flex-none">
-                            {formatDistanceToNow(new Date(e.createdAt), {
-                              addSuffix: true,
-                              locale: de,
-                            })}
-                          </span>
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-0.5 text-pretty">
-                          {e.cause}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <Leer text="Noch keine Gefühle festgehalten — das beginnt mit dem ersten Gespräch." />
-              )}
-            </div>
-
-            {character ? (
-              <div className="card-soft p-5 space-y-4 self-start">
-                <div className="text-sm text-muted-foreground">Gewachsener Charakter</div>
-                {character.selfImage && (
-                  <p className="text-sm leading-relaxed text-pretty">„{character.selfImage}"</p>
-                )}
-                <div className="space-y-2.5">
-                  {(
-                    [
-                      ["Selbstvertrauen", character.traits.confidence],
-                      ["Wärme", character.traits.warmth],
-                      ["Vorsicht", character.traits.guardedness],
-                      ["Verspieltheit", character.traits.playfulness],
-                      ["Ehrgeiz", character.traits.ambition],
-                    ] as const
-                  ).map(([label, value], i) => (
-                    <div key={label} className="flex items-center gap-3">
-                      <span className="text-xs w-28 flex-none text-muted-foreground">{label}</span>
-                      <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-primary/60 to-primary transition-[width] duration-700 ease-out"
-                          style={{
-                            width: `${Math.round(value * 100)}%`,
-                            transitionDelay: `${300 + i * 80}ms`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs w-8 text-right text-muted-foreground tabular-nums">
-                        {Math.round(value * 100)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <Leer text="Sein Charakter formt sich mit der ersten Reflexion." />
+          {/* Beim Tippen tritt die Begrüßung zurück — du weißt ja schon, was
+              du willst. Sie verschwindet nicht, sie wird nur leise. */}
+          <div
+            className={`text-center transition-all duration-500 ${
+              tippt ? "max-h-0 scale-95 opacity-0" : "max-h-40 opacity-100"
+            }`}
+          >
+            <p className="text-sm text-muted-foreground sm:text-base">Hallo Issa</p>
+            <h1 className="mt-1 text-[1.75rem] font-semibold leading-tight tracking-tight text-pretty sm:text-4xl">
+              {sprache.aktiv ? "Ich höre." : "Wie kann ich dir helfen?"}
+            </h1>
+            {!sprache.aktiv && (
+              <p className="mx-auto mt-3 hidden max-w-sm text-sm text-muted-foreground sm:block">
+                Von der schnellen Frage bis zur Arbeit, die von allein weiterläuft.
+              </p>
             )}
           </div>
-        </Abschnitt>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="space-y-8">
-            <Abschnitt icon={BookOpen} titel="Zuletzt im Tagebuch" verzoegerung={240}>
-              {recentDiary.length > 0 ? (
-                <div className="card-soft p-5 text-sm leading-relaxed text-pretty">
-                  {recentDiary[0].content}
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(recentDiary[0].createdAt), {
-                      addSuffix: true,
-                      locale: de,
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <Leer text="Noch kein Eintrag." />
-              )}
-            </Abschnitt>
+          {/* Im Gespräch: die letzte Zeile, damit man mitlesen kann. */}
+          {sprache.aktiv && letzteZeile && (
+            <p className="mx-auto max-w-md text-center text-sm text-muted-foreground">
+              <span className="opacity-60">{letzteZeile.role === "user" ? "Du: " : "Lukas: "}</span>
+              {letzteZeile.text}
+            </p>
+          )}
 
-            <Abschnitt icon={Target} titel="Aktive Ziele" verzoegerung={280}>
-              <div className="space-y-2.5">
-                {activeGoals.slice(0, 3).map((goal) => (
-                  <div
-                    key={goal.id}
-                    className="card-soft p-4 flex justify-between items-center gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{goal.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        Priorität {goal.priority}
-                      </div>
-                    </div>
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground shrink-0">
-                      {zustandText[goal.status] ?? goal.status}
-                    </span>
-                  </div>
-                ))}
-                {activeGoals.length === 0 && <Leer text="Keine aktiven Ziele." />}
-              </div>
-            </Abschnitt>
+          {sprache.fehler && (
+            <p className="max-w-md text-center text-sm text-destructive">{sprache.fehler}</p>
+          )}
+        </div>
+
+        {/* ── Eingabe ─────────────────────────────────────────────────── */}
+        <div className="w-full max-w-2xl shrink-0">
+          <div className="glass flex items-end gap-2 rounded-[1.75rem] px-3 py-2 shadow-lg shadow-black/20">
+            <button
+              type="button"
+              onClick={() => navigate("/chat")}
+              className="shrink-0 rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
+              aria-label="Datei anhängen (im Chat)"
+            >
+              <Paperclip className="h-[1.15rem] w-[1.15rem]" />
+            </button>
+
+            <textarea
+              ref={eingabe}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  absenden();
+                }
+              }}
+              rows={1}
+              placeholder={sprache.aktiv ? "Oder schreib mir…" : "Frag mich alles…"}
+              aria-label="Frage an Lukas"
+              className="max-h-40 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60"
+            />
+
+            {/* Die Taste wechselt mit dem, was du tust: schreibst du, ist es
+                Senden. Schreibst du nicht, ist es die Stimme. Zwei Tasten
+                nebeneinander hätten hier nur die Frage gestellt, welche. */}
+            {tippt ? (
+              <button
+                type="button"
+                onClick={absenden}
+                className="shrink-0 rounded-full bg-primary p-2.5 text-primary-foreground transition-transform hover:scale-105"
+                aria-label="Senden"
+              >
+                <ArrowUp className="h-[1.15rem] w-[1.15rem]" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={sprache.aktiv ? sprache.beenden : sprache.starten}
+                disabled={sprache.status === "verbindet"}
+                className={`shrink-0 rounded-full p-2.5 transition-all disabled:opacity-50 ${
+                  sprache.aktiv
+                    ? "bg-destructive text-white"
+                    : "bg-primary text-primary-foreground hover:scale-105"
+                }`}
+                aria-label={sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
+              >
+                {sprache.aktiv ? (
+                  <X className="h-[1.15rem] w-[1.15rem]" />
+                ) : (
+                  <AudioLines className="h-[1.15rem] w-[1.15rem]" />
+                )}
+              </button>
+            )}
           </div>
 
-          <Abschnitt icon={Film} titel="Medien-Aufträge" verzoegerung={320}>
-            <div className="space-y-2.5">
-              {mediaJobs.slice(0, 4).map((job) => (
-                <div key={job.id} className="card-soft p-4 space-y-2">
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="text-sm font-medium line-clamp-2 flex-1">
-                      {job.vision || job.prompt}
-                    </div>
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground shrink-0">
-                      {zustandText[job.status] ?? job.status}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs text-muted-foreground">
-                    <span>{job.mediaType === "video" ? "Video" : "Bild"}</span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {formatDistanceToNow(new Date(job.createdAt), {
-                        addSuffix: true,
-                        locale: de,
-                      })}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {mediaJobs.length === 0 && <Leer text="Noch keine Medien-Aufträge." />}
-            </div>
-          </Abschnitt>
+          {/* ── Vorschläge ────────────────────────────────────────────── */}
+          {/* Auf dem Handy nur, solange nichts los ist: dort ist der Platz
+              knapp, und sie stehen sonst der Tastatur im Weg. */}
+          <div
+            className={`mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 ${
+              tippt || sprache.aktiv ? "hidden" : "hidden sm:grid"
+            }`}
+          >
+            {VORSCHLAEGE.map(({ icon: Icon, titel, text: vorlage }) => (
+              <button
+                key={titel}
+                type="button"
+                onClick={() => {
+                  setText(vorlage);
+                  eingabe.current?.focus();
+                }}
+                className="card-soft rounded-2xl px-3.5 py-3 text-left"
+              >
+                <span className="flex items-center gap-2 text-[13px] font-medium">
+                  <Icon className="h-4 w-4 text-primary" />
+                  {titel}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
