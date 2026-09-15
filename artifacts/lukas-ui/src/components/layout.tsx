@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useHealthCheck } from "@workspace/api-client-react";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { Fehlergrenze } from "@/components/fehlergrenze";
 import {
-  Activity,
   BarChart3,
   KeyRound,
   Brain,
@@ -19,164 +18,196 @@ import {
   Plug,
   Inbox,
   Network,
-  Menu,
-  X, Phone } from "lucide-react";
+  X,
+  Phone,
+  House,
+  Grid2X2,
+  ArrowUpRight,
+} from "lucide-react";
+import "./app-shell.css";
 
-function handleLogout() {
-  localStorage.removeItem("lukas_token");
-  window.location.reload();
-}
-
+const navigation = [
+  { href: "/", label: "Heute", icon: House },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/gehirn", label: "Gehirn", icon: Network },
+  { href: "/memory", label: "Gedächtnis", icon: Brain },
+  { href: "/goals", label: "Ziele", icon: Target },
+  { href: "/diary", label: "Tagebuch", icon: BookOpen },
+  { href: "/studio", label: "Studio", icon: Film },
+  { href: "/meldungen", label: "Meldungen", icon: Inbox },
+  { href: "/proposals", label: "Vorschläge", icon: Lightbulb },
+  { href: "/approvals", label: "Freigaben", icon: ShieldCheck },
+  { href: "/mcp", label: "Verbindungen", icon: Plug },
+  { href: "/telefon", label: "Telefon", icon: Phone },
+  { href: "/kennzahlen", label: "Kennzahlen", icon: BarChart3 },
+  { href: "/zugaenge", label: "Zugänge", icon: KeyRound },
+  { href: "/diagnostics", label: "Diagnose", icon: AlertTriangle },
+];
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { data: health } = useHealthCheck();
-  const isMobile = useIsMobile();
-  const [navOpen, setNavOpen] = useState(false);
-
-  // Beim Wechseln der Seite (oder Wechsel Mobil/Desktop) die Drawer schliessen.
+  const { data: health, isError: healthError } = useHealthCheck();
+  const [mehr, setMehr] = useState(false);
+  const shell = useRef<HTMLDivElement>(null),
+    scroll = useRef<HTMLDivElement>(null);
+  const title = navigation.find((n) => n.href === location)?.label ?? "Lukas";
+  const online = !healthError && health?.status === "ok";
   useEffect(() => {
-    setNavOpen(false);
-  }, [location, isMobile]);
-
-  const navItems = [
-    { href: "/", label: "Übersicht", icon: Activity },
-    { href: "/chat", label: "Chat", icon: MessageSquare },
-    { href: "/studio", label: "Studio", icon: Film },
-    { href: "/memory", label: "Gedächtnis", icon: Brain },
-    { href: "/gehirn", label: "Gehirn", icon: Network },
-    { href: "/goals", label: "Ziele", icon: Target },
-    { href: "/diary", label: "Tagebuch", icon: BookOpen },
-    { href: "/meldungen", label: "Meldungen", icon: Inbox },
-    { href: "/proposals", label: "Vorschläge", icon: Lightbulb },
-    { href: "/approvals", label: "Freigaben", icon: ShieldCheck },
-    { href: "/mcp", label: "MCP", icon: Plug },
-    { href: "/telefon", label: "Telefon", icon: Phone },
-    { href: "/kennzahlen", label: "Kennzahlen", icon: BarChart3 },
-    { href: "/zugaenge", label: "Zugänge", icon: KeyRound },
-    { href: "/diagnostics", label: "Diagnose", icon: AlertTriangle },
-  ];
-
-  const sidebarContent = (
-    <>
-      <div className="flex h-16 items-center gap-3 px-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/12">
-          <span className="text-sm font-semibold text-primary">L</span>
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span className="font-semibold tracking-tight leading-tight">Lukas</span>
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5 leading-tight">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${health?.status === 'ok' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-            {health?.status === 'ok' ? 'online' : 'offline'}
-          </span>
-        </div>
-        {isMobile && (
-          <button
-            onClick={() => setNavOpen(false)}
-            className="ml-auto text-muted-foreground hover:text-foreground"
-            aria-label="Menü schliessen"
-            data-testid="button-close-nav"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
-      </div>
-
-      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {navItems.map((item) => {
-          const isActive = location === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              /*
-               * Der aktive Eintrag ist jetzt an einem farbigen Balken links zu
-               * erkennen, nicht nur an einem grauen Kasten — und das Icon
-               * nimmt die Akzentfarbe an. Ohne Farbe sah die Navigation aus
-               * wie eine Dateiliste.
-               */
-              className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                isActive
-                  ? "bg-primary/10 text-foreground font-medium"
-                  : "text-muted-foreground hover:bg-white/[0.05] hover:text-foreground"
-              }`}
-            >
-              {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
-              )}
-              <item.icon
-                className={`w-4 h-4 shrink-0 transition-colors ${isActive ? "text-primary" : ""}`}
-              />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="p-4">
-        <button
-          onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition-colors duration-200 hover:bg-white/[0.05] hover:text-foreground"
-          data-testid="button-logout"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          Abmelden
-        </button>
-      </div>
-    </>
+    setMehr(false);
+    scroll.current?.scrollTo({ top: 0 });
+  }, [location]);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const update = () => {
+      const h = viewport?.height ?? window.innerHeight;
+      shell.current?.style.setProperty("--app-viewport-height", `${h}px`);
+      const el = document.activeElement;
+      const editing =
+        el instanceof HTMLElement &&
+        (el.matches("input,textarea") || el.isContentEditable);
+      shell.current?.classList.toggle(
+        "keyboard-open",
+        editing && window.innerHeight - h > 150,
+      );
+    };
+    update();
+    viewport?.addEventListener("resize", update);
+    window.addEventListener("resize", update);
+    document.addEventListener("focusin", update);
+    document.addEventListener("focusout", update);
+    return () => {
+      viewport?.removeEventListener("resize", update);
+      window.removeEventListener("resize", update);
+      document.removeEventListener("focusin", update);
+      document.removeEventListener("focusout", update);
+    };
+  }, []);
+  const logout = () => {
+    localStorage.removeItem("lukas_token");
+    window.location.reload();
+  };
+  const status = (
+    <span className={`app-connection ${online ? "is-online" : ""}`}>
+      <span />
+      {healthError
+        ? "Offline"
+        : health
+          ? online
+            ? "Verbunden"
+            : "Offline"
+          : "Verbindet …"}
+    </span>
   );
-
   return (
-    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden font-sans">
-      {isMobile ? (
-        <>
-          {/* Mobile: schmale Top-Bar mit Menü-Button statt fixer Sidebar */}
-          <div className="glass fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-x-0 border-t-0 px-4">
-            <button
-              onClick={() => setNavOpen(true)}
-              className="text-foreground"
-              aria-label="Menü öffnen"
-              data-testid="button-open-nav"
+    <div ref={shell} className="app-shell">
+      <aside className="app-sidebar" aria-label="Desktop-Navigation">
+        <Link href="/" className="app-brand">
+          <span className="app-monogram">L</span>
+          <span>
+            Lukas<small>Dein persönlicher Assistent</small>
+          </span>
+        </Link>
+        <p className="app-nav-heading">DEIN RAUM</p>
+        <nav>
+          {navigation.map((n, i) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              aria-current={location === n.href ? "page" : undefined}
+              className={`app-sidebar-link ${i === 7 ? "app-nav-divider" : ""}`}
             >
-              <Menu className="w-6 h-6" />
+              <n.icon size={18} aria-hidden="true" />
+              {n.label}
+              {location === n.href && <span className="app-nav-dot" />}
+            </Link>
+          ))}
+        </nav>
+        <div className="app-sidebar-bottom">
+          {status}
+          <button type="button" onClick={logout} aria-label="Abmelden">
+            <LogOut size={17} />
+          </button>
+        </div>
+      </aside>
+      <header className="app-mobile-header">
+        <Link href="/" className="app-mobile-brand">
+          <span className="app-monogram">L</span>
+          {location === "/" ? "Lukas" : title}
+        </Link>
+        {status}
+      </header>
+      <main className="app-main">
+        <div className="app-scroll" ref={scroll}>
+          <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
+        </div>
+      </main>
+      <Dialog.Root open={mehr} onOpenChange={setMehr}>
+        <nav className="app-tabbar" aria-label="Hauptnavigation">
+          {navigation.slice(0, 3).map((n) => (
+            <Link
+              key={n.href}
+              href={n.href}
+              aria-current={location === n.href ? "page" : undefined}
+            >
+              <span>
+                <n.icon size={21} aria-hidden="true" />
+              </span>
+              {n.label}
+            </Link>
+          ))}
+          <Dialog.Trigger asChild>
+            <button
+              type="button"
+              className={
+                !navigation.slice(0, 3).some((n) => n.href === location)
+                  ? "is-current"
+                  : ""
+              }
+              aria-label="Weitere Bereiche öffnen"
+            >
+              <span>
+                <Grid2X2 size={21} aria-hidden="true" />
+              </span>
+              Mehr
             </button>
-            <span className="font-semibold tracking-tight">Lukas</span>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ml-auto ${health?.status === 'ok' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-          </div>
-
-          {navOpen && (
-            <div
-              className="fixed inset-0 z-40 bg-black/60"
-              onClick={() => setNavOpen(false)}
-              data-testid="overlay-nav-backdrop"
-            />
-          )}
-          <aside
-            className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-sidebar transition-transform duration-200 ${
-              navOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
-          >
-            {sidebarContent}
-          </aside>
-
-          <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative pt-14">
-            <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-              <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
+          </Dialog.Trigger>
+        </nav>
+        <Dialog.Portal>
+          <Dialog.Overlay className="app-sheet-overlay" />
+          <Dialog.Content className="app-sheet">
+            <div className="app-sheet-handle" aria-hidden="true" />
+            <div className="app-sheet-heading">
+              <div>
+                <Dialog.Title>Dein Lukas</Dialog.Title>
+                <Dialog.Description>Alles an einem Ort.</Dialog.Description>
+              </div>
+              <Dialog.Close
+                className="app-sheet-close"
+                aria-label="Menü schließen"
+              >
+                <X size={20} />
+              </Dialog.Close>
             </div>
-          </main>
-        </>
-      ) : (
-        <>
-          <aside className="flex w-64 flex-shrink-0 flex-col bg-sidebar">
-            {sidebarContent}
-          </aside>
-
-          <main className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
-            <div className="flex-1 min-w-0 overflow-y-auto">
-              <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
-            </div>
-          </main>
-        </>
-      )}
+            <nav className="app-sheet-grid" aria-label="Weitere Bereiche">
+              {navigation.slice(3).map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  onClick={() => setMehr(false)}
+                  aria-current={location === n.href ? "page" : undefined}
+                >
+                  <n.icon size={20} aria-hidden="true" />
+                  <span>{n.label}</span>
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </Link>
+              ))}
+            </nav>
+            <button type="button" className="app-sheet-logout" onClick={logout}>
+              <LogOut size={17} aria-hidden="true" />
+              Abmelden
+            </button>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
