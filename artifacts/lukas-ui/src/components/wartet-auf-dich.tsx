@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, Check, CheckCheck, Inbox, Send, ShieldCheck, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCheck,
+  Inbox,
+  Send,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 
@@ -66,7 +74,7 @@ const TIER_WORT: Record<string, string> = {
  * Und deshalb ist LEER hier ein Ergebnis, kein fehlender Inhalt: "Nichts
  * offen" ist die Nachricht, dass Lukas gerade nicht auf einen wartet.
  */
-export function WartetAufDich() {
+export function WartetAufDich({ kompakt = false }: { kompakt?: boolean } = {}) {
   const [daten, setDaten] = useState<Wartet | null>(null);
   const [entwuerfe, setEntwuerfe] = useState<Record<number, string>>({});
   const [beschaeftigt, setBeschaeftigt] = useState<string | null>(null);
@@ -103,7 +111,10 @@ export function WartetAufDich() {
     }
   };
 
-  const entscheide = async (id: number, was: "allow" | "deny" | "allow-auftrag") => {
+  const entscheide = async (
+    id: number,
+    was: "allow" | "deny" | "allow-auftrag",
+  ) => {
     setBeschaeftigt(`f${id}`);
     try {
       await fetch(`${BASE}/api/lukas/approvals/${id}/${was}`, {
@@ -132,10 +143,13 @@ export function WartetAufDich() {
   const freigaben = Array.isArray(daten.freigaben) ? daten.freigaben : [];
   const nichtsOffen = meldungen.length === 0 && freigaben.length === 0;
 
+  if (nichtsOffen && kompakt) return null;
+
   if (nichtsOffen) {
     return (
       <section className="card-soft rounded-3xl px-5 py-4 text-sm text-muted-foreground">
-        Nichts offen — Lukas wartet gerade auf keine Antwort und auf keine Freigabe.
+        Nichts offen — Lukas wartet gerade auf keine Antwort und auf keine
+        Freigabe.
       </section>
     );
   }
@@ -175,7 +189,7 @@ export function WartetAufDich() {
                 })}
               </div>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 className="gap-1.5"
@@ -236,7 +250,10 @@ export function WartetAufDich() {
               <span className="text-pretty">{m.betreff}</span>
             </div>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true, locale: de })}
+              {formatDistanceToNow(new Date(m.createdAt), {
+                addSuffix: true,
+                locale: de,
+              })}
             </span>
           </div>
 
@@ -246,7 +263,9 @@ export function WartetAufDich() {
 
           <Textarea
             value={entwuerfe[m.id] ?? ""}
-            onChange={(e) => setEntwuerfe((v) => ({ ...v, [m.id]: e.target.value }))}
+            onChange={(e) =>
+              setEntwuerfe((v) => ({ ...v, [m.id]: e.target.value }))
+            }
             placeholder="Deine Antwort — ein Satz reicht meistens."
             className="min-h-[70px] resize-none text-sm"
             aria-label={`Antwort auf ${m.betreff}`}
@@ -255,7 +274,9 @@ export function WartetAufDich() {
             <Button
               size="sm"
               className="gap-2"
-              disabled={!(entwuerfe[m.id] ?? "").trim() || beschaeftigt === `m${m.id}`}
+              disabled={
+                !(entwuerfe[m.id] ?? "").trim() || beschaeftigt === `m${m.id}`
+              }
               onClick={() => antworten(m.id)}
             >
               <Send className="h-4 w-4" /> Antworten
