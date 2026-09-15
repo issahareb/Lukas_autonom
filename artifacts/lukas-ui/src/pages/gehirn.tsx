@@ -10,6 +10,8 @@ import {
   List,
   Loader2,
   Minus,
+  Maximize2,
+  Minimize2,
   Network,
   Pause,
   Play,
@@ -70,6 +72,20 @@ export default function GehirnSeite() {
   const [exportiert, setExportiert] = useState(false);
   const [exportLaedt, setExportLaedt] = useState(false);
   const [hilfe, setHilfe] = useState(false);
+  const [gross, setGross] = useState(false);
+  const stage = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = stage.current,
+      scroller = el?.closest(".app-scroll");
+    if (gross && el && scroller)
+      scroller.scrollTo({
+        top:
+          scroller.scrollTop +
+          el.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top,
+        behavior: "instant",
+      });
+  }, [gross]);
   const [limit, setLimit] = useState(40);
   const box = useRef<HTMLDivElement>(null),
     labels = useRef<HTMLDivElement>(null);
@@ -467,7 +483,11 @@ export default function GehirnSeite() {
             ))}
           </div>
           {ansicht === "raum" ? (
-            <div className="gehirn-stage" data-testid="gehirn-stage">
+            <div
+              ref={stage}
+              className={`gehirn-stage ${gross ? "is-expanded" : ""}`}
+              data-testid="gehirn-stage"
+            >
               <div className="gehirn-canvas" ref={box} />
               <div className="gehirn-labels" ref={labels} />
               <div className="gehirn-stage-top">
@@ -478,7 +498,17 @@ export default function GehirnSeite() {
                       ? "DAS GANZE IM BLICK"
                       : BEREICHE[region].name.toLocaleUpperCase("de")}
                 </span>
-                <span className="gehirn-snapshot">Momentaufnahme</span>
+                <button
+                  type="button"
+                  className="gehirn-expand"
+                  onClick={() => setGross((v) => !v)}
+                  aria-label={
+                    gross ? "Ansicht verkleinern" : "Ansicht vergrößern"
+                  }
+                  aria-pressed={gross}
+                >
+                  {gross ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
               </div>
               {((laedt && !daten) ||
                 (daten && daten.knoten.length > 0 && !raum && !raumFehler)) && (
@@ -519,6 +549,15 @@ export default function GehirnSeite() {
                   <span>Hier entsteht Lukas’ Gedächtniskarte.</span>
                   <small>Noch keine Einträge vorhanden.</small>
                 </div>
+              )}
+              {gewaehlt && raum && !raumFehler && (
+                <button
+                  className="gehirn-dive"
+                  type="button"
+                  onClick={() => szene.current?.eintauchen(gewaehlt.id)}
+                >
+                  <ArrowUpRight size={18} /> Hineinfliegen: {gewaehlt.titel}
+                </button>
               )}
               {raum && !raumFehler && (
                 <div className="gehirn-stage-bottom">
@@ -577,8 +616,11 @@ export default function GehirnSeite() {
                   </button>
                   <strong>Eine Karte seines Gedächtnisses</strong>
                   <p>
-                    Ziehen dreht den Raum. Zwei Finger verschieben und zoomen.
-                    Ein Klick zeigt den Eintrag und seine Verbindungen.
+                    Mit einem Finger umsehen, mit zwei Fingern verschieben.
+                    Finger auseinander bewegt dich vorwärts durch die Neuronen;
+                    zusammen führt zurück. Tippen wählt einen Eintrag,
+                    „Hineinfliegen“ bringt dich ganz nah heran. „Überblick“
+                    führt zurück.
                   </p>
                   <p>
                     Die Impulse zeichnen ausgewählte Beziehungen nach. Sie

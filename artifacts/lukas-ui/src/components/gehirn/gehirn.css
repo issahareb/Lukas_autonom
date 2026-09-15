@@ -797,3 +797,67 @@
     animation: none;
   }
 }
+
+.gehirn-stage.is-expanded {
+  height: calc(100dvh - 150px);
+  min-height: 360px;
+}
+.gehirn-expand {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #ffffff18;
+  border-radius: 14px;
+  color: #c9d4ea;
+  background: #0a1220e6;
+}
+.gehirn-dive {
+  position: absolute;
+  z-index: 5;
+  top: 76px;
+  left: 14px;
+  max-width: calc(100% - 28px);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #c7bcfa40;
+  border-radius: 14px;
+  background: #151a2aeb;
+  color: #e2d9ff;
+  font-size: 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.gehirn-dive svg {
+  flex-shrink: 0;
+}
+@media (pointer: coarse) {
+  .gehirn-stage-tools button {
+    width: 44px;
+    height: 44px;
+  }
+  .gehirn-view-switch button,
+  .gehirn-regions button {
+    min-height: 44px;
+  }
+  .gehirn-label {
+    min-height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  .gehirn-stage-bottom {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .gehirn-stage-tools {
+    margin-left: auto;
+  }
+  .gehirn-help {
+    max-height: calc(100% - 150px);
+    overflow: auto;
+  }
+}
