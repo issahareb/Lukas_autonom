@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { neuronSteuerung } from "./steuerung";
 import { BEREICHE, hash, istHub, type Gehirn, type Raum } from "./modell";
 
 export type Ansicht = {
@@ -8,6 +8,7 @@ export type Ansicht = {
   treffer: Set<string> | null;
   auswahl: string | null;
   bewegung: boolean;
+  invertiert?: boolean;
 };
 export type Szene = {
   update: (a: Ansicht) => void;
@@ -52,16 +53,7 @@ export function erschaffeSzene(
   renderer.domElement.style.touchAction = "none";
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 5000);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.075;
-  controls.rotateSpeed = 0.42;
-  controls.zoomSpeed = 0.65;
-  controls.enableZoom = false;
-  controls.touches.TWO = THREE.TOUCH.PAN;
-  controls.minDistance = 0.05;
-  controls.maxDistance = 1600;
-  controls.autoRotateSpeed = 0.16;
+  const controls = neuronSteuerung(camera, renderer.domElement);
   const ids = new Map(g.knoten.map((k, i) => [k.id, i]));
   const points = g.knoten.map((_, i) =>
     new THREE.Vector3().fromArray(r.positionen, i * 3),
@@ -381,6 +373,7 @@ export function erschaffeSzene(
     if (a.bewegung && !state.bewegung && !a.auswahl) interacted = false;
     dirty = true;
     state = a;
+    controls.rotateSpeed = a.invertiert === false ? 0.18 : -0.18;
     if (changedSelection) elapsed = 0;
     g.knoten.forEach((k, i) => {
       const visible = a.sichtbar.has(k.id),
@@ -528,51 +521,30 @@ export function erschaffeSzene(
   };
   let start: { x: number; y: number; id: number } | null = null;
   const pointers = new Set<number>();
-  const touches = new Map<number, { x: number; y: number }>();
-  const travel = (factor: number) => {
+  const zoom = (factor: number) => {
     if (!Number.isFinite(factor) || factor <= 0) return;
-    flight = null;
     overview = false;
     interacted = true;
     controls.autoRotate = false;
-    let nearest = radius;
-    points.forEach((p, i) => {
-      if (state.sichtbar.has(g.knoten[i].id))
-        nearest = Math.min(nearest, p.distanceTo(camera.position));
-    });
-    const step =
-      THREE.MathUtils.clamp(nearest, 12, radius * 2) *
-      THREE.MathUtils.clamp(-Math.log(factor), -0.5, 0.5);
-    const direction = camera.getWorldDirection(new THREE.Vector3());
-    const destination = camera.position
+    const target = controls.target.clone();
+    const position = (flight?.position ?? camera.position)
       .clone()
-      .addScaledVector(direction, step);
-    // The real graph is finite; always permit the way back from its outer boundary.
-    if (
-      destination.distanceTo(center) > radius * 10 &&
-      destination.distanceTo(center) > camera.position.distanceTo(center)
-    )
-      return;
-    camera.position.copy(destination);
-    controls.target.copy(destination).addScaledVector(direction, 20);
-    dirty = true;
+      .sub(target)
+      .multiplyScalar(factor)
+      .clampLength(controls.minDistance, controls.maxDistance)
+      .add(target);
+    if (reduced.matches) {
+      camera.position.copy(position);
+      flight = null;
+      dirty = true;
+    } else flight = { target, position };
   };
   const move = (e: PointerEvent) => {
     if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 7)
       start = null;
-    if (!touches.has(e.pointerId)) return;
-    const before = [...touches.values()];
-    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size !== 2) return;
-    const after = [...touches.values()];
-    const a = Math.hypot(before[0].x - before[1].x, before[0].y - before[1].y);
-    const b = Math.hypot(after[0].x - after[1].x, after[0].y - after[1].y);
-    if (a > 8 && b > 8) travel(a / b);
   };
   const down = (e: PointerEvent) => {
     pointers.add(e.pointerId);
-    if (e.pointerType === "touch")
-      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     start =
       pointers.size === 1
         ? { x: e.clientX, y: e.clientY, id: e.pointerId }
@@ -584,12 +556,10 @@ export function erschaffeSzene(
   };
   const cancel = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
-    touches.delete(e.pointerId);
     start = null;
   };
   const up = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
-    touches.delete(e.pointerId);
     const s = start;
     start = null;
     if (
@@ -618,14 +588,13 @@ export function erschaffeSzene(
     });
     waehle(best);
   };
-  const wheel = (e: WheelEvent) => {
-    e.preventDefault();
-    const units =
-      e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? box.clientHeight : 1;
-    travel(
-      Math.exp(THREE.MathUtils.clamp(e.deltaY * units * 0.002, -0.5, 0.5)),
-    );
+  const interruptFlight = () => {
+    flight = null;
+    overview = false;
+    interacted = true;
+    controls.autoRotate = false;
   };
+  controls.addEventListener("start", interruptFlight);
   const lost = (e: Event) => {
     e.preventDefault();
     contextLost = true;
@@ -638,7 +607,6 @@ export function erschaffeSzene(
   renderer.domElement.addEventListener("pointermove", move);
   renderer.domElement.addEventListener("pointerup", up);
   renderer.domElement.addEventListener("pointercancel", cancel);
-  renderer.domElement.addEventListener("wheel", wheel, { passive: false });
   renderer.domElement.addEventListener("webglcontextlost", lost);
   document.addEventListener("visibilitychange", run);
   const motionChange = () => {
@@ -718,7 +686,7 @@ export function erschaffeSzene(
         flight = null;
       }
     },
-    zoom: travel,
+    zoom,
     eintauchen(id) {
       const i = ids.get(id);
       if (i === undefined) return;
@@ -745,7 +713,7 @@ export function erschaffeSzene(
       renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", up);
       renderer.domElement.removeEventListener("pointercancel", cancel);
-      renderer.domElement.removeEventListener("wheel", wheel);
+      controls.removeEventListener("start", interruptFlight);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
       controls.dispose();
       resources.forEach((x) => x.dispose());
