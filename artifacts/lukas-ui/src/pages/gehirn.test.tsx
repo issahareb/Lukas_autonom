@@ -6,6 +6,7 @@ const scene = vi.hoisted(() => ({
   update: vi.fn(),
   fokus: vi.fn(),
   zoom: vi.fn(),
+  eintauchen: vi.fn(),
   dispose: vi.fn(),
 }));
 const createScene = vi.hoisted(() => vi.fn(() => scene));
@@ -61,6 +62,34 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gehirnansicht", () => {
+  it("bietet mobile Nahfahrt, Rückweg und eine große Ansicht", async () => {
+    const user = userEvent.setup();
+    render(<GehirnSeite />);
+    await user.click(
+      await screen.findByRole("button", { name: /TaxiBB Essen/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Hineinfliegen: TaxiBB Essen/ }),
+    );
+    expect(scene.eintauchen).toHaveBeenCalledWith("a");
+    await user.click(screen.getByRole("button", { name: "Hineinzoomen" }));
+    expect(scene.zoom).toHaveBeenCalledWith(0.8);
+    await user.click(screen.getByRole("button", { name: "Herauszoomen" }));
+    expect(scene.zoom).toHaveBeenCalledWith(1.2);
+    await user.click(
+      screen.getByRole("button", { name: "Ansicht vergrößern" }),
+    );
+    expect(screen.getByTestId("gehirn-stage").className).toContain(
+      "is-expanded",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Ansicht verkleinern" }),
+    );
+    expect(screen.getByTestId("gehirn-stage").className).not.toContain(
+      "is-expanded",
+    );
+  });
+
   it("sucht in echten Einträgen, fokussiert die Auswahl und pausiert die Bewegung", async () => {
     const user = userEvent.setup();
     localStorage.setItem("lukas_token", "test-token");

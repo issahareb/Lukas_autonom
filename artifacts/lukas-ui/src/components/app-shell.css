@@ -395,3 +395,33 @@
     font-size: 16px;
   }
 }
+
+@media (pointer: coarse) {
+  .app-shell button,
+  .app-sheet button {
+    min-height: 44px;
+  }
+  .app-shell button:not(.home-speak),
+  .app-sheet-close {
+    min-width: 44px;
+  }
+  .app-shell :is(button, a),
+  .app-sheet :is(button, a) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app-shell button:active,
+  .app-sheet a:active {
+    filter: brightness(1.18);
+  }
+}
+
+/* Keep browser focus/scroll-into-view from moving the entire app chrome. */
+body:has(.app-shell) {
+  overflow: hidden;
+}
+.app-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}

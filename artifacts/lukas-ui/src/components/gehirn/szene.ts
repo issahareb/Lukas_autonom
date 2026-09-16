@@ -13,6 +13,7 @@ export type Szene = {
   update: (a: Ansicht) => void;
   fokus: (id: string | null) => void;
   zoom: (faktor: number) => void;
+  eintauchen: (id: string) => void;
   dispose: () => void;
 };
 const BG = 0x050912;
@@ -56,7 +57,9 @@ export function erschaffeSzene(
   controls.dampingFactor = 0.075;
   controls.rotateSpeed = 0.42;
   controls.zoomSpeed = 0.65;
-  controls.minDistance = 18;
+  controls.enableZoom = false;
+  controls.touches.TWO = THREE.TOUCH.PAN;
+  controls.minDistance = 0.05;
   controls.maxDistance = 1600;
   controls.autoRotateSpeed = 0.16;
   const ids = new Map(g.knoten.map((k, i) => [k.id, i]));
@@ -111,7 +114,29 @@ export function erschaffeSzene(
   };
   const tint = colors.flatMap((c) => [c.r, c.g, c.b]);
   const nodeAlpha = new Float32Array(points.length).fill(1);
-  const nodeGeo = makeGeo(r.positionen, tint, nodeAlpha);
+  // Instanced billboards avoid the hardware point-size limit during close flight.
+  const quad = new THREE.PlaneGeometry(1, 1);
+  const nodeGeo = new THREE.InstancedBufferGeometry();
+  nodeGeo.index = quad.index;
+  nodeGeo.setAttribute("position", quad.attributes.position);
+  nodeGeo.setAttribute("uv", quad.attributes.uv);
+  nodeGeo.setAttribute(
+    "offset",
+    new THREE.InstancedBufferAttribute(r.positionen, 3),
+  );
+  nodeGeo.setAttribute(
+    "tint",
+    new THREE.InstancedBufferAttribute(new Float32Array(tint), 3),
+  );
+  nodeGeo.setAttribute(
+    "alpha",
+    new THREE.InstancedBufferAttribute(nodeAlpha, 1).setUsage(
+      THREE.DynamicDrawUsage,
+    ),
+  );
+  nodeGeo.instanceCount = points.length;
+  resources.push(nodeGeo);
+  quad.dispose();
   const sizes = new Float32Array(
     g.knoten.map((k, i) =>
       k.art === "identitaet"
@@ -121,23 +146,24 @@ export function erschaffeSzene(
           : 3 + k.gewicht * 2,
     ),
   );
-  nodeGeo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+  nodeGeo.setAttribute("size", new THREE.InstancedBufferAttribute(sizes, 1));
   const nodeMat = material(
-    `
-    attribute vec3 tint; attribute float alpha; attribute float size;
-    uniform float resolution; varying vec3 vTint; varying float vAlpha;
-    void main(){ vec4 mv=modelViewMatrix*vec4(position,1.); vTint=tint;vAlpha=alpha;
-      gl_Position=projectionMatrix*mv; gl_PointSize=clamp(size*resolution/max(1.,-mv.z),2.,110.); }
-  `,
-    `
-    varying vec3 vTint; varying float vAlpha;
-    void main(){ float d=length(gl_PointCoord-.5)*2.; if(d>1.||vAlpha<.001)discard;
-      float halo=exp(-d*d*6.)*.28; float core=1.-smoothstep(.03,.22,d);
-      gl_FragColor=vec4(mix(vTint,vec3(1.),core*.75),(halo+core*.9)*vAlpha); }
-  `,
+    `attribute vec3 offset; attribute vec3 tint; attribute float alpha; attribute float size;
+    uniform float resolution; varying vec3 vTint; varying float vAlpha; varying vec2 vUv;
+    void main(){vec4 mv=modelViewMatrix*vec4(offset,1.);vTint=tint;vUv=uv;
+      vAlpha=alpha*smoothstep(.15,2.,-mv.z);
+      float diameter=max(size*1.3,2.*max(0.,-mv.z)/resolution);
+      mv.xy+=position.xy*diameter;gl_Position=projectionMatrix*mv;}`,
+    `varying vec3 vTint;varying float vAlpha;varying vec2 vUv;
+    void main(){float d=length(vUv-.5)*2.;if(d>1.||vAlpha<.001)discard;
+      float halo=exp(-d*d*6.)*.28;
+      float core=1.-smoothstep(.03,.22,d);
+      float membrane=(1.-smoothstep(.012,.027,abs(d-.3)))*.12;
+      gl_FragColor=vec4(mix(vTint,vec3(1.),core*.75),(halo+core*.9+membrane)*vAlpha);}`,
     { resolution: { value: 1000 } },
   );
-  const neurons = new THREE.Points(nodeGeo, nodeMat);
+  const neurons = new THREE.Mesh(nodeGeo, nodeMat);
+  neurons.frustumCulled = false;
   neurons.renderOrder = 3;
   scene.add(neurons);
 
@@ -363,7 +389,7 @@ export function erschaffeSzene(
       nodeAlpha[i] = !visible
         ? 0
         : !related || !found
-          ? 0.035
+          ? 0.22
           : a.auswahl === k.id
             ? 1.5
             : 0.95;
@@ -406,10 +432,15 @@ export function erschaffeSzene(
   };
   const drawLabels = () => {
     const selected = state.auswahl ? ids.get(state.auswahl) : undefined;
+    const nearby = points
+      .map((p, i) => ({ i, d: p.distanceToSquared(camera.position) }))
+      .sort((a, b) => a.d - b.d);
+    const local =
+      nearby[0]?.d < radius * radius ? nearby.map((p) => p.i) : labelIndices;
     const candidates =
       selected === undefined
-        ? labelIndices
-        : [selected, ...labelIndices.filter((i) => i !== selected)];
+        ? local
+        : [selected, ...local.filter((i) => i !== selected)];
     const rects: number[][] = [];
     let count = 0;
     for (const i of candidates) {
@@ -426,7 +457,7 @@ export function erschaffeSzene(
       const x = (projected.x * 0.5 + 0.5) * box.clientWidth + 8,
         y = (-projected.y * 0.5 + 0.5) * box.clientHeight;
       const width = Math.min(168, k.titel.length * 6.5 + 18),
-        height = 32;
+        height = narrow ? 44 : 32;
       if (
         x < 8 ||
         x + width > box.clientWidth - 8 ||
@@ -497,8 +528,51 @@ export function erschaffeSzene(
   };
   let start: { x: number; y: number; id: number } | null = null;
   const pointers = new Set<number>();
+  const touches = new Map<number, { x: number; y: number }>();
+  const travel = (factor: number) => {
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    flight = null;
+    overview = false;
+    interacted = true;
+    controls.autoRotate = false;
+    let nearest = radius;
+    points.forEach((p, i) => {
+      if (state.sichtbar.has(g.knoten[i].id))
+        nearest = Math.min(nearest, p.distanceTo(camera.position));
+    });
+    const step =
+      THREE.MathUtils.clamp(nearest, 12, radius * 2) *
+      THREE.MathUtils.clamp(-Math.log(factor), -0.5, 0.5);
+    const direction = camera.getWorldDirection(new THREE.Vector3());
+    const destination = camera.position
+      .clone()
+      .addScaledVector(direction, step);
+    // The real graph is finite; always permit the way back from its outer boundary.
+    if (
+      destination.distanceTo(center) > radius * 10 &&
+      destination.distanceTo(center) > camera.position.distanceTo(center)
+    )
+      return;
+    camera.position.copy(destination);
+    controls.target.copy(destination).addScaledVector(direction, 20);
+    dirty = true;
+  };
+  const move = (e: PointerEvent) => {
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 7)
+      start = null;
+    if (!touches.has(e.pointerId)) return;
+    const before = [...touches.values()];
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size !== 2) return;
+    const after = [...touches.values()];
+    const a = Math.hypot(before[0].x - before[1].x, before[0].y - before[1].y);
+    const b = Math.hypot(after[0].x - after[1].x, after[0].y - after[1].y);
+    if (a > 8 && b > 8) travel(a / b);
+  };
   const down = (e: PointerEvent) => {
     pointers.add(e.pointerId);
+    if (e.pointerType === "touch")
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     start =
       pointers.size === 1
         ? { x: e.clientX, y: e.clientY, id: e.pointerId }
@@ -510,10 +584,12 @@ export function erschaffeSzene(
   };
   const cancel = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
+    touches.delete(e.pointerId);
     start = null;
   };
   const up = (e: PointerEvent) => {
     pointers.delete(e.pointerId);
+    touches.delete(e.pointerId);
     const s = start;
     start = null;
     if (
@@ -542,11 +618,13 @@ export function erschaffeSzene(
     });
     waehle(best);
   };
-  const wheel = () => {
-    flight = null;
-    overview = false;
-    interacted = true;
-    controls.autoRotate = false;
+  const wheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const units =
+      e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? box.clientHeight : 1;
+    travel(
+      Math.exp(THREE.MathUtils.clamp(e.deltaY * units * 0.002, -0.5, 0.5)),
+    );
   };
   const lost = (e: Event) => {
     e.preventDefault();
@@ -557,9 +635,10 @@ export function erschaffeSzene(
     );
   };
   renderer.domElement.addEventListener("pointerdown", down);
+  renderer.domElement.addEventListener("pointermove", move);
   renderer.domElement.addEventListener("pointerup", up);
   renderer.domElement.addEventListener("pointercancel", cancel);
-  renderer.domElement.addEventListener("wheel", wheel, { passive: true });
+  renderer.domElement.addEventListener("wheel", wheel, { passive: false });
   renderer.domElement.addEventListener("webglcontextlost", lost);
   document.addEventListener("visibilitychange", run);
   const motionChange = () => {
@@ -639,14 +718,21 @@ export function erschaffeSzene(
         flight = null;
       }
     },
-    zoom(factor) {
-      flight = null;
+    zoom: travel,
+    eintauchen(id) {
+      const i = ids.get(id);
+      if (i === undefined) return;
       overview = false;
-      camera.position
-        .sub(controls.target)
-        .multiplyScalar(factor)
-        .clampLength(controls.minDistance, controls.maxDistance)
-        .add(controls.target);
+      interacted = true;
+      controls.autoRotate = false;
+      const direction = points[i].clone().sub(camera.position).normalize();
+      const target = points[i].clone();
+      const position = target.clone().addScaledVector(direction, -12);
+      if (reduced.matches) {
+        camera.position.copy(position);
+        controls.target.copy(target);
+        dirty = true;
+      } else flight = { target, position };
     },
     dispose() {
       disposed = true;
@@ -656,6 +742,7 @@ export function erschaffeSzene(
       document.removeEventListener("visibilitychange", run);
       reduced.removeEventListener("change", motionChange);
       renderer.domElement.removeEventListener("pointerdown", down);
+      renderer.domElement.removeEventListener("pointermove", move);
       renderer.domElement.removeEventListener("pointerup", up);
       renderer.domElement.removeEventListener("pointercancel", cancel);
       renderer.domElement.removeEventListener("wheel", wheel);
