@@ -62,6 +62,31 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gehirnansicht", () => {
+  it("speichert die umgekehrte Drehrichtung und übergibt sie an die Szene", async () => {
+    const user = userEvent.setup();
+    const view = render(<GehirnSeite />);
+    await waitFor(() => expect(createScene).toHaveBeenCalled());
+    await user.click(
+      screen.getByRole("button", { name: "Darstellung erklären" }),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Drehrichtung umkehren" }),
+    ).toBeChecked();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Drehrichtung umkehren" }),
+    );
+    expect(scene.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ invertiert: false }),
+    );
+    expect(localStorage.getItem("lukas_gehirn_invertiert")).toBe("false");
+    view.unmount();
+    render(<GehirnSeite />);
+    await waitFor(() => expect(createScene).toHaveBeenCalledTimes(2));
+    expect(scene.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ invertiert: false }),
+    );
+  });
+
   it("bietet mobile Nahfahrt, Rückweg und eine große Ansicht", async () => {
     const user = userEvent.setup();
     render(<GehirnSeite />);

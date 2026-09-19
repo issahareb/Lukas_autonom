@@ -72,6 +72,20 @@ export default function GehirnSeite() {
   const [exportiert, setExportiert] = useState(false);
   const [exportLaedt, setExportLaedt] = useState(false);
   const [hilfe, setHilfe] = useState(false);
+  const [invertiert, setInvertiert] = useState(() => {
+    try {
+      return localStorage.getItem("lukas_gehirn_invertiert") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("lukas_gehirn_invertiert", String(invertiert));
+    } catch {
+      /* Private browsing may disable storage. */
+    }
+  }, [invertiert]);
   const [gross, setGross] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -292,8 +306,18 @@ export default function GehirnSeite() {
       treffer,
       auswahl,
       bewegung,
+      invertiert,
     });
-  }, [sichtbar, nachbarn, treffer, auswahl, bewegung, raum, ansicht]);
+  }, [
+    sichtbar,
+    nachbarn,
+    treffer,
+    auswahl,
+    bewegung,
+    invertiert,
+    raum,
+    ansicht,
+  ]);
   useEffect(() => {
     szene.current?.fokus(auswahl);
   }, [auswahl, raum, ansicht, region, tiefe]);
@@ -615,12 +639,21 @@ export default function GehirnSeite() {
                     <X size={15} />
                   </button>
                   <strong>Eine Karte seines Gedächtnisses</strong>
+                  <label className="gehirn-direction">
+                    <input
+                      type="checkbox"
+                      checked={invertiert}
+                      onChange={(e) => setInvertiert(e.target.checked)}
+                    />
+                    Drehrichtung umkehren
+                  </label>
                   <p>
-                    Mit einem Finger umsehen, mit zwei Fingern verschieben.
-                    Finger auseinander bewegt dich vorwärts durch die Neuronen;
-                    zusammen führt zurück. Tippen wählt einen Eintrag,
-                    „Hineinfliegen“ bringt dich ganz nah heran. „Überblick“
-                    führt zurück.
+                    Mit einem Finger das Modell drehen. Zwei Finger auseinander
+                    zoomt hinein, zusammen zoomt heraus. Mit zwei Fingern
+                    gemeinsam verschieben. Tippen wählt einen Eintrag.
+                    „Hineinfliegen“ bringt dich an dieses Neuron und dreht
+                    anschließend um dieses Neuron. „Überblick“ führt zurück zum
+                    gesamten Netzwerk.
                   </p>
                   <p>
                     Die Impulse zeichnen ausgewählte Beziehungen nach. Sie
