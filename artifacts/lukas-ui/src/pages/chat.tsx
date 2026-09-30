@@ -10,7 +10,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Plus, Trash2, ArrowUp, MessageSquare, Loader2, ArrowLeft,
+  Plus, Trash2, ArrowUp, MessageSquare, Loader2, ArrowLeft, Search,
   Paperclip, X, FileText, Film, ImageIcon, File as FileIcon, ArrowDown, Square,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -18,6 +18,7 @@ import { takeCompleteLines, parseSseData } from "@/lib/sse";
 import { warteSchritt, GEDULD_MS } from "@/lib/geduld";
 import { ToolSteps, type ToolStep } from "@/components/tool-steps";
 import { VoicePanel } from "@/components/voice-panel";
+import "./chat.css";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -71,21 +72,7 @@ function renderWithLinks(text: string) {
   );
 }
 
-/*
- * Eine Sprechblase — Lukas links am Rand, Issa rechts am Rand.
- *
- * Zwei Dinge standen dem vorher im Weg. Erstens hatte nur Issa eine Blase;
- * Lukas' Antworten standen als nackter Text ueber die volle Breite und lasen
- * sich wie ein Ausgabe-Log. Zweitens sass neben jeder Blase ein Avatar-Kreis
- * und hat sie um dessen Breite von der Kante weggeschoben — genau die Kante,
- * an der sie kleben soll.
- *
- * Deshalb: keine Avatare mehr. In einem Gespraech zwischen genau zwei Leuten
- * sagt die Seite bereits, wer spricht — so macht es auch jeder Messenger.
- *
- * 85% Maximalbreite, weil eine Blase ueber die ganze Breite optisch keine
- * Seite mehr hat.
- */
+/** Distinct message surfaces with a shared, readable measure. */
 function Bubble({
   own,
   zeit,
@@ -99,23 +86,23 @@ function Bubble({
 }) {
   return (
     <div
-      className={`flex flex-col min-w-0 animate-in fade-in duration-300 ${
-        own ? "items-end slide-in-from-right-3" : "items-start slide-in-from-left-3"
+      className={`chat-message flex flex-col min-w-0 ${
+        own ? "chat-message--own items-end" : "chat-message--assistant items-start"
       }`}
     >
       <div
-        className={`max-w-[85%] min-w-0 px-4 py-3 border shadow-sm transition-colors ${
+        className={`chat-bubble min-w-0 ${
           own
-            ? "bg-primary/20 border-primary/25 rounded-2xl rounded-br-sm"
-            : "card-soft rounded-3xl rounded-bl-md"
+            ? "chat-bubble--own"
+            : "chat-bubble--assistant"
         }`}
       >
         {children}
       </div>
       {zeit && (
-        <div className="text-[11px] text-muted-foreground/60 mt-1.5 px-1 flex items-center gap-1.5">
+        <div className="chat-message-meta">
           {wartet && <Loader2 className="w-3 h-3 animate-spin" />}
-          {zeit}
+          <span>{own ? "Du" : "Lukas"}</span><span aria-hidden="true">·</span>{zeit}
         </div>
       )}
     </div>
@@ -163,6 +150,7 @@ export default function Chat() {
   const qc = useQueryClient();
   const [activeId, setActiveId] = useState<number | null>(null);
   const [input, setInput] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState("");
   const [pending, setPending] = useState<Attachment[]>([]);
@@ -535,7 +523,7 @@ export default function Chat() {
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -546,51 +534,74 @@ export default function Chat() {
   const isMobile = useIsMobile();
   const showList = !isMobile || activeId === null;
   const showChat = !isMobile || activeId !== null;
+  const visibleConvos = convos.filter((c) => c.title.toLocaleLowerCase("de-DE").includes(conversationSearch.trim().toLocaleLowerCase("de-DE")));
 
   return (
-    <div className="flex flex-col h-full min-w-0">
-      <VoicePanel autoStart={autoVoice} />
-      <div className="flex flex-1 min-h-0 min-w-0">
+    <div className="chat-page">
+      <div className="chat-voice-bar">
+        <div className="chat-voice-brand"><span aria-hidden="true">L</span><div>Lukas<small>Dein Gesprächsraum</small></div></div>
+        <VoicePanel autoStart={autoVoice} />
+      </div>
+      <div className="chat-workspace">
         {showList && (
-          <div className="w-full md:w-72 border-r border-border flex flex-col shrink-0">
-            <div className="p-3">
-              <Button onClick={handleNew} variant="outline" className="w-full justify-start gap-2 h-10" disabled={createConvo.isPending}>
-                <Plus className="w-4 h-4" /> Neuer Chat
+          <aside className="chat-sidebar" aria-label="Gespräche">
+            <div className="chat-sidebar-heading">
+              <div><h1>Gespräche</h1><span>{convos.length}</span></div>
+              <Button onClick={handleNew} className="chat-new-button" disabled={createConvo.isPending}>
+                <Plus className="w-4 h-4" aria-hidden="true" /> Neuer Chat
               </Button>
+              <label className="chat-search">
+                <Search size={16} aria-hidden="true" />
+                <input type="search" value={conversationSearch} onChange={(e) => setConversationSearch(e.target.value)} placeholder="Gespräche suchen" aria-label="Gespräche suchen" />
+              </label>
             </div>
-            <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
-              {loadingConvos && <div className="text-sm text-muted-foreground px-3 py-2">Lädt…</div>}
-              {convos.map((c) => (
-                <div key={c.id} onClick={() => setActiveId(c.id)} className={`group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${activeId === c.id ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="truncate text-sm">{c.title}</div>
-                    <div className="text-xs text-muted-foreground/70 mt-0.5">{relativeDay(c.createdAt)}</div>
-                  </div>
-                  <button onClick={(e) => handleDelete(c.id, e)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 -m-1" aria-label={`${c.title} löschen`}>
-                    <Trash2 className="w-3.5 h-3.5" />
+            <div className="chat-conversation-list">
+              {loadingConvos && <p className="chat-list-status" role="status">Gespräche werden geladen …</p>}
+              {visibleConvos.map((c) => (
+                <div key={c.id} className={"chat-conversation-item " + (activeId === c.id ? "is-selected" : "")}>
+                  <button type="button" onClick={() => setActiveId(c.id)} className="chat-conversation-select" aria-current={activeId === c.id ? "true" : undefined}>
+                    <MessageSquare size={17} aria-hidden="true" />
+                    <span><span>{c.title}</span><small>{relativeDay(c.createdAt)}</small></span>
+                  </button>
+                  <button type="button" onClick={(e) => handleDelete(c.id, e)} className="chat-conversation-delete" aria-label={c.title + " löschen"}>
+                    <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
               ))}
-              {!loadingConvos && convos.length === 0 && <p className="text-sm text-muted-foreground px-3 py-2">Noch keine Gespräche.</p>}
+              {!loadingConvos && convos.length === 0 && <p className="chat-list-status">Hier entsteht dein Gesprächsverlauf.</p>}
+              {!loadingConvos && convos.length > 0 && visibleConvos.length === 0 && <p className="chat-list-status">Keine Gespräche zu „{conversationSearch}“.</p>}
             </div>
-          </div>
+            <p className="chat-sidebar-footer">Platz für Gedanken, die weiterführen.</p>
+          </aside>
         )}
 
         {showChat && (
-          <div className="flex-1 flex flex-col min-w-0 relative">
+          <div className="chat-main">
             {activeId ? (
               <>
-                <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.05] px-4">
+                <div className="chat-thread-heading">
                   {isMobile && (
-                    <button onClick={() => setActiveId(null)} className="text-muted-foreground hover:text-foreground shrink-0" aria-label="Zurück zur Liste" data-testid="button-back-to-list">
+                    <button onClick={() => setActiveId(null)} className="chat-back-button" aria-label="Zurück zur Liste" data-testid="button-back-to-list">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
-                  <span className="truncate font-medium">{activeConv?.title ?? "…"}</span>
+                  <div className="chat-thread-title"><span>{activeConv?.title ?? "Gespräch wird geladen …"}</span><small>{streaming ? "Lukas arbeitet an deiner Antwort" : wartetAufNachzuegler ? "Antwort wird nachgeladen" : "Mit Lukas weiterdenken"}</small></div>
                 </div>
 
-                <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden">
-                  <div className="max-w-3xl mx-auto px-4 py-6 space-y-6 sm:px-6">
+                <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll">
+                  <div className="chat-messages">
+                    {activeConv && allMessages.length === 0 && !optimisticMsg && !streaming && !wartetAufNachzuegler && (
+                      <div className="chat-thread-empty">
+                        <span className="chat-kicker">Ein neuer Anfang</span>
+                        <h2>Was hast du vor?</h2>
+                        <p>Erzähl Lukas, was dich beschäftigt.</p>
+                        <div className="chat-suggestions">
+                          {["Was ist heute wichtig?", "Lass uns meine Ziele sortieren."].map((vorschlag) => (
+                            <button type="button" key={vorschlag} onClick={() => { setInput(vorschlag); textareaRef.current?.focus(); }}>{vorschlag}<ArrowUp size={15} aria-hidden="true" /></button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {allMessages.map((m) => {
                       const own = m.role === "user";
                       const files = sentAttachments.filter((a) => a.messageId === m.id);
@@ -685,13 +696,13 @@ export default function Chat() {
                 </div>
 
                 {!atBottom && (
-                  <button onClick={() => { setAtBottom(true); scrollToBottom(); }} className="glass absolute bottom-32 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs shadow-lg transition-transform hover:scale-105">
+                  <button onClick={() => { setAtBottom(true); scrollToBottom(); }} className="chat-jump-latest">
                     <ArrowDown className="w-3.5 h-3.5" /> Neueste
                   </button>
                 )}
 
-                <div className="px-4 pb-4 pt-2 sm:px-6 shrink-0" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}>
-                  <div className="max-w-3xl mx-auto">
+                <div className="chat-composer-area" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}>
+                  <div className="chat-composer-width">
                     {(pending.length > 0 || uploading || uploadError) && (
                       <div className="mb-2 flex flex-wrap gap-2">
                         {pending.map((a) => {
@@ -709,32 +720,33 @@ export default function Chat() {
                       </div>
                     )}
 
-                    <div className="glass flex items-end gap-2 rounded-[1.75rem] px-2.5 py-2 shadow-lg shadow-black/30">
+                    <div className="chat-composer">
                       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-                      <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading} className="shrink-0 rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-40" aria-label="Datei anhängen" data-testid="button-attach">
+                      <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading} className="chat-attach-button" aria-label="Datei anhängen" data-testid="button-attach">
                         <Paperclip className="w-5 h-5" />
                       </button>
-                      <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Schreibe Lukas…" rows={1} disabled={streaming} className="flex-1 bg-transparent resize-none py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/60 disabled:opacity-50 max-h-[200px]" />
+                      <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Schreibe Lukas …" aria-label="Nachricht an Lukas" rows={1} disabled={streaming} className="chat-input" />
                       {streaming ? (
-                        <button onClick={handleCancel} className="shrink-0 rounded-full bg-primary p-2.5 text-primary-foreground transition-transform hover:scale-105" aria-label="Antwort stoppen" data-testid="button-stop-response">
+                        <button onClick={handleCancel} className="chat-send-button chat-send-button--stop" aria-label="Antwort stoppen" data-testid="button-stop-response">
                           <Square className="w-5 h-5 fill-current" />
                         </button>
                       ) : (
-                        <button onClick={handleSend} disabled={(!input.trim() && pending.length === 0)} className="shrink-0 rounded-full bg-primary p-2.5 text-primary-foreground transition-transform hover:scale-105 disabled:bg-white/[0.06] disabled:text-muted-foreground disabled:hover:scale-100" aria-label="Senden">
+                        <button onClick={handleSend} disabled={(!input.trim() && pending.length === 0)} className="chat-send-button" aria-label="Senden">
                           <ArrowUp className="w-5 h-5" />
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground/60 mt-2 text-center hidden sm:block">Enter zum Senden · Shift+Enter für eine neue Zeile</p>
+                    <p className="chat-composer-hint">Enter zum Senden · Shift+Enter für eine neue Zeile</p>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                <MessageSquare className="w-12 h-12 text-muted-foreground/25 mb-5" />
-                <h2 className="text-lg font-semibold mb-1.5">Womit fangen wir an?</h2>
-                <p className="text-muted-foreground text-sm mb-6 max-w-sm">Starte ein neues Gespräch — Lukas erinnert sich an alles, was ihr besprecht.</p>
-                <Button onClick={handleNew} className="gap-2" disabled={createConvo.isPending}><Plus className="w-4 h-4" /> Neuer Chat</Button>
+              <div className="chat-welcome">
+                <div className="chat-welcome-symbol" aria-hidden="true"><MessageSquare size={30} strokeWidth={1.3} /></div>
+                <span className="chat-kicker">Raum für deine Ideen</span>
+                <h2>Große Dinge beginnen<br />mit einem Gespräch.</h2>
+                <p>Gedanken sortieren. Pläne entwickeln. Gemeinsam den nächsten Schritt finden.</p>
+                <Button onClick={handleNew} className="chat-welcome-action" disabled={createConvo.isPending}><Plus className="w-4 h-4" aria-hidden="true" /> Neues Gespräch</Button>
               </div>
             )}
           </div>

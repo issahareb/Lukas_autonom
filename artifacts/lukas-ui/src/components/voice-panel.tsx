@@ -140,7 +140,7 @@ export function VoicePanel({ autoStart = false }: { autoStart?: boolean }) {
   };
 
   return (
-    <div className="border-b border-white/[0.05]" data-testid="panel-voice">
+    <div className="voice-panel border-b border-white/[0.05]" data-testid="panel-voice">
       <div className="flex items-center gap-3 px-4 py-2.5">
         <Button
           size="sm"

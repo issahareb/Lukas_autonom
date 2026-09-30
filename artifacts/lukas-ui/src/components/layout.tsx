@@ -43,6 +43,13 @@ const navigation = [
   { href: "/zugaenge", label: "Zugänge", icon: KeyRound },
   { href: "/diagnostics", label: "Diagnose", icon: AlertTriangle },
 ];
+const navigationGroups = [
+  { label: "Arbeitsraum", paths: ["/", "/chat", "/goals", "/studio"] },
+  { label: "Wissen", paths: ["/gehirn", "/memory", "/diary"] },
+  { label: "Entscheidungen", paths: ["/meldungen", "/proposals", "/approvals"] },
+  { label: "System", paths: ["/mcp", "/telefon", "/kennzahlen", "/zugaenge", "/diagnostics"] },
+];
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: health, isError: healthError } = useHealthCheck();
@@ -106,19 +113,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Lukas<small>Dein persönlicher Assistent</small>
           </span>
         </Link>
-        <p className="app-nav-heading">DEIN RAUM</p>
-        <nav>
-          {navigation.map((n, i) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-current={location === n.href ? "page" : undefined}
-              className={`app-sidebar-link ${i === 7 ? "app-nav-divider" : ""}`}
-            >
-              <n.icon size={18} aria-hidden="true" />
-              {n.label}
-              {location === n.href && <span className="app-nav-dot" />}
-            </Link>
+        <nav aria-label="Bereiche">
+          {navigationGroups.map((group, index) => (
+            <section className="app-nav-group" key={group.label} aria-labelledby={"app-nav-group-" + index}>
+              <h2 id={"app-nav-group-" + index} className="app-nav-heading">{group.label}</h2>
+              {navigation.filter((n) => group.paths.includes(n.href)).map((n) => (
+                <Link key={n.href} href={n.href} aria-current={location === n.href ? "page" : undefined} className="app-sidebar-link">
+                  <n.icon size={18} aria-hidden="true" />
+                  {n.label}
+                  {location === n.href && <span className="app-nav-dot" aria-hidden="true" />}
+                </Link>
+              ))}
+            </section>
           ))}
         </nav>
         <div className="app-sidebar-bottom">

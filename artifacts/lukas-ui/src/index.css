@@ -3,17 +3,7 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
-/*
- * Design-Sprache 1:1 aus dem Portfolio (portfolio_v2/app/globals.css)
- * uebernommen, damit Dashboard und oeffentliche Seite wie ein Produkt wirken:
- * oklch-Farbraum, near-black Hintergrund, weiche entsaettigte Blau-/Lila-
- * Akzente, grosszuegiger Radius (0.75rem statt vorher 0.25rem) und die
- * .glass-Utility.
- *
- * Der wichtigste Fix: --primary war vorher schlicht WEISS (0 0% 98%) — dadurch
- * hatte das ganze Dashboard keinerlei Farbidentitaet, jeder Button war ein
- * grauer Kasten. Primary ist jetzt das Portfolio-Blau.
- */
+/* Shared dark palette: graphite surfaces, readable secondary text and lilac actions. */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -72,12 +62,12 @@
 :root {
   color-scheme: dark;
 
-  --background: #050505;
+  --background: #0b0e15;
   --foreground: oklch(0.97 0 0);
 
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.6 0.12 265);
+  --ring: #c7bcfa;
 
   --card: oklch(0.16 0.008 265);
   --card-foreground: oklch(0.97 0 0);
@@ -100,14 +90,14 @@
   --blue: oklch(0.72 0.11 250);
   --purple: oklch(0.68 0.11 300);
 
-  --primary: oklch(0.72 0.11 250);
-  --primary-foreground: oklch(0.15 0.01 265);
+  --primary: #c7bcfa;
+  --primary-foreground: #252035;
 
   --secondary: oklch(0.22 0.006 265);
   --secondary-foreground: oklch(0.97 0 0);
 
   --muted: oklch(0.22 0.006 265);
-  --muted-foreground: oklch(0.62 0.01 265);
+  --muted-foreground: #a5adbf;
 
   --accent: oklch(0.22 0.006 265);
   --accent-foreground: oklch(0.97 0 0);
