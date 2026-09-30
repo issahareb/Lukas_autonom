@@ -1,0 +1,47 @@
+name: Oberfläche
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/lukas-ui/**"
+      - "lib/api-client-react/**"
+      - "package-lock.json"
+      - ".github/workflows/oberflaeche.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oberflaeche:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:libs
+      - name: Frontend-Typprüfung und bestehende Tests
+        run: npm run typecheck -w @workspace/lukas-ui
+      - name: Produktionsbuild der Oberfläche
+        run: npm run build:ui
+      - name: Browser installieren
+        run: npx playwright install --with-deps chromium
+      - name: Layout und Bedienung mit festen Beispieldaten
+        run: node artifacts/lukas-ui/scripts/check-ui-layout.mjs
+        env:
+          UI_INLINE_PREVIEW: "1"
+      - name: Screenshots aufbewahren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oberflaeche-desktop-mobil
+          path: artifacts/lukas-ui/ui-preview/
+          if-no-files-found: ignore
