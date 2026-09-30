@@ -11,6 +11,7 @@ import {
   Brain,
   ChevronRight,
   Network,
+  MessageSquare,
   Paperclip,
   Target,
   X,
@@ -73,217 +74,187 @@ export default function Dashboard() {
         ? "Ich höre dir zu"
         : sprache.status === "verbindet"
           ? "Verbindung wird aufgebaut"
-          : "Ein Gedanke reicht.";
+          : "Dein direkter Draht zu Lukas";
+  const ziele = data?.activeGoals?.slice(0, 3) ?? [];
+  const nichtVerfuegbar = isError && !data;
+  const zuletztAktiv = seit(status?.lastActive);
+
   return (
     <div className="home-page">
       <header className="home-heading">
         <div>
-          <p>DEIN PERSÖNLICHER RAUM</p>
-          <h1>
-            Hey Issa<span>.</span>
-          </h1>
+          <p className="home-eyebrow">Dein persönlicher Arbeitsraum</p>
+          <h1>Hey Issa<span>.</span></h1>
+          <p className="home-intro">Deine Ziele. Lukas’ Gedanken. Alles im Blick.</p>
         </div>
-        <button
-          type="button"
-          className="home-profile"
-          onClick={() => navigate("/zugaenge")}
-          aria-label="Zugänge verwalten"
-        >
-          IH
+        <button type="button" className="home-header-action" onClick={() => navigate("/chat")}>
+          <MessageSquare size={18} aria-hidden="true" />
+          Zum Chat
+          <ArrowUpRight size={16} aria-hidden="true" />
         </button>
       </header>
+
+      {isError && (
+        <div className="home-fetch-error" role="alert">
+          <span>Der aktuelle Stand ist gerade nicht erreichbar.</span>
+          <button type="button" onClick={() => refetch()}>Erneut laden</button>
+        </div>
+      )}
+
       <div className="home-pending">
         <WartetAufDich kompakt />
       </div>
+
       <div className="home-columns">
-        <section
-          className={`home-conversation ${sprache.aktiv ? "is-active" : ""}`}
-          aria-label="Mit Lukas sprechen oder schreiben"
-        >
-          <div className="home-orb">
-            <Orb zustand={zustand} pegel={pegel} groesse="mittel" />
+        <section className="home-context" aria-labelledby="home-focus-heading">
+          <div className="home-section-heading">
+            <h2 id="home-focus-heading">Im Fokus</h2>
+            {zuletztAktiv && <span>Zuletzt aktiv {zuletztAktiv}</span>}
           </div>
-          <p className="home-voice-state" aria-live="polite">
-            {sprachText}
-          </p>
-          <h2>
-            {sprache.aktiv ? (
-              "Ich bin ganz Ohr."
+          <button type="button" className="home-focus" onClick={() => navigate("/goals")}>
+            <span className="home-focus-top">
+              <span><Target size={17} aria-hidden="true" /> Lukas’ aktuelles Thema</span>
+              <ArrowUpRight size={20} aria-hidden="true" />
+            </span>
+            <h3>{status?.obsession || (status ? "Raum für neue Ideen" : nichtVerfuegbar ? "Stand nicht verfügbar" : "Wird geladen …")}</h3>
+            <span className="home-focus-bottom">
+              <span className="home-mood">
+                <span className="home-mood-dot" aria-hidden="true" />
+                <span>{status?.mood ?? (nichtVerfuegbar ? "Nicht verfügbar" : "Stimmung lädt …")}</span>
+                {status && <small>Energie: {status.energy}</small>}
+              </span>
+              <span className="home-focus-cta">Ziele ansehen <ChevronRight size={16} aria-hidden="true" /></span>
+            </span>
+          </button>
+
+          <div className="home-goals">
+            <div className="home-section-heading">
+              <h2>Woran Lukas arbeitet</h2>
+              <button type="button" className="home-text-link" onClick={() => navigate("/goals")}>
+                Alle Ziele <ArrowUpRight size={15} aria-hidden="true" />
+              </button>
+            </div>
+            {ziele.length > 0 ? (
+              <ol className="home-goal-list">
+                {ziele.map((ziel, index) => (
+                  <li key={ziel.id}>
+                    <button type="button" className="home-goal" onClick={() => navigate("/goals")}>
+                      <span className="home-goal-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="home-goal-copy">
+                        <span>{ziel.title}</span>
+                        <small>{ziel.progress || ziel.description}</small>
+                      </span>
+                      <ChevronRight size={17} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ol>
             ) : (
-              <>
-                Was machen
-                <br />
-                wir heute?
-              </>
+              <p className="home-empty">
+                {data ? "Noch keine aktiven Ziele. Gib Lukas eine Richtung." : nichtVerfuegbar ? "Deine Ziele sind gerade nicht erreichbar." : "Deine Ziele werden geladen …"}
+              </p>
             )}
-          </h2>
+          </div>
+
+          <div className="home-metrics">
+            <button type="button" onClick={() => navigate("/goals")}>
+              <Target size={20} aria-hidden="true" />
+              <span>{status ? status.activeGoalsCount + " aktive Ziele" : nichtVerfuegbar ? "Ziele nicht verfügbar" : "Ziele laden …"}</span>
+              <small>Gemeinsam vorankommen</small>
+              <ArrowUpRight size={15} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => navigate("/memory")}>
+              <Brain size={20} aria-hidden="true" />
+              <span>{status ? status.memoriesCount + " Erinnerungen" : nichtVerfuegbar ? "Gedächtnis nicht verfügbar" : "Gedächtnis lädt …"}</span>
+              <small>Wissen, das bleibt</small>
+              <ArrowUpRight size={15} aria-hidden="true" />
+            </button>
+          </div>
+          {status?.note && <p className="home-status-note">{status.note}</p>}
+        </section>
+
+        <section className={"home-conversation " + (sprache.aktiv ? "is-active" : "")} aria-label="Mit Lukas sprechen oder schreiben">
+          <div className="home-conversation-top">
+            <span className="home-eyebrow">Ein Gedanke genügt</span>
+            <span className="home-conversation-mark" aria-hidden="true">L</span>
+          </div>
+          <div className="home-orb"><Orb zustand={zustand} pegel={pegel} groesse="mittel" /></div>
+          <p className="home-voice-state" aria-live="polite">{sprachText}</p>
+          <h2>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute?</>}</h2>
+          <p className="home-conversation-description">Ein Ziel, eine Frage oder eine neue Idee.<br />Lass uns anfangen.</p>
           {sprache.aktiv && letzteZeile && (
             <p className="home-transcript">
               <span>{letzteZeile.role === "user" ? "Du" : "Lukas"}</span>
               {letzteZeile.text}
             </p>
           )}
-          {sprache.fehler && (
-            <p className="home-voice-error" role="alert">
-              {sprache.fehler}
-            </p>
-          )}
+          {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
           <div className="home-composer">
             <textarea
               ref={eingabe}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   absenden();
                 }
               }}
               rows={1}
-              placeholder={
-                sprache.aktiv ? "Oder schreib mir …" : "Frag mich etwas …"
-              }
+              placeholder={sprache.aktiv ? "Oder schreib mir …" : "Was geht dir durch den Kopf?"}
               aria-label="Frage an Lukas"
             />
             <div className="home-composer-actions">
-              <button
-                type="button"
-                className="home-attach"
-                onClick={() => navigate("/chat")}
-                aria-label="Datei anhängen (im Chat)"
-              >
-                <Paperclip size={19} />
+              <button type="button" className="home-attach" onClick={() => navigate("/chat")} aria-label="Datei anhängen (im Chat)">
+                <Paperclip size={19} aria-hidden="true" />
               </button>
-              <span>Dein nächster Schritt beginnt hier.</span>
+              <span>Mit Lukas weiterdenken</span>
               {tippt ? (
-                <button
-                  type="button"
-                  className="home-send"
-                  onClick={absenden}
-                  aria-label="Senden"
-                >
-                  <ArrowUp size={21} />
-                </button>
+                <button type="button" className="home-send" onClick={absenden} aria-label="Senden"><ArrowUp size={21} aria-hidden="true" /></button>
               ) : (
                 <button
                   type="button"
-                  className={`home-speak ${sprache.aktiv ? "is-active" : ""}`}
+                  className={"home-speak " + (sprache.aktiv ? "is-active" : "")}
                   onClick={sprache.aktiv ? sprache.beenden : sprache.starten}
                   disabled={sprache.status === "verbindet"}
-                  aria-label={
-                    sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"
-                  }
+                  aria-label={sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
                 >
-                  {sprache.aktiv ? <X size={18} /> : <AudioLines size={18} />}
+                  {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
                   <span>{sprache.aktiv ? "Beenden" : "Sprechen"}</span>
                 </button>
               )}
             </div>
           </div>
-          <button
-            type="button"
-            className="home-brain-link"
-            onClick={() => navigate("/gehirn")}
-          >
-            <Network size={16} aria-hidden="true" />
-            Ein Blick in Lukas’ Gehirn
-            <ArrowUpRight size={15} aria-hidden="true" />
+          <button type="button" className="home-brain-link" onClick={() => navigate("/gehirn")}>
+            <Network size={17} aria-hidden="true" /> Ein Blick in Lukas’ Gehirn <ArrowUpRight size={15} aria-hidden="true" />
           </button>
         </section>
-        <div className="home-context">
-          {isError && (
-            <div className="home-fetch-error" role="alert">
-              Der aktuelle Stand ist gerade nicht erreichbar.
-              <button type="button" onClick={() => refetch()}>
-                Erneut laden
-              </button>
-            </div>
-          )}
-          <div className="home-section-heading">
-            <h2>Gerade bei Lukas</h2>
-            <span>IM FOKUS</span>
-          </div>
-          <button
-            type="button"
-            className="home-focus"
-            onClick={() => navigate("/goals")}
-          >
-            <div className="home-focus-top">
-              <span>
-                <Target size={15} aria-hidden="true" />
-                Aktuelles Thema
-              </span>
-              <ArrowUpRight size={19} aria-hidden="true" />
-            </div>
-            <h3>
-              {status?.obsession ||
-                (status ? "Raum für neue Ideen" : "Wird geladen …")}
-            </h3>
-            <div className="home-mood">
-              <span className="home-mood-dot" />
-              <span>{status?.mood ?? "Stimmung lädt …"}</span>
-              {status && <small>Energie: {status.energy}</small>}
-            </div>
-          </button>
-          <div className="home-metrics">
-            <button type="button" onClick={() => navigate("/memory")}>
-              <Brain size={20} aria-hidden="true" />
-              <span>
-                {status
-                  ? `${status.memoriesCount} Erinnerungen`
-                  : "Gedächtnis lädt …"}
-              </span>
-              <small>Was bleibt</small>
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </button>
-            <button type="button" onClick={() => navigate("/goals")}>
-              <Target size={20} aria-hidden="true" />
-              <span>
-                {status
-                  ? `${status.activeGoalsCount} aktive Ziele`
-                  : "Ziele laden …"}
-              </span>
-              <small>Was als Nächstes kommt</small>
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </button>
-          </div>
-          <div className="home-section-heading home-recent-heading">
-            <h2>Zuletzt festgehalten</h2>
-          </div>
-          <div className="home-recent">
-            <button type="button" onClick={() => navigate("/diary")}>
-              <span className="home-recent-icon">
-                <BookOpen size={18} aria-hidden="true" />
-              </span>
-              <span>
-                <small>
-                  Tagebuch
-                  {tagebuch?.createdAt
-                    ? ` · ${seit(tagebuch.createdAt) ?? ""}`
-                    : ""}
-                </small>
-                <span>{tagebuch?.content || "Noch kein Eintrag"}</span>
-              </span>
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
-            <button type="button" onClick={() => navigate("/memory")}>
-              <span className="home-recent-icon">
-                <Brain size={18} aria-hidden="true" />
-              </span>
-              <span>
-                <small>Erinnerung</small>
-                <span>{erinnerung?.content || "Noch nichts festgehalten"}</span>
-              </span>
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
-          </div>
-          {status?.note && <p className="home-status-note">{status.note}</p>}
-        </div>
       </div>
+
+      <section className="home-recent-section" aria-labelledby="home-recent-heading">
+        <div className="home-section-heading">
+          <h2 id="home-recent-heading">Zuletzt festgehalten</h2>
+          <span>Gedanken mit Bestand</span>
+        </div>
+        <div className="home-recent">
+          <button type="button" onClick={() => navigate("/diary")}>
+            <span className="home-recent-icon"><BookOpen size={21} aria-hidden="true" /></span>
+            <span className="home-recent-copy">
+              <small>Tagebuch{tagebuch?.createdAt && seit(tagebuch.createdAt) ? " · " + seit(tagebuch.createdAt) : ""}</small>
+              <span>{tagebuch?.content || (data ? "Noch kein Eintrag" : nichtVerfuegbar ? "Nicht verfügbar" : "Tagebuch lädt …")}</span>
+            </span>
+            <ArrowUpRight size={18} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => navigate("/memory")}>
+            <span className="home-recent-icon"><Brain size={21} aria-hidden="true" /></span>
+            <span className="home-recent-copy">
+              <small>Erinnerung</small>
+              <span>{erinnerung?.content || (data ? "Noch nichts festgehalten" : nichtVerfuegbar ? "Nicht verfügbar" : "Erinnerungen laden …")}</span>
+            </span>
+            <ArrowUpRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

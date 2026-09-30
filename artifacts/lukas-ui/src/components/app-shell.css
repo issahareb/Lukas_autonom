@@ -1,11 +1,11 @@
 .app-shell {
-  --app-surface: #0a0c12;
+  --app-surface: #0b0e15;
   --app-panel: #121620;
   --app-text: #f0f1f7;
-  --app-secondary: #9299ac;
+  --app-secondary: #a5adbf;
   --app-lilac: #c7bcfa;
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -25,34 +25,34 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 28px 16px 18px;
-  background: #0d1017;
-  border-right: 1px solid #ffffff06;
+  padding: 32px 15px 18px;
+  background: #0e121b;
+  border-right: 1px solid #ffffff0d;
 }
 .app-brand {
   display: flex;
   gap: 11px;
   align-items: center;
   color: #f1f0f9;
-  padding: 0 8px 29px;
-  font-size: 19px;
+  padding: 0 9px 32px;
+  font-size: 21px;
   font-weight: 600;
   letter-spacing: -0.035em;
 }
 .app-brand small {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
   font-weight: 400;
-  color: #82899d;
+  color: #a0a9bc;
   margin-top: 4px;
 }
 .app-monogram {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 35px;
-  height: 35px;
+  width: 39px;
+  height: 39px;
   border-radius: 12px;
   background: linear-gradient(135deg, #e0d5ff, #a7b4ea);
   color: #292342;
@@ -61,12 +61,15 @@
   box-shadow: 0 4px 18px #a29bd21c;
 }
 .app-nav-heading {
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  color: #666f85;
-  padding: 0 14px;
-  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #98a1b6;
+  padding: 0 13px;
+  margin: 0 0 8px;
 }
+.app-nav-group + .app-nav-group { margin-top: 24px; }
 .app-sidebar nav {
   overflow: auto;
   scrollbar-width: thin;
@@ -76,11 +79,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   padding: 10px 13px;
   margin: 3px 0;
   border-radius: 11px;
-  font-size: 12px;
-  color: #929bad;
+  font-size: 13px;
+  color: #aab4c8;
   transition:
     background 0.15s,
     color 0.15s;
@@ -91,7 +95,8 @@
 }
 .app-sidebar-link[aria-current="page"] {
   color: #e5ddff;
-  background: #bbb1f714;
+  background: #bbb1f71b;
+  box-shadow: inset 0 0 0 1px #c7bcfa13;
 }
 .app-nav-dot {
   width: 5px;
@@ -107,7 +112,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 11px 0;
+  padding: 17px 10px 0;
+  margin-top: 16px;
+  border-top: 1px solid #ffffff0d;
 }
 .app-sidebar-bottom button {
   border: 0;
@@ -119,13 +126,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
-  color: #8992a4;
+  font-size: 11px;
+  color: #a5afc1;
   white-space: nowrap;
 }
 .app-connection > span {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #788194;
 }
@@ -271,6 +278,7 @@
     padding-top: max(12px, env(safe-area-inset-top));
     background: #0a0c12;
     min-height: 62px;
+    border-bottom: 1px solid #ffffff0a;
   }
   .app-mobile-brand {
     display: flex;
@@ -307,8 +315,8 @@
     min-width: 0;
     border: none;
     background: none;
-    color: #788397;
-    font-size: 10px;
+    color: #a1acc0;
+    font-size: 11px;
     letter-spacing: 0.01em;
     text-decoration: none;
     border-radius: 12px;
