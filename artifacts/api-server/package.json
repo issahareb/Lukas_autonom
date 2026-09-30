@@ -27,7 +27,7 @@
     "imapflow": "^1.5.0",
     "mailparser": "^3.9.16",
     "multer": "^2.3.0",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.0.12",
     "openai": "^6.48.0",
     "pg": "^8.20.0",
     "pino": "^9.14.0",
