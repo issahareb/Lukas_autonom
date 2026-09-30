@@ -93,7 +93,7 @@ try {
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).waitFor();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("STUDIO");
     assert.equal(await page.locator(".chat-conversation-select").count(), 1, "Search should narrow the conversation list");
-    const select = page.getByRole("button", { name: /Ideen für das Studio/ });
+    const select = page.locator(".chat-conversation-select").filter({ hasText: "Ideen für das Studio" });
     await select.focus();
     await page.keyboard.press("Enter");
     const input = page.getByRole("textbox", { name: "Nachricht an Lukas" });
