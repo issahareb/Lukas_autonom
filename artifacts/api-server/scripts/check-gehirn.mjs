@@ -96,7 +96,7 @@ export const db = {
 );
 
 await build({
-  entryPoints: ["src/lib/gehirn.ts", "src/lib/zip.ts"],
+  entryPoints: ["src/lib/gehirn.ts", "src/lib/zip.ts", "src/lib/gehirn-pdf.ts"],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -108,6 +108,7 @@ await build({
 
 const { baueGehirn, gehirnVault } = await import(`file://${out}`);
 const { packeZip } = await import(`file://${join(dir, "zip.mjs")}`);
+const { themenPdf } = await import(`file://${join(dir, "gehirn-pdf.mjs")}`);
 rmSync(dir, { recursive: true, force: true });
 
 let fehler = 0;
@@ -155,6 +156,16 @@ try {
   delete globalThis.__brainHttpFixture;
   rmSync(httpDir, { recursive: true, force: true });
 }
+
+// ── PDF-Auszug: echte Datei, echtes Umfeld, vollständige Texte ────────────
+const pdfExport = themenPdf(g, "thema/higgsfield");
+pruefe("Themen-PDF beginnt mit einer gültigen PDF-Signatur", pdfExport.pdf.subarray(0, 8).toString("latin1") === "%PDF-1.4");
+pruefe("Themen-PDF ist nicht leer", pdfExport.pdf.length > 1000);
+pruefe("Themen-PDF enthält verbundene Einträge", pdfExport.knoten >= 3 && pdfExport.kanten >= 2);
+const pdfText = pdfExport.pdf.toString("latin1");
+pruefe("Themen-PDF enthält den vollständigen Erinnerungstext", pdfText.includes("Issa arbeitet mit Higgsfield an einem Video-Workflow."));
+pruefe("Themen-PDF enthält die Beziehungsliste", pdfText.includes("VERBINDUNGEN IM AUSZUG"));
+pruefe("Themen-PDF hat einen PDF-Dateinamen", pdfExport.dateiname.endsWith(".pdf"));
 
 // ── 1. Ein Graph, der sich zeichnen laesst ────────────────────────────────
 pruefe("es gibt Knoten", g.knoten.length > 10);
