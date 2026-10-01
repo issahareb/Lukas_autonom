@@ -259,5 +259,45 @@ describe("Gehirnansicht", () => {
     const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
     unmount();
     expect(signal?.aborted).toBe(true);
+  });  it("lädt ein ausgewähltes Thema als echte PDF-Datei herunter", async () => {
+    const user = userEvent.setup();
+    const pdf = new Blob(["%PDF-1.4 test"], { type: "application/pdf" });
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/thema.pdf")) {
+        return {
+          ok: true,
+          status: 200,
+          blob: async () => pdf,
+          headers: new Headers({
+            "content-disposition":
+              "attachment; filename*=UTF-8''lukas-thema-TaxiBB-Essen.pdf",
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => graph } as Response;
+    });
+    const createObjectURL = vi.fn(() => "blob:topic-pdf");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    render(<GehirnSeite />);
+    await user.click(
+      await screen.findByRole("button", { name: /TaxiBB Essen/i }),
+    );
+    await user.click(screen.getByRole("button", { name: "Thema als PDF" }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/lukas/gehirn/thema.pdf?id=a",
+        expect.objectContaining({ headers: {} }),
+      ),
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(pdf);
   });
+
 });
