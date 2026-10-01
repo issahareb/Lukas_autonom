@@ -87,6 +87,8 @@ const privaterVollkontext = [
 globalThis.__gesendet = [];
 globalThis.__sollScheitern = false;
 
+// Diese Regression prueft den explizit aktivierten Politurpfad.
+process.env.LUKAS_VOICE_POLISH = "true";
 const antwort = await renderLukasVoice({
   systemPrompt: privaterVollkontext,
   conversation: verlaufMitWerkzeug,

@@ -15,7 +15,7 @@ import { logger } from "../logger";
  * ueber memoryContextFor gezielt zurueck — plus query_memory, wenn Lukas
  * gezielt sucht. Gekuerzt wird also nur, was in DIESEM Aufruf mitfaehrt.
  */
-const DEFAULT_MAX_CONTEXT_CHARS = Number(process.env.LUKAS_CONTEXT_MAX_CHARS ?? 60_000);
+const DEFAULT_MAX_CONTEXT_CHARS = 60_000;
 
 function contentCost(content: unknown): number {
   if (typeof content === "string") return content.length;
@@ -46,7 +46,7 @@ function messageCost(message: OpenAI.Chat.Completions.ChatCompletionMessageParam
 
 function maxContextChars(): number {
   const raw = Number(process.env.LUKAS_CONTEXT_MAX_CHARS ?? DEFAULT_MAX_CONTEXT_CHARS);
-  if (!Number.isFinite(raw)) return DEFAULT_MAX_CONTEXT_CHARS;
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_MAX_CONTEXT_CHARS;
   return Math.max(12_000, Math.floor(raw));
 }
 
@@ -66,22 +66,27 @@ export function fitLukasContext(
   const systemMessages = messages.filter((m) => m.role === "system");
   const nonSystem = messages.filter((m) => m.role !== "system");
   const systemCost = systemMessages.reduce((sum, message) => sum + messageCost(message), 0);
-  const budget = Math.max(20_000, maxChars - systemCost - 1500);
-
-  const kept: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  const budget = Math.max(0, maxChars - systemCost - 1500);
+  // Ganze Dialogzuege statt einzelner Nachrichten: aktuelle Frage und alle
+  // zusammengehoerigen Werkzeugaufrufe/-ergebnisse bleiben beieinander.
+  const groups: typeof nonSystem[] = [];
+  for (const message of nonSystem) {
+    if (message.role === "user" || groups.length === 0) groups.push([]);
+    groups[groups.length - 1].push(message);
+  }
+  const keptGroups: typeof groups = [];
   let used = 0;
-  for (let i = nonSystem.length - 1; i >= 0; i--) {
-    const message = nonSystem[i];
-    const cost = messageCost(message);
-    // Die allerletzte Nachricht darf nie herausfallen, auch wenn ein grosser
-    // Anhang allein den Schaetzwert uebersteigt.
-    if (kept.length > 0 && used + cost > budget) break;
-    kept.unshift(message);
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const cost = groups[i].reduce((sum, m) => sum + messageCost(m), 0);
+    if (keptGroups.length > 0 && used + cost > budget) break;
+    keptGroups.unshift(groups[i]);
     used += cost;
   }
-
-  // Nie mitten in einer alten Tool-Sequenz anfangen.
-  while (kept.length > 1 && kept[0].role === "tool") kept.shift();
+  const kept = keptGroups.flat();
+  while (kept[0]?.role === "tool") kept.shift();
+  if (systemCost + used > maxChars) {
+    logger.info({ systemCost, currentTurnCost: used, maxChars }, "Aktueller Zug ueberschreitet Kontextziel; bleibt vollstaendig");
+  }
 
   const dropped = nonSystem.length - kept.length;
   const archiveHint: OpenAI.Chat.Completions.ChatCompletionSystemMessageParam = {

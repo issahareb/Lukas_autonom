@@ -21,7 +21,8 @@ import { Arbeitsschleife } from "./arbeitsschleife";
  */
 
 function historyHasMultimodal(history: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): boolean {
-  return history.some((message: any) => Array.isArray(message.content));
+  return history.some((message: any) => Array.isArray(message.content) &&
+    message.content.some((part: any) => part?.type === "image_url" || part?.type === "file"));
 }
 
 
@@ -98,6 +99,8 @@ export async function runLukasTurn(opts: {
   ];
 
   const textPieces: string[] = [];
+  const previousUserText = opts.history.filter((m) => m.role === "user" && typeof m.content === "string")
+    .map((m) => String(m.content)).filter((s) => s !== opts.userText).at(-1);
   const usedTools: string[] = [];
   let hasAttachments = historyHasMultimodal(opts.history);
 
@@ -112,6 +115,7 @@ export async function runLukasTurn(opts: {
       ? { ...directRoute(opts.profil), profile: opts.profil }
       : routeLukasModel({
           userText: opts.userText,
+          previousUserText,
           hasAttachments,
           usedTools,
           iteration: i,
@@ -144,6 +148,7 @@ export async function runLukasTurn(opts: {
       messages: fuerModell,
     });
 
+    schleife.verbucht(result.usage);
     if (result.content) textPieces.push(result.content);
     if (result.toolCalls.length === 0) break;
 
@@ -164,8 +169,6 @@ export async function runLukasTurn(opts: {
      * zugehoerigen Ergebnisse folgen — schiebt man eine System-Nachricht
      * dazwischen, weist die API den ganzen Aufruf zurueck.
      */
-    // Was dieser Aufruf gekostet hat, zaehlt aufs Budget dieses Zuges.
-    schleife.verbucht(result.usage);
 
     const hinweise = schleife.hinweise(result.toolCalls);
 
@@ -312,8 +315,9 @@ export async function runLukasTurn(opts: {
     try {
       const letzte = await callLukasModel({
       cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
-        route: routeLukasModel({
+        route: opts.profil ? directRoute(opts.profil) : routeLukasModel({
           userText: opts.userText,
+          previousUserText,
           hasAttachments,
           usedTools,
           iteration: schleife.rundenZahl,
@@ -330,6 +334,7 @@ export async function runLukasTurn(opts: {
           },
         ],
       });
+      schleife.verbucht(letzte.usage);
       draft = (letzte.content || "").trim();
     } catch (err) {
       logger.warn({ err }, "Abschlussrunde fehlgeschlagen");

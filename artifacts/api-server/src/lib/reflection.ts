@@ -1,7 +1,6 @@
 import { db } from "@workspace/db";
 import { diaryTable, goalsTable, messages, memoriesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai";
 import { LUKAS_SOUL } from "./lukas-soul";
 import { getLukasStatus, setLukasStatus, DEFAULT_STATUS } from "./lukas-status";
 import {
@@ -13,7 +12,8 @@ import {
 import { openEpisode, closeEpisode, upsertClaim } from "./memory-writer";
 import { queryRows } from "./vps-db";
 import { logger } from "./logger";
-import { directModel } from "./ai/model-router";
+import { directRoute } from "./ai/model-router";
+import { callLukasModel } from "./ai/model-client";
 
 const REFLECTION_COOLDOWN_MS = 6 * 60 * 60 * 1000; // max. eine Auto-Reflexion alle 6h
 
@@ -140,13 +140,13 @@ Antworte NUR mit einem JSON-Objekt, kein Markdown:
 }
 Zu claims: Extrahiere 0-4 konkrete, merkwürdige Aussagen aus den Gesprächen. evidenceLevel: 0=dein Gedanke, 1=deine Beobachtung aus dem Gespräch. NIEMALS höher.`;
 
-  const response = await openai.chat.completions.create({
-    model: directModel("reasoning"),
-    max_completion_tokens: 2048,
+  const response = await callLukasModel({
+    route: directRoute("general"),
+    maxTokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const text = response.choices[0]?.message?.content ?? "";
+  const text = response.content;
   let parsed: {
     content?: string;
     feeling?: { emotion?: string; valence?: number; intensity?: number; cause?: string };

@@ -15,7 +15,6 @@ import { db } from "@workspace/db";
 import { memoriesTable, strategiesTable } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { memActionsTable } from "@workspace/db";
-import { openai } from "@workspace/integrations-openai-ai";
 import { LUKAS_SOUL } from "./lukas-soul";
 import { recordEmotion, getEmotionalContext, getCharacterContext } from "./emotion-engine";
 import {
@@ -38,7 +37,8 @@ import {
   type MoltbookNotification,
 } from "./moltbook";
 import { logger } from "./logger";
-import { directModel } from "./ai/model-router";
+import { directRoute } from "./ai/model-router";
+import { callLukasModel } from "./ai/model-client";
 import { mitSperre } from "./lauf-sperre";
 
 /*
@@ -265,13 +265,13 @@ Antworte NUR mit JSON:
 }
 Leere Arrays sind völlig okay — nicht jeder Feed ist spannend.`;
 
-    const response = await openai.chat.completions.create({
-      model: directModel("general"),
-      max_completion_tokens: 3000,
+    const response = await callLukasModel({
+      route: directRoute("general"),
+      maxTokens: 4096,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.choices[0]?.message?.content ?? "";
+    const text = response.content;
     let decision: Decision;
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
