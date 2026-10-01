@@ -277,7 +277,7 @@ describe("Gehirnansicht", () => {
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
-        "/api/lukas/gehirn/export/a.pdf",
+        "/api/lukas/gehirn/export/a",
         expect.objectContaining({ headers: expect.any(Object) }),
       ),
     );
