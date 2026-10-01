@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Copy, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, Check, ChevronRight, Copy, Loader2, X } from "lucide-react";
 import { ARTEN, BEREICHE, bereich, type Knoten } from "./modell";
 
 type Verbindung = { knoten: Knoten; beziehung: string; key: string };
@@ -13,6 +13,7 @@ type Props = {
   tiefe: number;
   onTiefe: (tiefe: number) => void;
   gefiltert: boolean;
+  onPdf: () => Promise<void>;
 };
 const farbe = (k: Knoten) =>
   k.art === "identitaet" ? "#e8f2ff" : BEREICHE[bereich(k.art)].farbe;
@@ -24,6 +25,7 @@ export function GehirnEintrag(props: Props) {
   const [kopiert, setKopiert] = useState(false);
   const [fehler, setFehler] = useState("");
   const [limit, setLimit] = useState(40);
+  const [pdfLaedt, setPdfLaedt] = useState(false);
   const body = useRef<HTMLDivElement>(null);
   const copySequence = useRef(0);
 
@@ -33,6 +35,7 @@ export function GehirnEintrag(props: Props) {
     setKopiert(false);
     setFehler("");
     setLimit(40);
+    setPdfLaedt(false);
     if (body.current) body.current.scrollTop = 0;
   }, [knoten.id]);
   useEffect(
@@ -55,6 +58,21 @@ export function GehirnEintrag(props: Props) {
         setFehler(
           "Kopieren ist hier nicht verfügbar. Du kannst den Text markieren und kopieren.",
         );
+    }
+  }
+
+  async function pdfExportieren() {
+    if (pdfLaedt) return;
+    setPdfLaedt(true);
+    setFehler("");
+    try {
+      await props.onPdf();
+    } catch (err) {
+      setFehler(
+        err instanceof Error ? err.message : "PDF konnte nicht erstellt werden.",
+      );
+    } finally {
+      setPdfLaedt(false);
     }
   }
 
@@ -117,6 +135,19 @@ export function GehirnEintrag(props: Props) {
                 <Copy size={16} aria-hidden="true" />
               )}
               {kopiert ? "Kopiert" : "Text kopieren"}
+            </button>
+            <button
+              type="button"
+              className="gehirn-button gehirn-copy"
+              onClick={pdfExportieren}
+              disabled={pdfLaedt}
+            >
+              {pdfLaedt ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowDownToLine size={16} aria-hidden="true" />
+              )}
+              {pdfLaedt ? "PDF wird erstellt …" : "Als PDF herunterladen"}
             </button>
             <span className="gehirn-sr" role="status">
               {kopiert ? "Text kopiert." : ""}
