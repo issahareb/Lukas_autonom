@@ -50,6 +50,9 @@ globalThis.__daten = {
   memories: [
     { id: 1, content: "Issa arbeitet mit Higgsfield an einem Video-Workflow.", category: "arbeit", importance: 9, tags: ["Higgsfield", "video"], createdAt: D("2026-08-01") },
     { id: 2, content: "Nummer +49152... hat Adminrechte.", category: "regeln", importance: 10, tags: [], createdAt: D("2026-07-01") },
+    { id: 3, content: "Der Video-Workflow nutzt feste Character-Referenzen.", category: "arbeit", importance: 8, tags: ["video", "character"], createdAt: D("2026-08-02") },
+    { id: 4, content: "Character-Konsistenz wird über wiederkehrende Referenzansichten gehalten.", category: "arbeit", importance: 8, tags: ["character", "continuity"], createdAt: D("2026-08-03") },
+    { id: 5, content: "Continuity-Notiz liegt mehr als zwei Kanten vom Higgsfield-Thema entfernt.", category: "arbeit", importance: 7, tags: ["continuity", "deep-context"], createdAt: D("2026-08-04") },
   ],
   goals: [{ id: 1, title: "Fehler selbst finden", description: "Diagnose ohne Nachfrage.", priority: "high", status: "active", progress: "läuft", createdAt: D("2026-06-01"), updatedAt: D("2026-08-10") }],
   diary: [{ id: 1, content: "Guter Tag.", mood: "zufrieden", energy: "normal", createdAt: D("2026-08-15") }],
@@ -164,6 +167,8 @@ pruefe("Themen-PDF ist nicht leer", pdfExport.pdf.length > 1000);
 pruefe("Themen-PDF enthält verbundene Einträge", pdfExport.knoten >= 3 && pdfExport.kanten >= 2);
 const pdfText = pdfExport.pdf.toString("latin1");
 pruefe("Themen-PDF enthält den vollständigen Erinnerungstext", pdfText.includes("Issa arbeitet mit Higgsfield an einem Video-Workflow."));
+pruefe("Themen-PDF folgt dem Themen-Netz auch tiefer als zwei Ebenen", pdfText.includes("Continuity-Notiz liegt mehr als zwei Kanten vom Higgsfield-Thema entfernt."));
+pruefe("Themen-PDF springt nicht über Kategorien in fremde Erinnerungen", !pdfText.includes("Nummer +49152... hat Adminrechte."));
 pruefe("Themen-PDF enthält die Beziehungsliste", pdfText.includes("VERBINDUNGEN IM AUSZUG"));
 pruefe("Themen-PDF hat einen PDF-Dateinamen", pdfExport.dateiname.endsWith(".pdf"));
 
