@@ -393,6 +393,42 @@ export default function GehirnSeite() {
       setExportLaedt(false);
     }
   }
+
+  async function themaPdfExportieren(knoten: Knoten) {
+    const res = await fetch(
+      `${BASE}/api/lukas/gehirn/thema.pdf?id=${encodeURIComponent(knoten.id)}`,
+      { headers: authHeaders() },
+    );
+    if (!res.ok) {
+      throw new Error(`PDF-Export fehlgeschlagen (HTTP ${res.status}).`);
+    }
+    const blob = await res.blob();
+    if (!blob.size) throw new Error("PDF-Export war leer.");
+
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const utf8Name = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const fallback = `lukas-thema-${knoten.titel
+      .replace(/[^a-zA-Z0-9äöüÄÖÜß_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "thema"}.pdf`;
+    let dateiname = fallback;
+    if (utf8Name) {
+      try {
+        dateiname = decodeURIComponent(utf8Name.replace(/^"|"$/g, ""));
+      } catch {
+        dateiname = fallback;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = dateiname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   function knotenZeile(k: Knoten) {
     return (
       <button
@@ -446,6 +482,7 @@ export default function GehirnSeite() {
       tiefe={tiefe}
       onTiefe={setTiefe}
       gefiltert={region !== null}
+      onPdfExport={() => themaPdfExportieren(gewaehlt)}
     />
   );
 
