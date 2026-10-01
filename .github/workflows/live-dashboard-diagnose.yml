@@ -1,0 +1,39 @@
+name: Live-Dashboard zuordnen
+
+on:
+  push:
+    branches: ["codex/diagnose-live-dashboard"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zuordnen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Öffentliche HTML- und Asset-Version lesen
+        run: |
+          node --input-type=module <<'JS'
+          import { lookup } from "node:dns/promises";
+          const origin = "https://lukas.issahareb.me";
+          console.log("DNS", JSON.stringify(await lookup(new URL(origin).hostname, { all: true })));
+          for (const route of ["/", "/chat"]) {
+            const url = new URL(route, origin);
+            url.searchParams.set("ui-version-check", String(Date.now()));
+            const response = await fetch(url, { headers: { "Cache-Control": "no-cache" }, signal: AbortSignal.timeout(20000) });
+            const html = await response.text();
+            const assets = [...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/g)].map(m => new URL(m[1], response.url)).filter(u => u.origin === new URL(response.url).origin);
+            console.log("PAGE", JSON.stringify({ route, status: response.status, finalUrl: response.url, server: response.headers.get("server"), cache: response.headers.get("cache-control"), title: html.match(/<title>(.*?)<\/title>/s)?.[1], assets: assets.map(u => u.pathname) }));
+            for (const asset of assets.slice(0, 8)) {
+              const result = await fetch(asset, { signal: AbortSignal.timeout(20000) });
+              const source = await result.text();
+              const markers = ["Woran Lukas arbeitet", "home-focus-cta", "home-goal-list", "chat-conversation-select", "chat-voice-brand", "home-profile", "Was machen", "wir heute?", "LUKAS · AI AGENT DASHBOARD"];
+              console.log("ASSET", JSON.stringify({ path: asset.pathname, status: result.status, bytes: source.length, markers: Object.fromEntries(markers.map(m => [m, source.includes(m)])) }));
+            }
+          }
+          JS
