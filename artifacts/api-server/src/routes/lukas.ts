@@ -19,6 +19,7 @@ import { wartendes } from "../lib/wartet";
 import { listeZugaenge, setzeZugang, loescheZugang } from "../lib/zugaenge";
 import { tresorBereit } from "../lib/tresor";
 import { baueGehirn, gehirnVault } from "../lib/gehirn";
+import { themenPdf } from "../lib/gehirn-pdf";
 import { packeZip } from "../lib/zip";
 import { buildSystemPrompt } from "../lib/system-prompt";
 import { openai } from "@workspace/integrations-openai-ai";
@@ -538,6 +539,30 @@ router.get("/lukas/gehirn", async (_req, res) => {
     logger.error({ err }, "Gehirn-Graph konnte nicht gebaut werden");
     recordDebugEvent("gehirn", err);
     res.status(500).json({ error: "Failed to build brain graph" });
+  }
+});
+
+router.get("/lukas/gehirn/export/:id.pdf", async (req, res) => {
+  try {
+    const gehirn = await baueGehirn();
+    const id = String(req.params.id || "");
+    const exportiert = themenPdf(gehirn, id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exportiert.dateiname.replace(/"/g, "")}"`,
+    );
+    res.setHeader("Content-Length", String(exportiert.pdf.length));
+    res.setHeader("X-Lukas-Export-Nodes", String(exportiert.knoten));
+    res.setHeader("X-Lukas-Export-Edges", String(exportiert.kanten));
+    res.end(exportiert.pdf);
+  } catch (err) {
+    if (err instanceof Error && err.message === "Eintrag nicht gefunden.") {
+      return void res.status(404).json({ error: "Brain entry not found" });
+    }
+    logger.error({ err }, "Gehirn-PDF konnte nicht gebaut werden");
+    recordDebugEvent("gehirn-pdf", err);
+    res.status(500).json({ error: "Failed to build brain PDF" });
   }
 });
 
