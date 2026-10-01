@@ -19,6 +19,7 @@ import { wartendes } from "../lib/wartet";
 import { listeZugaenge, setzeZugang, loescheZugang } from "../lib/zugaenge";
 import { tresorBereit } from "../lib/tresor";
 import { baueGehirn, gehirnVault } from "../lib/gehirn";
+import { gehirnThemaPdf, sichererPdfName } from "../lib/gehirn-pdf";
 import { packeZip } from "../lib/zip";
 import { buildSystemPrompt } from "../lib/system-prompt";
 import { openai } from "@workspace/integrations-openai-ai";
@@ -554,6 +555,37 @@ router.get("/lukas/gehirn/vault.zip", async (_req, res) => {
     logger.error({ err }, "Gehirn-Vault konnte nicht gepackt werden");
     recordDebugEvent("gehirn", err);
     res.status(500).json({ error: "Failed to build vault" });
+  }
+});
+
+router.get("/lukas/gehirn/thema.pdf", async (req, res) => {
+  try {
+    const id = typeof req.query.id === "string" ? req.query.id : "";
+    if (!id.startsWith("thema/")) {
+      return void res.status(400).json({ error: "Valid topic id required" });
+    }
+
+    const gehirn = await baueGehirn();
+    const thema = gehirn.knoten.find((k) => k.id === id && k.art === "thema");
+    if (!thema) {
+      return void res.status(404).json({ error: "Topic not found" });
+    }
+
+    const pdf = gehirnThemaPdf(gehirn, id);
+    const dateiname = `lukas-thema-${sichererPdfName(thema.titel)}-${gehirn.stand.slice(0, 10)}.pdf`;
+    const asciiName = dateiname.replace(/[^\x20-\x7e]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(dateiname)}`,
+    );
+    res.setHeader("Content-Length", String(pdf.length));
+    res.setHeader("Cache-Control", "no-store");
+    res.end(pdf);
+  } catch (err) {
+    logger.error({ err }, "Gehirn-Themen-PDF konnte nicht gebaut werden");
+    recordDebugEvent("gehirn", err);
+    res.status(500).json({ error: "Failed to build topic PDF" });
   }
 });
 
