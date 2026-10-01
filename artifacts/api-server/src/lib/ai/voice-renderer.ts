@@ -28,6 +28,8 @@ export async function renderLukasVoice(opts: {
 }): Promise<string> {
   const draft = opts.draft.trim();
   if (!draft) return "";
+  // Die Arbeitsrunde kennt Lukas bereits; eine zweite Tokenrechnung ist optional.
+  if (process.env.LUKAS_VOICE_POLISH?.trim().toLowerCase() !== "true") return draft;
 
   const route = routeLukasVoiceModel();
 
@@ -72,7 +74,9 @@ export async function renderLukasVoice(opts: {
    * mit — bei einem langen Gespraech war das der groesste einzelne Posten, und
    * zwar fuer die billigste Aufgabe im ganzen System.
    */
-  const letzte = dialog.slice(-Number(process.env.LUKAS_VOICE_HISTORY ?? 4));
+  const requestedHistory = Number(process.env.LUKAS_VOICE_HISTORY ?? 4);
+  const historyCount = Number.isFinite(requestedHistory) ? Math.max(0, Math.min(8, Math.floor(requestedHistory))) : 4;
+  const letzte = historyCount > 0 ? dialog.slice(-historyCount) : [];
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
