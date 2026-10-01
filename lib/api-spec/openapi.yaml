@@ -293,7 +293,7 @@ paths:
                 $ref: "#/components/schemas/LukasDashboard"
 
   # ── GEHIRN-EXPORT ────────────────────────────────────────────────────────
-  /lukas/gehirn/export/{id}.pdf:
+  /lukas/gehirn/export/{id}:
     get:
       operationId: exportBrainEntryPdf
       tags: [lukas]
