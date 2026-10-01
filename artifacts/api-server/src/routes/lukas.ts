@@ -531,12 +531,9 @@ router.post("/lukas/meldungen/:id/antwort", async (req, res) => {
 router.get("/lukas/gehirn", async (_req, res) => {
   try {
     const gehirn = await baueGehirn();
-    res.json({
-      ...gehirn,
-      // Der Fließtext einer Erinnerung kann lang sein. Fuers Bild reicht ein
-      // Anriss; wer alles will, laedt den Vault.
-      knoten: gehirn.knoten.map((k) => ({ ...k, text: k.text.slice(0, 600) })),
-    });
+    // Die Detailansicht liest denselben Inhalt wie der Vault. Nur die
+    // Knotenbeschriftung ist kurz; der Erinnerungstext bleibt vollständig.
+    res.json(gehirn);
   } catch (err) {
     logger.error({ err }, "Gehirn-Graph konnte nicht gebaut werden");
     recordDebugEvent("gehirn", err);

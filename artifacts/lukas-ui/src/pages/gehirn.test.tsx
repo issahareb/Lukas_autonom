@@ -152,6 +152,7 @@ describe("Gehirnansicht", () => {
         name: /Website planen/,
       }),
     );
+    await user.click(screen.getByRole("button", { name: /Verbindungen 2/ }));
     await user.click(
       within(screen.getByRole("complementary")).getByRole("button", {
         name: /Domainwissen/,
@@ -167,6 +168,73 @@ describe("Gehirnansicht", () => {
         sichtbar: new Set(["a", "b", "c"]),
       }),
     );
+  });
+  it("zeigt und kopiert lange Inhalte vollständig und erhält die Suche beim Schließen", async () => {
+    const user = userEvent.setup();
+    const inhalt =
+      "Cully Hill Boys: ".repeat(80) + "Letzter vollständiger Satz.";
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...graph,
+        knoten: graph.knoten.map((k) =>
+          k.id === "b" ? { ...k, text: inhalt } : k,
+        ),
+      }),
+    } as Response);
+    const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    render(<GehirnSeite />);
+    await user.type(screen.getByRole("searchbox"), "Cully");
+    await user.click(
+      await screen.findByRole("button", { name: /Website planen/ }),
+    );
+    expect(screen.getByText(/Letzter vollständiger Satz/)).toHaveTextContent(
+      inhalt,
+    );
+    await user.click(screen.getByRole("button", { name: "Text kopieren" }));
+    expect(copy).toHaveBeenCalledWith(inhalt);
+    await user.click(screen.getByRole("button", { name: "Auswahl schließen" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("Cully");
+    expect(
+      await screen.findByRole("button", { name: /Website planen/ }),
+    ).toBeInTheDocument();
+  });
+  it("öffnet auf dem iPhone einen Leser mit Rückweg zwischen Einträgen und zur Karte", async () => {
+    vi.stubGlobal("innerWidth", 393);
+    const user = userEvent.setup();
+    render(<GehirnSeite />);
+    const ausloeser = await screen.findByRole("button", {
+      name: /TaxiBB Essen/,
+    });
+    await user.click(ausloeser);
+    const dialog = await screen.findByRole("dialog", { name: "TaxiBB Essen" });
+    await user.click(
+      within(dialog).getByRole("button", { name: /Verbindungen 1/ }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /Website planen/ }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Website planen" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Zum vorherigen Eintrag" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "TaxiBB Essen" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Zur Gedächtniskarte" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /TaxiBB Essen/ }),
+      ).toHaveFocus(),
+    );
+    expect(scene.fokus).toHaveBeenLastCalledWith(null);
   });
   it("erhält bei WebGL-Ausfall die durchsuchbare Liste und räumt Worker auf", async () => {
     createScene.mockImplementation(() => {

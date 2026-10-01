@@ -16,9 +16,11 @@
  *  - eine ZIP-Datei, die kein Entpacker oeffnet
  */
 import { build } from "esbuild";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { inflateRawSync } from "node:zlib";
+import express from "express";
+import { once } from "node:events";
 
 const dir = mkdtempSync(join(process.cwd(), ".gehirn-check-"));
 const out = join(dir, "gehirn.mjs");
@@ -118,6 +120,41 @@ const pruefe = (was, bedingung) => {
 
 const g = await baueGehirn();
 const nach = new Map(g.knoten.map((k) => [k.id, k]));
+
+// Der echte HTTP-Handler muss auch den Teil nach Zeichen 600 ausliefern.
+// Graph-Bauer und andere Dienste sind Attrappen; Routing und JSON sind echt.
+const httpDir = mkdtempSync(join(process.cwd(), ".gehirn-http-check-"));
+const routeSource = readFileSync("src/routes/lukas.ts", "utf8");
+const exports = [...new Set([...routeSource.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)]
+  .filter((m) => m[2] !== "express")
+  .flatMap((m) => m[1].split(",").map((name) => name.trim()).filter(Boolean)))];
+const fake = exports.map((name) => `export const ${name} = ${name === "baueGehirn" ? "async () => globalThis.__brainHttpFixture" : name === "logger" ? "{ error() {} }" : "() => {}"};`).join("\n");
+const langerText = "Cully Hill Boys: feste Referenzen und räumliche Anker. ".repeat(40) + "VOLLSTÄNDIGES ENDE";
+globalThis.__brainHttpFixture = { ...g, knoten: [{ ...g.knoten[0], text: langerText }] };
+let server;
+try {
+  await build({
+    entryPoints: ["src/routes/lukas.ts"], outfile: join(httpDir, "route.mjs"),
+    bundle: true, format: "esm", platform: "node", external: ["express"], logLevel: "silent",
+    plugins: [{ name: "isolierte-dienste", setup(b) {
+      b.onResolve({ filter: /.*/ }, (args) => args.importer.endsWith("/routes/lukas.ts") && args.path !== "express" ? { path: args.path, namespace: "attrappe" } : undefined);
+      b.onLoad({ filter: /.*/, namespace: "attrappe" }, () => ({ contents: fake, loader: "js" }));
+    } }],
+  });
+  const { default: router } = await import(`file://${join(httpDir, "route.mjs")}`);
+  const app = express();
+  app.use(router);
+  server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/lukas/gehirn`);
+  const payload = await response.json();
+  pruefe("Gehirn-API antwortet erfolgreich", response.status === 200);
+  pruefe("Gehirn-API liefert den vollständigen langen Text statt 600 Zeichen", payload.knoten?.[0]?.text === langerText);
+} finally {
+  if (server) await new Promise((resolve) => server.close(resolve));
+  delete globalThis.__brainHttpFixture;
+  rmSync(httpDir, { recursive: true, force: true });
+}
 
 // ── 1. Ein Graph, der sich zeichnen laesst ────────────────────────────────
 pruefe("es gibt Knoten", g.knoten.length > 10);

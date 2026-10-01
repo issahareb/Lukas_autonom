@@ -1,10 +1,13 @@
-.gehirn-page {
+.gehirn-page,
+.gehirn-reader {
   --brain-ink: #edf2fa;
   --brain-muted: #94a3ba;
   --brain-line: rgba(152, 180, 217, 0.12);
   --brain-panel: #0b101b;
   --brain-accent: #8dbbff;
   color: var(--brain-ink);
+}
+.gehirn-page {
   padding: 32px;
   max-width: 1900px;
   margin: 0 auto;
@@ -15,21 +18,21 @@
     transparent 55%
   );
 }
-.gehirn-page button,
-.gehirn-page input,
-.gehirn-page select {
+:is(.gehirn-page, .gehirn-reader) button,
+:is(.gehirn-page, .gehirn-reader) input,
+:is(.gehirn-page, .gehirn-reader) select {
   font: inherit;
 }
-.gehirn-page button {
+:is(.gehirn-page, .gehirn-reader) button {
   cursor: pointer;
 }
-.gehirn-page button:disabled {
+:is(.gehirn-page, .gehirn-reader) button:disabled {
   opacity: 0.35;
   cursor: default;
 }
-.gehirn-page button:focus-visible,
-.gehirn-page input:focus-visible,
-.gehirn-page select:focus-visible {
+:is(.gehirn-page, .gehirn-reader) button:focus-visible,
+:is(.gehirn-page, .gehirn-reader) input:focus-visible,
+:is(.gehirn-page, .gehirn-reader) select:focus-visible {
   outline: 2px solid var(--brain-accent);
   outline-offset: 4px;
 }
@@ -875,4 +878,142 @@
   width: 20px;
   height: 20px;
   accent-color: #c7bcfa;
+}
+
+/* Der Leser scrollt unabhängig von der Karte. Seine Navigation bleibt da. */
+.gehirn-inspector.has-selection {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 80px);
+  min-height: 0;
+  padding-top: 0;
+}
+.gehirn-inspector[hidden] {
+  display: none;
+}
+.gehirn-reader-header {
+  flex-shrink: 0;
+  padding: 8px 0 12px;
+  background: #0b101b;
+  border-bottom: 1px solid var(--brain-line);
+}
+.gehirn-reader-header .gehirn-icon-button {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+.gehirn-reader-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--brain-ink);
+  font-size: 13px !important;
+}
+.gehirn-reader-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding-top: 8px;
+}
+.gehirn-reader-tabs button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #111a28;
+  color: var(--brain-muted);
+  font-size: 13px;
+}
+.gehirn-reader-tabs button[aria-pressed="true"] {
+  border-color: #c7bcfa55;
+  background: #c7bcfa16;
+  color: #e2d9ff;
+}
+.gehirn-reader-tabs span {
+  margin-left: 4px;
+}
+.gehirn-reader-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y pinch-zoom;
+  scrollbar-width: thin;
+  padding: 4px 2px 24px;
+}
+.gehirn-reader-body .gehirn-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.gehirn-copy {
+  min-height: 44px;
+  margin-top: 6px;
+}
+.gehirn-reader-metadata summary {
+  min-height: 44px;
+  padding: 12px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--brain-muted);
+}
+.gehirn-reader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  background: #0009;
+}
+.gehirn-reader {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  padding: max(8px, env(safe-area-inset-top)) 18px 0;
+  background: #0b101b;
+}
+.gehirn-reader .gehirn-reader-body {
+  flex: 1;
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+.gehirn-reader h2 {
+  font-size: 22px;
+  line-height: 1.35;
+}
+.gehirn-reader .gehirn-content {
+  font-size: 16px;
+  line-height: 1.75;
+}
+.gehirn-reader .gehirn-eyebrow {
+  font-size: 11px;
+}
+.gehirn-reader .gehirn-connection {
+  min-height: 56px;
+  padding: 16px 0;
+}
+.gehirn-reader .gehirn-connection > span:nth-child(2) > span {
+  font-size: 15px;
+}
+.gehirn-reader .gehirn-connections-heading select {
+  min-height: 44px;
+  font-size: 14px;
+}
+@media (max-width: 1150px) {
+  .gehirn-inspector.has-selection {
+    position: static;
+    max-height: 80dvh;
+  }
+}
+@media (max-width: 767px) {
+  .gehirn-entry-text > span {
+    white-space: normal;
+    line-height: 1.5;
+  }
 }
