@@ -393,6 +393,39 @@ export default function GehirnSeite() {
       setExportLaedt(false);
     }
   }
+
+  async function eintragAlsPdf(k: Knoten) {
+    const res = await fetch(
+      `${BASE}/api/lukas/gehirn/export/${encodeURIComponent(k.id)}.pdf`,
+      { headers: authHeaders() },
+    );
+    if (!res.ok)
+      throw new Error(`PDF-Export fehlgeschlagen (HTTP ${res.status}).`);
+    const contentType = res.headers?.get?.("content-type") ?? "";
+    if (contentType && !contentType.includes("application/pdf"))
+      throw new Error("Der Server hat keine PDF-Datei zurückgegeben.");
+
+    const blob = await res.blob();
+    if (!blob.size)
+      throw new Error("Die erzeugte PDF-Datei ist leer.");
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const disposition = res.headers?.get?.("content-disposition") ?? "";
+    const match = disposition.match(/filename="([^"]+)"/i);
+    a.href = url;
+    a.download =
+      match?.[1] ||
+      `lukas-${k.titel
+        .replace(/[^a-zA-Z0-9äöüÄÖÜß _.-]+/g, " ")
+        .trim()
+        .replace(/\s+/g, "-")
+        .slice(0, 72) || "thema"}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   function knotenZeile(k: Knoten) {
     return (
       <button
@@ -446,6 +479,7 @@ export default function GehirnSeite() {
       tiefe={tiefe}
       onTiefe={setTiefe}
       gefiltert={region !== null}
+      onPdf={() => eintragAlsPdf(gewaehlt)}
     />
   );
 
