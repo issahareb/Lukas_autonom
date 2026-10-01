@@ -292,6 +292,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/LukasDashboard"
 
+  # ── GEHIRN-EXPORT ────────────────────────────────────────────────────────
+  /lukas/gehirn/export/{id}.pdf:
+    get:
+      operationId: exportBrainEntryPdf
+      tags: [lukas]
+      summary: Export one brain topic with its connected context as PDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Brain node ID, for example thema/higgsfield
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PDF containing the selected entry, metadata, relationships and connected entries
+          headers:
+            X-Lukas-Export-Nodes:
+              schema:
+                type: integer
+            X-Lukas-Export-Edges:
+              schema:
+                type: integer
+          content:
+            application/pdf:
+              schema:
+                type: string
+                contentEncoding: binary
+        "404":
+          description: Brain entry not found
+
   # ── BETRIEBSBEREITSCHAFT ─────────────────────────────────────────────────
   /readyz:
     get:
