@@ -236,6 +236,55 @@ describe("Gehirnansicht", () => {
     );
     expect(scene.fokus).toHaveBeenLastCalledWith(null);
   });
+  it("lädt einen ausgewählten Gehirn-Eintrag wirklich als PDF herunter", async () => {
+    const NativeURL = globalThis.URL;
+    const createObjectURL = vi.fn(() => "blob:lukas-pdf");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal(
+      "URL",
+      class extends NativeURL {
+        static createObjectURL = createObjectURL;
+        static revokeObjectURL = revokeObjectURL;
+      },
+    );
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/lukas/gehirn/export/")) {
+        return {
+          ok: true,
+          headers: new Headers({
+            "content-type": "application/pdf",
+            "content-disposition": 'attachment; filename="lukas-taxibb.pdf"',
+          }),
+          blob: async () =>
+            new Blob(["%PDF-1.4 test"], { type: "application/pdf" }),
+        } as Response;
+      }
+      return { ok: true, json: async () => graph } as Response;
+    });
+
+    const user = userEvent.setup();
+    render(<GehirnSeite />);
+    await user.click(
+      await screen.findByRole("button", { name: /TaxiBB Essen/i }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Als PDF herunterladen" }),
+    );
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/lukas/gehirn/export/a.pdf",
+        expect.objectContaining({ headers: expect.any(Object) }),
+      ),
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(click).toHaveBeenCalled();
+  });
+
   it("erhält bei WebGL-Ausfall die durchsuchbare Liste und räumt Worker auf", async () => {
     createScene.mockImplementation(() => {
       throw new Error("No WebGL");
