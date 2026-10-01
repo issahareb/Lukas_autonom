@@ -138,63 +138,54 @@ function pdfAusSeiten(seiten: string[][]): Buffer {
 
 function sammle(g: Gehirn, startId: string): ExportKnoten[] {
   const index = new Map(g.knoten.map((k) => [k.id, k]));
-  if (!index.has(startId)) throw new Error("Eintrag nicht gefunden.");
+  const root = index.get(startId);
+  if (!root) throw new Error("Eintrag nicht gefunden.");
 
-  const adj = new Map<string, string[]>();
+  // Ein Themenexport ist bewusst KEIN Graph-Crawl. Ein allgemeines Wort wie
+  // "workflow", "video" oder "project" verbindet sonst nach wenigen Sprüngen
+  // fast das ganze Gedächtnis. Für "alles zu diesem Thema" ist die stabile
+  // Grenze: der gewählte Knoten plus ALLE direkt daran gespeicherten Knoten.
+  const direkt = new Set<string>();
   for (const e of g.kanten) {
-    const a = adj.get(e.von) ?? [];
-    a.push(e.nach);
-    adj.set(e.von, a);
-    const b = adj.get(e.nach) ?? [];
-    b.push(e.von);
-    adj.set(e.nach, b);
+    if (e.von === startId && e.nach !== "lukas") direkt.add(e.nach);
+    if (e.nach === startId && e.von !== "lukas") direkt.add(e.von);
   }
 
-  const darfWeiterfuehren = (id: string) => {
-    const k = index.get(id);
-    if (!k) return false;
-    // Diese Knoten sind Struktur-Hubs, keine inhaltlichen Themenbrücken:
-    // - "lukas" würde fast das gesamte Gedächtnis verbinden.
-    // - Kategorien wie "arbeit" oder "conversation" verbinden hunderte
-    //   ansonsten unabhängige Erinnerungen.
-    // Wir dürfen sie als Blatt im Export zeigen, aber niemals durch sie in
-    // andere Themen weiterlaufen.
-    return id !== "lukas" && k.art !== "kategorie";
-  };
-
-  const dist = new Map<string, number>([[startId, 0]]);
-  const queue = [startId];
-
-  for (let i = 0; i < queue.length; i++) {
-    const id = queue[i];
-    const tiefe = dist.get(id) ?? 0;
-    if (id !== startId && !darfWeiterfuehren(id)) continue;
-
-    for (const next of adj.get(id) ?? []) {
-      // Der globale Identitätsknoten selbst ist für einen Themenexport nur
-      // Rauschen. Kategorien dagegen bleiben als Blatt sichtbar, weil sie eine
-      // echte direkte Beziehung des enthaltenen Eintrags darstellen.
-      if (next === "lukas" || dist.has(next)) continue;
-      dist.set(next, tiefe + 1);
-      if (darfWeiterfuehren(next)) queue.push(next);
-    }
-  }
-
-  return [...dist.entries()]
-    .map(([id, tiefe]) => ({ knoten: index.get(id)!, tiefe }))
-    .sort(
-      (a, b) =>
-        a.tiefe - b.tiefe ||
-        b.knoten.gewicht - a.knoten.gewicht ||
-        a.knoten.titel.localeCompare(b.knoten.titel, "de"),
-    );
+  return [
+    { knoten: root, tiefe: 0 },
+    ...[...direkt]
+      .map((id) => index.get(id))
+      .filter((k): k is Knoten => Boolean(k))
+      .sort(
+        (a, b) =>
+          b.gewicht - a.gewicht ||
+          a.titel.localeCompare(b.titel, "de"),
+      )
+      .map((knoten) => ({ knoten, tiefe: 1 })),
+  ];
 }
 
+function verbindungenVon(g: Gehirn, id: string): string[] {
+  const index = new Map(g.knoten.map((k) => [k.id, k]));
+  const raus: string[] = [];
+  for (const e of g.kanten) {
+    if (e.von === id) {
+      const ziel = index.get(e.nach);
+      if (ziel && ziel.id !== "lukas")
+        raus.push(`${e.art} -> ${ziel.titel}`);
+    } else if (e.nach === id) {
+      const quelle = index.get(e.von);
+      if (quelle && quelle.id !== "lukas")
+        raus.push(`${quelle.titel} -> ${e.art}`);
+    }
+  }
+  return raus;
+}
 function kantenImAuszug(g: Gehirn, ids: Set<string>): Kante[] {
   return g.kanten.filter((e) => ids.has(e.von) && ids.has(e.nach));
 }
 
-function knotenBlock(k: Knoten, tiefe: number): string[] {
+function knotenBlock(g: Gehirn, k: Knoten, tiefe: number): string[] {
   const out = [
     `${tiefe === 0 ? "HAUPTEINTRAG" : `VERBUNDENER EINTRAG · EBENE ${tiefe}`}`,
     k.titel,
@@ -205,6 +196,11 @@ function knotenBlock(k: Knoten, tiefe: number): string[] {
   if (meta.length) {
     out.push("", "Details:");
     for (const [key, value] of meta) out.push(...umbruch(`- ${key}: ${String(value)}`));
+  }
+  const bezuege = verbindungenVon(g, k.id);
+  if (bezuege.length) {
+    out.push("", "Direkte Verbindungen dieses Eintrags:");
+    for (const bezug of bezuege) out.push(...umbruch(`- ${bezug}`));
   }
   out.push("");
   return out;
@@ -227,9 +223,9 @@ export function themenPdf(g: Gehirn, startId: string): {
     root.titel,
     `Stand: ${g.stand}`,
     `Enthalten: ${auszug.length} Eintraege · ${kanten.length} Verbindungen`,
-    `Umfeld: vollständiges zusammenhängendes Themen-Netz (globale Struktur-Hubs ausgenommen)`,
+    `Umfang: gewähltes Thema + alle direkt daran gespeicherten Einträge; deren eigene Verbindungen werden als Kontext aufgeführt`,
     "",
-    ...knotenBlock(root, 0),
+    ...knotenBlock(g, root, 0),
     "VERBINDUNGEN IM AUSZUG",
   ];
 
@@ -241,7 +237,7 @@ export function themenPdf(g: Gehirn, startId: string): {
   }
   lines.push("");
 
-  for (const item of auszug.slice(1)) lines.push(...knotenBlock(item.knoten, item.tiefe));
+  for (const item of auszug.slice(1)) lines.push(...knotenBlock(g, item.knoten, item.tiefe));
 
   const seiten: string[][] = [];
   for (let i = 0; i < lines.length; i += ZEILEN_PRO_SEITE)
