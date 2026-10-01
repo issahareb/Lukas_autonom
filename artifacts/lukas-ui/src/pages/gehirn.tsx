@@ -396,7 +396,7 @@ export default function GehirnSeite() {
 
   async function eintragAlsPdf(k: Knoten) {
     const res = await fetch(
-      `${BASE}/api/lukas/gehirn/export/${encodeURIComponent(k.id)}.pdf`,
+      `${BASE}/api/lukas/gehirn/export/${encodeURIComponent(k.id)}`,
       { headers: authHeaders() },
     );
     if (!res.ok)
