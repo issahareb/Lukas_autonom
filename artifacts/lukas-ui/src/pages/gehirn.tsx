@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Check,
-  ChevronRight,
   CircleHelp,
   Layers3,
   List,
@@ -31,6 +30,9 @@ import {
   type Raum,
 } from "@/components/gehirn/modell";
 import { erschaffeSzene, type Szene } from "@/components/gehirn/szene";
+import { GehirnEintrag } from "@/components/gehirn/eintrag";
+import { useIsMobile } from "@/hooks/use-mobile";
+import * as Dialog from "@radix-ui/react-dialog";
 import "@/components/gehirn/gehirn.css";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -63,7 +65,14 @@ export default function GehirnSeite() {
   const [szeneRevision, setSzeneRevision] = useState(0);
   const [suche, setSuche] = useState("");
   const [region, setRegion] = useState<number | null>(null);
-  const [auswahl, setAuswahl] = useState<string | null>(null);
+  const [navigation, setNavigation] = useState<{
+    id: string | null;
+    verlauf: string[];
+  }>({ id: null, verlauf: [] });
+  const auswahl = navigation.id;
+  const mobil = useIsMobile();
+  const ausloeser = useRef<HTMLElement | null>(null);
+  const ausloeserId = useRef<string | null>(null);
   const [tiefe, setTiefe] = useState(1);
   const [bewegung, setBewegung] = useState(
     () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -124,7 +133,7 @@ export default function GehirnSeite() {
       .then((g) => {
         if (!abort.signal.aborted) {
           setDaten(normalisiere(g));
-          setAuswahl(null);
+          setNavigation({ id: null, verlauf: [] });
         }
       })
       .catch((e) => {
@@ -264,8 +273,22 @@ export default function GehirnSeite() {
     [daten, sichtbar],
   );
   const waehle = useCallback((id: string | null) => {
-    setAuswahl(id);
-    if (id) setSuche("");
+    if (id && !document.querySelector(".gehirn-reader")) {
+      ausloeser.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      ausloeserId.current = id;
+    }
+    setNavigation((vorher) => ({
+      id,
+      verlauf:
+        id && vorher.id && vorher.id !== id
+          ? [...vorher.verlauf, vorher.id]
+          : id
+            ? vorher.verlauf
+            : [],
+    }));
     setTiefe(1);
   }, []);
 
@@ -334,7 +357,7 @@ export default function GehirnSeite() {
   }, []);
 
   const reset = () => {
-    setAuswahl(null);
+    setNavigation({ id: null, verlauf: [] });
     setSuche("");
     setRegion(null);
     setTiefe(1);
@@ -342,7 +365,7 @@ export default function GehirnSeite() {
   };
   const wechseln = (r: number | null) => {
     setRegion(r);
-    setAuswahl(null);
+    setNavigation({ id: null, verlauf: [] });
     szene.current?.fokus(null);
   };
   async function exportieren() {
@@ -376,6 +399,7 @@ export default function GehirnSeite() {
         type="button"
         key={k.id}
         className="gehirn-entry"
+        data-knoten-id={k.id}
         onClick={() => waehle(k.id)}
         aria-pressed={auswahl === k.id}
       >
@@ -390,6 +414,40 @@ export default function GehirnSeite() {
       </button>
     );
   }
+
+  const eintrag = gewaehlt && (
+    <GehirnEintrag
+      knoten={gewaehlt}
+      verbindungen={verbindungen.flatMap((e, i) => {
+        const other = knotenIndex.get(e.von === auswahl ? e.nach : e.von);
+        return other
+          ? [
+              {
+                knoten: other,
+                beziehung: e.von === auswahl ? `→ ${e.art}` : `← ${e.art}`,
+                key: `${other.id}-${i}`,
+              },
+            ]
+          : [];
+      })}
+      zurueck={navigation.verlauf.length > 0}
+      onZurueck={() => {
+        setNavigation((vorher) => ({
+          id: vorher.verlauf.at(-1) ?? null,
+          verlauf: vorher.verlauf.slice(0, -1),
+        }));
+        setTiefe(1);
+      }}
+      onSchliessen={() => waehle(null)}
+      onWaehlen={(id) => {
+        if (!sichtbar.has(id)) setRegion(null);
+        waehle(id);
+      }}
+      tiefe={tiefe}
+      onTiefe={setTiefe}
+      gefiltert={region !== null}
+    />
+  );
 
   return (
     <div className="gehirn-page">
@@ -449,7 +507,7 @@ export default function GehirnSeite() {
                 value={suche}
                 onChange={(e) => {
                   setSuche(e.target.value);
-                  setAuswahl(null);
+                  setNavigation({ id: null, verlauf: [] });
                 }}
                 placeholder="Eine Erinnerung, ein Thema …"
                 aria-label="Im Gehirn suchen"
@@ -702,106 +760,12 @@ export default function GehirnSeite() {
           </footer>
         </section>
         <aside
-          className="gehirn-inspector"
+          className={`gehirn-inspector ${gewaehlt ? "has-selection" : ""}`}
+          hidden={mobil && !!gewaehlt}
           aria-label={gewaehlt ? "Ausgewählter Eintrag" : "Gedächtnis erkunden"}
         >
           {gewaehlt ? (
-            <>
-              <div className="gehirn-inspector-top">
-                <span
-                  className="gehirn-eyebrow"
-                  style={{ color: farbe(gewaehlt) }}
-                >
-                  {ARTEN[gewaehlt.art] ?? gewaehlt.art}
-                </span>
-                <button
-                  type="button"
-                  className="gehirn-icon-button"
-                  onClick={() => waehle(null)}
-                  aria-label="Auswahl schließen"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <h2>{gewaehlt.titel}</h2>
-              {gewaehlt.text && (
-                <p className="gehirn-content">{gewaehlt.text}</p>
-              )}
-              {Object.keys(gewaehlt.daten).length > 0 && (
-                <dl className="gehirn-metadata">
-                  {Object.entries(gewaehlt.daten).map(([key, value]) => (
-                    <div key={key}>
-                      <dt>{key}</dt>
-                      <dd>{String(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              <div className="gehirn-connections-heading">
-                <h3>
-                  Verbindungen <span>{verbindungen.length}</span>
-                </h3>
-                <label>
-                  Umfeld
-                  <select
-                    aria-label="Verbindungstiefe"
-                    value={tiefe}
-                    onChange={(e) => setTiefe(Number(e.target.value))}
-                  >
-                    <option value={1}>1 Ebene</option>
-                    <option value={2}>2 Ebenen</option>
-                  </select>
-                </label>
-              </div>
-              {region !== null && (
-                <p className="gehirn-note">
-                  Der Bereichsfilter begrenzt den Raum. Die Liste zeigt alle
-                  direkten Beziehungen.
-                </p>
-              )}
-              <div className="gehirn-connection-list">
-                {verbindungen.slice(0, limit).map((e, i) => {
-                  const other = knotenIndex.get(
-                    e.von === auswahl ? e.nach : e.von,
-                  );
-                  if (!other) return null;
-                  return (
-                    <button
-                      type="button"
-                      className="gehirn-connection"
-                      key={`${other.id}-${i}`}
-                      onClick={() => {
-                        if (!sichtbar.has(other.id)) setRegion(null);
-                        waehle(other.id);
-                      }}
-                    >
-                      <span style={{ background: farbe(other) }} />
-                      <span>
-                        <small>
-                          {e.von === auswahl ? `→ ${e.art}` : `← ${e.art}`}
-                        </small>
-                        <span>{other.titel}</span>
-                      </span>
-                      <ChevronRight size={15} aria-hidden="true" />
-                    </button>
-                  );
-                })}
-              </div>
-              {!verbindungen.length && (
-                <p className="gehirn-note">
-                  Für diesen Eintrag sind noch keine Beziehungen gespeichert.
-                </p>
-              )}
-              {verbindungen.length > limit && (
-                <button
-                  type="button"
-                  className="gehirn-button"
-                  onClick={() => setLimit((v) => v + 60)}
-                >
-                  Weitere Verbindungen ({verbindungen.length - limit})
-                </button>
-              )}
-            </>
+            !mobil && eintrag
           ) : (
             <>
               <p className="gehirn-eyebrow">
@@ -864,6 +828,45 @@ export default function GehirnSeite() {
           )}
         </aside>
       </div>
+      {mobil && (
+        <Dialog.Root
+          open={!!gewaehlt}
+          onOpenChange={(offen) => {
+            if (!offen) waehle(null);
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Overlay className="gehirn-reader-overlay" />
+            <Dialog.Content
+              className="gehirn-reader gehirn-inspector"
+              aria-describedby={undefined}
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                // Die Entdecken-Liste wird während der Auswahl ersetzt.
+                // Nach dem Schließen ihren neu gerenderten Auslöser finden.
+                const ziel = ausloeser.current?.isConnected
+                  ? ausloeser.current
+                  : (Array.from(
+                      document.querySelectorAll<HTMLElement>(
+                        "[data-knoten-id]",
+                      ),
+                    ).find(
+                      (el) => el.dataset.knotenId === ausloeserId.current,
+                    ) ??
+                    document.querySelector<HTMLElement>(
+                      ".gehirn-search input",
+                    ));
+                ziel?.focus({ preventScroll: true });
+              }}
+            >
+              <Dialog.Title className="gehirn-sr">
+                {gewaehlt?.titel}
+              </Dialog.Title>
+              {eintrag}
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
       <div className="gehirn-sr" role="status" aria-live="polite">
         {gewaehlt
           ? `${gewaehlt.titel} ausgewählt. ${verbindungen.length} direkte Verbindungen.`
