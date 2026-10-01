@@ -96,7 +96,7 @@ export const db = {
 );
 
 await build({
-  entryPoints: ["src/lib/gehirn.ts", "src/lib/zip.ts"],
+  entryPoints: ["src/lib/gehirn.ts", "src/lib/gehirn-pdf.ts", "src/lib/zip.ts"],
   bundle: true,
   format: "esm",
   platform: "node",
@@ -107,6 +107,7 @@ await build({
 });
 
 const { baueGehirn, gehirnVault } = await import(`file://${out}`);
+const { gehirnThemaPdf, themaTeilgraph } = await import(`file://${join(dir, "gehirn-pdf.mjs")}`);
 const { packeZip } = await import(`file://${join(dir, "zip.mjs")}`);
 rmSync(dir, { recursive: true, force: true });
 
@@ -172,6 +173,24 @@ pruefe("'Higgsfield' und 'higgsfield' ergeben EIN Thema", higgs.length === 1);
 const anHiggs = g.kanten.filter((k) => k.nach === "thema/higgsfield").map((k) => nach.get(k.von).art);
 pruefe("die Erinnerung hängt daran", anHiggs.includes("erinnerung"));
 pruefe("und der Agent auch — das ist die Brücke", anHiggs.includes("agent"));
+
+const higgsTeil = themaTeilgraph(g, "thema/higgsfield");
+pruefe("Themenexport enthält den Themenknoten", higgsTeil.thema.id === "thema/higgsfield");
+pruefe(
+  "Themenexport enthält die vollständige verbundene Erinnerung",
+  higgsTeil.knoten.some((k) => k.id === "erinnerung/1" && k.text.includes("Video-Workflow")),
+);
+pruefe(
+  "Themenexport enthält den verbundenen Agenten",
+  higgsTeil.knoten.some((k) => k.id === "agent/7"),
+);
+const higgsPdf = gehirnThemaPdf(g, "thema/higgsfield");
+pruefe("Themenexport ist eine echte PDF-Datei", higgsPdf.subarray(0, 8).toString("latin1") === "%PDF-1.4");
+const pdfText = higgsPdf.toString("latin1");
+pruefe("PDF enthält den Themennamen", pdfText.includes("Higgsfield"));
+pruefe("PDF enthält den vollständigen Erinnerungstext", pdfText.includes("Issa arbeitet mit Higgsfield an einem Video-Workflow."));
+pruefe("PDF enthält die Beziehungen", pdfText.includes("Verbindungen"));
+pruefe("PDF hat einen vollständigen Trailer", pdfText.includes("%%EOF"));
 
 const novaAussage = g.kanten.find((k) => k.nach === "aussage/1");
 pruefe("die Aussage über Nova Prime hat eine Quelle", !!novaAussage);
