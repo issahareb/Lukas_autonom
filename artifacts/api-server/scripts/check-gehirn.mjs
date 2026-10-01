@@ -167,8 +167,10 @@ pruefe("Themen-PDF ist nicht leer", pdfExport.pdf.length > 1000);
 pruefe("Themen-PDF enthält verbundene Einträge", pdfExport.knoten >= 3 && pdfExport.kanten >= 2);
 const pdfText = pdfExport.pdf.toString("latin1");
 pruefe("Themen-PDF enthält den vollständigen Erinnerungstext", pdfText.includes("Issa arbeitet mit Higgsfield an einem Video-Workflow."));
-pruefe("Themen-PDF folgt dem Themen-Netz auch tiefer als zwei Ebenen", pdfText.includes("Continuity-Notiz liegt mehr als zwei Kanten vom Higgsfield-Thema entfernt."));
+pruefe("Themen-PDF enthält alle direkt am Thema gespeicherten Inhalte", pdfText.includes("Issa arbeitet mit Higgsfield an einem Video-Workflow."));
+pruefe("Themen-PDF springt nicht über generische Tags in fremde Erinnerungen", !pdfText.includes("Continuity-Notiz liegt mehr als zwei Kanten vom Higgsfield-Thema entfernt."));
 pruefe("Themen-PDF springt nicht über Kategorien in fremde Erinnerungen", !pdfText.includes("Nummer +49152... hat Adminrechte."));
+pruefe("Themen-PDF listet die direkten Verbindungen eines enthaltenen Eintrags als Kontext", pdfText.includes("Direkte Verbindungen dieses Eintrags:"));
 pruefe("Themen-PDF enthält die Beziehungsliste", pdfText.includes("VERBINDUNGEN IM AUSZUG"));
 pruefe("Themen-PDF hat einen PDF-Dateinamen", pdfExport.dateiname.endsWith(".pdf"));
 
