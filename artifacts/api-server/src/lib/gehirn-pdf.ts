@@ -2,8 +2,6 @@ import type { Gehirn, Kante, Knoten } from "./gehirn";
 
 type ExportKnoten = { knoten: Knoten; tiefe: number };
 
-const MAX_KNOTEN = 120;
-const MAX_TIEFE = 2;
 const SEITEN_BREITE = 595;
 const SEITEN_HOEHE = 842;
 const RAND_X = 48;
@@ -152,20 +150,33 @@ function sammle(g: Gehirn, startId: string): ExportKnoten[] {
     adj.set(e.nach, b);
   }
 
+  const darfWeiterfuehren = (id: string) => {
+    const k = index.get(id);
+    if (!k) return false;
+    // Diese Knoten sind Struktur-Hubs, keine inhaltlichen Themenbrücken:
+    // - "lukas" würde fast das gesamte Gedächtnis verbinden.
+    // - Kategorien wie "arbeit" oder "conversation" verbinden hunderte
+    //   ansonsten unabhängige Erinnerungen.
+    // Wir dürfen sie als Blatt im Export zeigen, aber niemals durch sie in
+    // andere Themen weiterlaufen.
+    return id !== "lukas" && k.art !== "kategorie";
+  };
+
   const dist = new Map<string, number>([[startId, 0]]);
   const queue = [startId];
-  for (let i = 0; i < queue.length && dist.size < MAX_KNOTEN; i++) {
+
+  for (let i = 0; i < queue.length; i++) {
     const id = queue[i];
     const tiefe = dist.get(id) ?? 0;
-    if (tiefe >= MAX_TIEFE) continue;
-    // "lukas" verbindet sehr viele Bereiche. Als Zwischenknoten würde er einen
-    // einzelnen Themenexport praktisch zum Gesamtexport aufblasen.
-    if (id === "lukas" && id !== startId) continue;
+    if (id !== startId && !darfWeiterfuehren(id)) continue;
+
     for (const next of adj.get(id) ?? []) {
-      if (dist.has(next)) continue;
+      // Der globale Identitätsknoten selbst ist für einen Themenexport nur
+      // Rauschen. Kategorien dagegen bleiben als Blatt sichtbar, weil sie eine
+      // echte direkte Beziehung des enthaltenen Eintrags darstellen.
+      if (next === "lukas" || dist.has(next)) continue;
       dist.set(next, tiefe + 1);
-      queue.push(next);
-      if (dist.size >= MAX_KNOTEN) break;
+      if (darfWeiterfuehren(next)) queue.push(next);
     }
   }
 
@@ -216,7 +227,7 @@ export function themenPdf(g: Gehirn, startId: string): {
     root.titel,
     `Stand: ${g.stand}`,
     `Enthalten: ${auszug.length} Eintraege · ${kanten.length} Verbindungen`,
-    `Umfeld: bis ${MAX_TIEFE} Ebenen, max. ${MAX_KNOTEN} Eintraege`,
+    `Umfeld: vollständiges zusammenhängendes Themen-Netz (globale Struktur-Hubs ausgenommen)`,
     "",
     ...knotenBlock(root, 0),
     "VERBINDUNGEN IM AUSZUG",
