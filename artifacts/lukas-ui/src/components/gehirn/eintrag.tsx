@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronRight, Copy, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, Check, ChevronRight, Copy, Loader2, X } from "lucide-react";
 import { ARTEN, BEREICHE, bereich, type Knoten } from "./modell";
 
 type Verbindung = { knoten: Knoten; beziehung: string; key: string };
@@ -13,6 +13,7 @@ type Props = {
   tiefe: number;
   onTiefe: (tiefe: number) => void;
   gefiltert: boolean;
+  onPdfExport: () => Promise<void>;
 };
 const farbe = (k: Knoten) =>
   k.art === "identitaet" ? "#e8f2ff" : BEREICHE[bereich(k.art)].farbe;
@@ -23,6 +24,7 @@ export function GehirnEintrag(props: Props) {
   const [ansicht, setAnsicht] = useState<"inhalt" | "verbindungen">("inhalt");
   const [kopiert, setKopiert] = useState(false);
   const [fehler, setFehler] = useState("");
+  const [pdfLaedt, setPdfLaedt] = useState(false);
   const [limit, setLimit] = useState(40);
   const body = useRef<HTMLDivElement>(null);
   const copySequence = useRef(0);
@@ -32,6 +34,7 @@ export function GehirnEintrag(props: Props) {
     setAnsicht("inhalt");
     setKopiert(false);
     setFehler("");
+    setPdfLaedt(false);
     setLimit(40);
     if (body.current) body.current.scrollTop = 0;
   }, [knoten.id]);
@@ -55,6 +58,22 @@ export function GehirnEintrag(props: Props) {
         setFehler(
           "Kopieren ist hier nicht verfügbar. Du kannst den Text markieren und kopieren.",
         );
+    }
+  }
+
+  async function pdfExportieren() {
+    setPdfLaedt(true);
+    setFehler("");
+    try {
+      await props.onPdfExport();
+    } catch (err) {
+      setFehler(
+        err instanceof Error
+          ? err.message
+          : "PDF konnte nicht heruntergeladen werden.",
+      );
+    } finally {
+      setPdfLaedt(false);
     }
   }
 
@@ -118,6 +137,21 @@ export function GehirnEintrag(props: Props) {
               )}
               {kopiert ? "Kopiert" : "Text kopieren"}
             </button>
+            {knoten.art === "thema" && (
+              <button
+                type="button"
+                className="gehirn-button gehirn-copy"
+                onClick={pdfExportieren}
+                disabled={pdfLaedt}
+              >
+                {pdfLaedt ? (
+                  <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <ArrowDownToLine size={16} aria-hidden="true" />
+                )}
+                {pdfLaedt ? "PDF wird erstellt …" : "Thema als PDF"}
+              </button>
+            )}
             <span className="gehirn-sr" role="status">
               {kopiert ? "Text kopiert." : ""}
             </span>
