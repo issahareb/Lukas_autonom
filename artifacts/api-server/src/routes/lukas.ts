@@ -542,7 +542,7 @@ router.get("/lukas/gehirn", async (_req, res) => {
   }
 });
 
-router.get("/lukas/gehirn/export/:id.pdf", async (req, res) => {
+router.get("/lukas/gehirn/export/:id", async (req, res) => {
   try {
     const gehirn = await baueGehirn();
     const id = String(req.params.id || "");
