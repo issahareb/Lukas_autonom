@@ -9,7 +9,7 @@ import { fuehleWerkzeug } from "./emotion-engine";
 import { logger } from "./logger";
 import { fehlerText, netzDiagnose } from "./fehlertext";
 import { recordDebugEvent } from "./debug-log";
-import { routeLukasModel, directRoute } from "./ai/model-router";
+import { routeLukasModel, directRoute, previousRoutingTask } from "./ai/model-router";
 import { callLukasModel } from "./ai/model-client";
 import { renderLukasVoice } from "./ai/voice-renderer";
 import { Arbeitsschleife } from "./arbeitsschleife";
@@ -99,8 +99,7 @@ export async function runLukasTurn(opts: {
   ];
 
   const textPieces: string[] = [];
-  const previousUserText = opts.history.filter((m) => m.role === "user" && typeof m.content === "string")
-    .map((m) => String(m.content)).filter((s) => s !== opts.userText).at(-1);
+  const previousUserText = previousRoutingTask(opts.history, opts.userText);
   const usedTools: string[] = [];
   let hasAttachments = historyHasMultimodal(opts.history);
 

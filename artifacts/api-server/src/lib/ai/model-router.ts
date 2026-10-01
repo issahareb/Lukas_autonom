@@ -89,6 +89,17 @@ function profileFor(text: string): ModelProfile {
   if (text.length > 1200 || COMPLEX.test(text)) return "reasoning";
   return text.length < 260 && !/[?].*[?]/s.test(text) ? "fast" : "general";
 }
+/** Letzten inhaltlichen Auftrag vor der aktuellen Nachricht finden, auch nach mehreren "weiter". */
+export function previousRoutingTask(
+  history: Array<{ role: string; content?: unknown }>, currentText: string,
+): string | undefined {
+  const users = history.filter((m) => m.role === "user").map((m) =>
+    typeof m.content === "string" ? m.content : Array.isArray(m.content)
+      ? m.content.filter((p: any) => p?.type === "text").map((p: any) => String(p.text ?? "")).join("\n") : "",
+  );
+  if (users.at(-1)?.trim() === currentText.trim()) users.pop();
+  return users.reverse().find((text) => text.trim() && !CONTINUATION.test(text.trim()));
+}
 export function routeLukasModel(input: RouteInput): ModelRoute {
   const text = input.userText ?? "";
   const tools = new Set(input.usedTools ?? []);

@@ -14,7 +14,7 @@ import { recordDebugEvent } from "../lib/debug-log";
 import { attachmentKind } from "./attachments";
 import { extractVideoFrames } from "../lib/video-frames";
 import { rememberAssistantMessage, rememberUserMessage } from "../lib/conversation-memory";
-import { routeLukasModel } from "../lib/ai/model-router";
+import { routeLukasModel, previousRoutingTask } from "../lib/ai/model-router";
 import { callLukasModel } from "../lib/ai/model-client";
 import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
@@ -345,7 +345,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     const internalDraftPieces: string[] = [];
     const usedTools: string[] = [];
     const schritte: ToolStep[] = [];
-    const previousUserText = history.filter((m) => m.role === "user").slice(0, -1).at(-1)?.content;
+    const previousUserText = previousRoutingTask(history, String(content));
     const attachmentKinds = pendingAttachments.map((a) => attachmentKind(a.mimeType, a.filename));
 
     /*
@@ -391,7 +391,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         userText: String(content),
         previousUserText,
         hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
-        attachmentKinds,
+        attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
         usedTools,
         iteration,
       });
@@ -577,7 +577,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
             userText: String(content),
         previousUserText,
             hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
-            attachmentKinds,
+            attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
             usedTools,
             iteration: schleife.rundenZahl,
           }),

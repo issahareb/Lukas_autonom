@@ -19,7 +19,7 @@ await build({
     b.onResolve({ filter: /(^|\/)(logger|tagesbudget)$/ }, () => ({ path: stub }));
   } }], logLevel: "silent",
 });
-const { routeLukasModel, directRoute, callLukasModel, fitLukasContext, renderLukasVoice, isModelBroken } =
+const { routeLukasModel, previousRoutingTask, directRoute, callLukasModel, fitLukasContext, renderLukasVoice, isModelBroken } =
   await import(pathToFileURL(join(dir, "test.mjs")));
 const savedEnv = { ...process.env };
 let checks = 0;
@@ -47,6 +47,10 @@ try {
   equal("GENERAL auf Terra", directRoute("general").model, "gpt-5.6-terra");
   for (const profile of ["fast", "general", "reasoning", "code", "vision", "long_context"]) ok("Astra nur explizit: " + profile, !directRoute(profile).model.includes("astra"));
   equal("Code-Fortsetzung", routeLukasModel({ userText: "Ja, mach das", previousUserText: "Implementiere den Cache in router.ts" }).profile, "code");
+  const continued = [{ role: "user", content: "Fix router.ts" }, { role: "assistant", content: "Entwurf" }, { role: "user", content: "weiter" }, { role: "user", content: "weiter" }];
+  equal("Mehrere Fortsetzungen behalten Auftrag", previousRoutingTask(continued, "weiter"), "Fix router.ts");
+  equal("Wiederholter gleicher echter Auftrag bleibt erhalten", previousRoutingTask([{ role: "user", content: "Fix router.ts" }, { role: "user", content: "Fix router.ts" }], "Fix router.ts"), "Fix router.ts");
+  equal("Textanhang plus Werkzeugbild nutzt Vision", routeLukasModel({ userText: "weiter", hasAttachments: true, attachmentKinds: ["text", "image"] }).profile, "vision");
   equal("Neues Danke bleibt billig", routeLukasModel({ userText: "Danke!", previousUserText: "Analysiere unsere Strategie" }).profile, "fast");
   equal("Text braucht keine Vision", routeLukasModel({ userText: "Fasse das kurz zusammen", hasAttachments: true, attachmentKinds: ["text"] }).profile, "fast");
   equal("Bild bleibt sichtbar", routeLukasModel({ userText: "Was siehst du?", attachmentKinds: ["image"] }).profile, "vision");
@@ -126,6 +130,10 @@ try {
   equal("Aktuelle Frage samt Werkzeugpaaren", packed.slice(-transaction.length), transaction);
   ok("Kein versteckter 20k-Mindestrest", JSON.stringify(packed).length < 12000);
   equal("Originalarchiv vollstaendig", context.length, 7);
+  const screenshot = { role: "user", content: [{ type: "text", text: "Browser \u2009[Werkzeugbild]" }, { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } }] };
+  const withScreenshot = fitLukasContext([...context, screenshot]);
+  ok("Werkzeugbild behaelt urspruengliche Nutzerfrage", withScreenshot.some((m) => m.content === "CURRENT_QUESTION"));
+  equal("Werkzeugbild behaelt beide Ergebnisse", withScreenshot.filter((m) => m.role === "tool").length, 2);
   process.env.LUKAS_CONTEXT_MAX_CHARS = "NaN";
   equal("Ungueltiges Kontextlimit", fitLukasContext(messages), messages);
   console.log("OK — " + checks + " Routing-/Kostenpruefungen: Profile, Request-Payloads, Fallback, Sperre, Politur, Buchhaltung, Kontext.");

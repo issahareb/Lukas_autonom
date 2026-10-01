@@ -1,5 +1,6 @@
 import type OpenAI from "openai";
 import { logger } from "../logger";
+import { BILD_MARKE } from "../bildablage";
 
 /*
  * Wie viel Gespraech ueberhaupt mitgeschickt wird.
@@ -71,7 +72,9 @@ export function fitLukasContext(
   // zusammengehoerigen Werkzeugaufrufe/-ergebnisse bleiben beieinander.
   const groups: typeof nonSystem[] = [];
   for (const message of nonSystem) {
-    if (message.role === "user" || groups.length === 0) groups.push([]);
+    const toolImage = Array.isArray(message.content) && message.content.some((p: any) =>
+      p?.type === "text" && String(p.text ?? "").includes(BILD_MARKE));
+    if ((message.role === "user" && !toolImage) || groups.length === 0) groups.push([]);
     groups[groups.length - 1].push(message);
   }
   const keptGroups: typeof groups = [];
