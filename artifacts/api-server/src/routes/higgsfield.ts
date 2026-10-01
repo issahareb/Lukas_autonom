@@ -2,7 +2,6 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { mediaJobsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { openai } from "@workspace/integrations-openai-ai";
 import { HIGGSFIELD_PROMPT_SYSTEM } from "../lib/lukas-soul.js";
 import { recordEmotion } from "../lib/emotion-engine";
 import { logger } from "../lib/logger";
@@ -15,7 +14,8 @@ import {
   pollMcpJob,
   importMediaUrl,
 } from "../lib/mcp";
-import { directModel } from "../lib/ai/model-router";
+import { directRoute } from "../lib/ai/model-router";
+import { callLukasModel } from "../lib/ai/model-client";
 import {
   resolveHiggsfieldModel,
   higgsfieldMediaType,
@@ -48,16 +48,16 @@ ${model ? `GEWÜNSCHTES MODELL: ${model}` : ""}
 Erstelle einen cinematischen, detaillierten Prompt auf Englisch der das Beste aus Higgsfield herausholt.
 Antworte NUR mit dem JSON-Objekt.`;
 
-    const response = await openai.chat.completions.create({
-      model: directModel("general"),
-      max_completion_tokens: 8192,
+    const response = await callLukasModel({
+      route: directRoute("general"),
+      maxTokens: 4096,
       messages: [
         { role: "system", content: HIGGSFIELD_PROMPT_SYSTEM },
         { role: "user", content: userPrompt },
       ],
     });
 
-    const text = response.choices[0]?.message?.content ?? "";
+    const text = response.content;
 
     let parsed: Record<string, unknown>;
     try {

@@ -10,8 +10,8 @@
  * WARUM TOKENS UND NICHT EURO. Preise pro Modell aendern sich, und sie hier
  * fest einzutragen hiesse, eine Zahl zu behaupten, die morgen falsch ist.
  * Tokens sind das, was tatsaechlich gemessen wird. Wer Euro sehen will,
- * traegt die Preise ueber LUKAS_PREIS_<MODELL> ein — dann wird gerechnet,
- * sonst nicht.
+ * braucht die jeweils gueltigen Providerpreise. Dieses Modul misst Tokens,
+ * keine Eurobetraege.
  *
  * ZWEI SCHWELLEN, und die zweite ist absichtlich aus.
  *
@@ -41,7 +41,7 @@ export function heute(): string {
 
 /** Kostenlose Anbieter zaehlen nicht mit. */
 function kostenpflichtig(provider: string): boolean {
-  return provider !== "local";
+  return provider !== "local" || process.env.LUKAS_LOCAL_BILLABLE === "true";
 }
 
 export async function verbucheTag(input: {
@@ -101,7 +101,7 @@ export type Tagesstand = {
 
 export async function tagesstand(): Promise<Tagesstand> {
   const tag = heute();
-  let zeilen: Array<{ provider: string; model: string; rein: number; raus: number; aufrufe: number }> = [];
+  let zeilen: Array<{ provider: string; model: string; rein: number; raus: number; ausCache: number; inCache: number; aufrufe: number }> = [];
   try {
     zeilen = await db
       .select({
@@ -109,6 +109,8 @@ export async function tagesstand(): Promise<Tagesstand> {
         model: tageskostenTable.model,
         rein: tageskostenTable.rein,
         raus: tageskostenTable.raus,
+        ausCache: tageskostenTable.ausCache,
+        inCache: tageskostenTable.inCache,
         aufrufe: tageskostenTable.aufrufe,
       })
       .from(tageskostenTable)
@@ -117,7 +119,8 @@ export async function tagesstand(): Promise<Tagesstand> {
     logger.debug({ err }, "Tagesstand nicht lesbar");
   }
 
-  const tokens = zeilen.reduce((s, z) => s + z.rein + z.raus, 0);
+  const summe = (z: typeof zeilen[number]) => z.rein + z.raus + (z.ausCache ?? 0) + (z.inCache ?? 0);
+  const tokens = zeilen.reduce((s, z) => s + summe(z), 0);
   const aufrufe = zeilen.reduce((s, z) => s + z.aufrufe, 0);
   const warnung = WARNUNG();
   const stopp = STOPP();
@@ -131,7 +134,7 @@ export async function tagesstand(): Promise<Tagesstand> {
     ueberWarnung: warnung > 0 && tokens >= warnung,
     ueberStopp: stopp > 0 && tokens >= stopp,
     jeModell: zeilen
-      .map((z) => ({ model: z.model, provider: z.provider, tokens: z.rein + z.raus, aufrufe: z.aufrufe }))
+      .map((z) => ({ model: z.model, provider: z.provider, tokens: summe(z), aufrufe: z.aufrufe }))
       .sort((a, b) => b.tokens - a.tokens),
   };
 }

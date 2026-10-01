@@ -14,7 +14,7 @@ import { recordDebugEvent } from "../lib/debug-log";
 import { attachmentKind } from "./attachments";
 import { extractVideoFrames } from "../lib/video-frames";
 import { rememberAssistantMessage, rememberUserMessage } from "../lib/conversation-memory";
-import { routeLukasModel } from "../lib/ai/model-router";
+import { routeLukasModel, previousRoutingTask } from "../lib/ai/model-router";
 import { callLukasModel } from "../lib/ai/model-client";
 import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
@@ -345,6 +345,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     const internalDraftPieces: string[] = [];
     const usedTools: string[] = [];
     const schritte: ToolStep[] = [];
+    const previousUserText = previousRoutingTask(history, String(content));
     const attachmentKinds = pendingAttachments.map((a) => attachmentKind(a.mimeType, a.filename));
 
     /*
@@ -388,8 +389,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
         userText: String(content),
+        previousUserText,
         hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
-        attachmentKinds,
+        attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
         usedTools,
         iteration,
       });
@@ -403,6 +405,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         messages: convo,
       });
 
+      schleife.verbucht(result.usage);
       if (result.content) internalDraftPieces.push(result.content);
       if (result.toolCalls.length === 0) {
         nochAmArbeiten = false;
@@ -421,8 +424,6 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
 
       // Erst nach den Ergebnissen einfuegen: zwischen Aufruf und Ergebnis darf
       // nichts stehen, sonst weist die API den ganzen Aufruf zurueck.
-      // Was dieser Aufruf gekostet hat, zaehlt aufs Budget dieses Zuges.
-      schleife.verbucht(result.usage);
 
       const hinweise = schleife.hinweise(result.toolCalls);
 
@@ -574,8 +575,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         cacheKey: `lukas-${convId}`,
           route: routeLukasModel({
             userText: String(content),
+        previousUserText,
             hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
-            attachmentKinds,
+            attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
             usedTools,
             iteration: schleife.rundenZahl,
           }),
@@ -590,6 +592,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
             },
           ],
         });
+        schleife.verbucht(letzte.usage);
         if (letzte.content) abschluss = `${draft}\n\n${letzte.content}`.trim();
       } catch (err) {
         logger.warn({ err, conversationId: convId }, "Abschlussrunde fehlgeschlagen");

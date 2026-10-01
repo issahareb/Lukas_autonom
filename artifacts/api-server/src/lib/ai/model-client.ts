@@ -3,7 +3,8 @@ import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../logger";
 import { fitLukasContext } from "./context-window";
 import type { ModelRoute } from "./model-router";
-import { localBaseUrl } from "./model-router";
+import { fallbackRoutes, localBaseUrl, providerAvailable } from "./model-router";
+import { verdichteWerkzeugErgebnisse } from "./verdichten";
 import { CACHE_TRENNER, ohneTrenner, systemBloecke } from "./cache-marke";
 
 export type LukasToolCall = {
@@ -398,7 +399,7 @@ function merkeVerbrauch(model: string, usage: any, provider = "unbekannt"): { re
       ausCache: cache.gelesen,
       inCache: cache.geschrieben,
     }),
-  );
+  ).catch((err) => logger.warn({ err }, "Tagesverbrauch nicht gebucht"));
 
   // Fuer das Budget zaehlt der ganze Eingang, auch der gecachte Teil: guenstiger
   // heisst nicht kostenlos.
@@ -421,6 +422,25 @@ export function verbrauchsUebersicht(): Array<{
     .sort((a, b) => b.rein + b.raus - (a.rein + a.raus));
 }
 
+const OUTPUT_LIMITS: Record<ModelRoute["profile"], number> = {
+  fast: 2048, general: 4096, vision: 4096, reasoning: 16384, code: 16384, long_context: 16384,
+};
+function positiveInteger(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) || undefined : undefined;
+}
+function outputLimit(input: CallInput): number {
+  return positiveInteger(input.maxTokens) ??
+    positiveInteger(process.env["LUKAS_MAX_OUTPUT_TOKENS_" + input.route.profile.toUpperCase()]) ??
+    positiveInteger(process.env.LUKAS_MAX_OUTPUT_TOKENS) ?? OUTPUT_LIMITS[input.route.profile];
+}
+function reasoningEffort(route: ModelRoute): string | undefined {
+  if (!/^gpt-(?:5|6)(?:[.-]|$)/.test(route.model) || /chat-latest/.test(route.model)) return undefined;
+  const configured = process.env["LUKAS_REASONING_EFFORT_" + route.profile.toUpperCase()]?.trim();
+  if (configured && ["low", "medium", "high"].includes(configured)) return configured;
+  return ["fast", "general", "vision"].includes(route.profile) ? "low" : "medium";
+}
 async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   /*
    * Lukas ist ein Tool-Agent. Die 5.6-Reasoning-Modelle unterstuetzen Function
@@ -435,7 +455,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
      * teilen sich Denken und Antwort dasselbe Budget. Deshalb hoeher, und per
      * Variable nachstellbar.
      */
-    max_output_tokens: input.maxTokens ?? Number(process.env.LUKAS_MAX_OUTPUT_TOKENS ?? 16384),
+    max_output_tokens: outputLimit(input),
   };
   /*
    * OpenAI cached Praefixe ab etwa 1024 Token von selbst — aber nur, wenn
@@ -447,6 +467,8 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
    * Praefix, und genau die sollen sich treffen.
    */
   request.prompt_cache_key = input.cacheKey ?? "lukas";
+  const effort = reasoningEffort(input.route);
+  if (effort) request.reasoning = { effort };
 
   const tools = toResponsesTools(input.tools);
   if (tools.length) request.tools = tools;
@@ -550,7 +572,7 @@ async function callAnthropic(input: CallInput): Promise<LukasModelResult> {
 
   const body: any = {
     model: input.route.model,
-    max_tokens: input.maxTokens ?? 8192,
+    max_tokens: outputLimit(input),
     system: systemBloecke_,
     messages: converted.messages,
   };
@@ -622,7 +644,7 @@ async function callLocal(input: CallInput): Promise<LukasModelResult> {
   const body: any = {
     model: input.route.model,
     messages: input.messages,
-    max_tokens: input.maxTokens ?? 4096,
+    max_tokens: outputLimit(input),
     stream: false,
   };
   if (input.tools?.length) body.tools = input.tools;
@@ -675,7 +697,7 @@ async function callLocal(input: CallInput): Promise<LukasModelResult> {
 async function callGoogle(input: CallInput): Promise<LukasModelResult> {
   const body: any = {
     model: input.route.model,
-    max_tokens: input.maxTokens ?? 8192,
+    max_tokens: outputLimit(input),
     messages: input.messages,
     stream: false,
   };
@@ -714,128 +736,53 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
   };
 }
 
-/** Ein gemeinsamer Modell-Aufruf. Provider sind Rechenkerne, nicht Identitaeten. */
+/** Kontext, Profilgrenzen, Provider und Buchhaltung fuer alle Kanaele. */
 export async function callLukasModel(input: CallInput): Promise<LukasModelResult> {
-  // Die vollstaendige Historie bleibt persistent in DB/Memory. Nur die aktive
-  // Payload wird bei sehr langen Threads auf das Provider-Fenster gepackt.
-  const prepared: CallInput = { ...input, messages: fitLukasContext(input.messages) };
-
-  /*
-   * NUR Anthropic kennt die Trennmarke. Bei allen anderen wird sie hier
-   * entfernt, BEVOR irgendein Anbieterpfad sie zu sehen bekommt.
-   *
-   * An genau einer Stelle, nicht in jedem Pfad einzeln: eine Marke, die
-   * durchrutscht, steht mitten im Prompt und richtet dort still Schaden an —
-   * kein Fehler, keine Ausnahme, nur ein Modell, das eine sinnlose Zeile liest
-   * und sich fragt, was sie bedeutet. Genau die Sorte Fehler, die man erst
-   * bemerkt, wenn die Antworten seltsam werden.
-   *
-   * Auch bei OpenAI kostet das nichts: dort laeuft das Zwischenspeichern
-   * automatisch ueber den laengsten passenden Praefix, ganz ohne Marken.
-   */
-  const ohne: CallInput = {
-    ...prepared,
-    messages: prepared.messages.map((m: any) =>
-      typeof m?.content === "string" && m.content.includes(CACHE_TRENNER)
-        ? { ...m, content: ohneTrenner(m.content) }
-        : m,
-    ),
-  };
-
-  try {
-    if (prepared.route.provider === "anthropic") return await callAnthropic(prepared);
-    if (prepared.route.provider === "google") return await callGoogle(ohne);
-    if (prepared.route.provider === "local") return await callLocal(ohne);
-    return await callOpenAI(ohne);
-  } catch (err) {
-    logger.warn(
-      {
-        err,
-        provider: prepared.route.provider,
-        model: prepared.route.model,
-        profile: prepared.route.profile,
-      },
-      "Lukas provider call failed",
-    );
-    if (prepared.route.provider !== "openai") {
-      const fallback: ModelRoute = {
-        provider: "openai",
-        model: process.env.LUKAS_CORE_MODEL ?? "gpt-4o",
-        profile: prepared.route.profile,
-        reason: `Fallback nach ${prepared.route.provider}-Fehler`,
-      };
-      // Exakt dieselbe vorbereitete Lukas-Historie geht an den Fallback.
-      return await callOpenAI({ ...ohne, route: fallback });
+  const messages = fitLukasContext(verdichteWerkzeugErgebnisse(input.messages));
+  const clean = messages.map((m: any) =>
+    typeof m?.content === "string" && m.content.includes(CACHE_TRENNER)
+      ? { ...m, content: ohneTrenner(m.content) } : m,
+  );
+  const routes = [input.route, ...fallbackRoutes(input.route)];
+  let lastError: unknown = new Error("Kein konfiguriertes, erreichbares Modell fuer " + input.route.profile);
+  for (const route of routes) {
+    if (!providerAvailable(route.provider) || isModelBroken(route.model, route.provider)) continue;
+    const prepared = { ...input, route, messages: route.provider === "anthropic" ? messages : clean };
+    try {
+      if (route.provider === "anthropic") return await callAnthropic(prepared);
+      if (route.provider === "google") return await callGoogle(prepared);
+      if (route.provider === "local") return await callLocal(prepared);
+      return await callOpenAI(prepared);
+    } catch (err) {
+      lastError = err;
+      const unavailable = isModelUnavailable(err);
+      if (unavailable) markModelBroken(route, err);
+      logger.warn({ err, ...route }, "Lukas provider call failed");
+      // Auth-/Budget-/Rate-Limit-/Payloadfehler loest ein Modellwechsel nicht.
+      if (route.provider === "openai" && !unavailable) throw err;
     }
-
-    /*
-     * OpenAI-Modell nicht nutzbar — z.B. weil der Account es nicht
-     * freigeschaltet hat oder die ID nicht mehr existiert.
-     *
-     * Vorher flog der Fehler hier ungebremst durch und riss den kompletten Zug
-     * mit: im Chat stand nur noch "Hmm, da ist etwas schiefgelaufen". Genau so
-     * ist der oeffentliche Chat schon einmal ausgefallen, nachdem eine neue
-     * Modell-ID eingetragen wurde, die der Account nicht hatte.
-     *
-     * Jetzt: einmal auf den Core zurueckfallen und die kaputte ID fuer eine
-     * Weile merken, damit nicht jeder Aufruf erneut in denselben Fehler
-     * laeuft. Eine falsche Modell-ID kostet damit Qualitaet, nicht die
-     * Funktion.
-     */
-    const core = process.env.LUKAS_CORE_MODEL?.trim() || "gpt-4o";
-    if (prepared.route.model !== core && isModelUnavailable(err)) {
-      markModelBroken(prepared.route.model, err);
-      return await callOpenAI({
-        ...prepared,
-        route: {
-          provider: "openai",
-          model: core,
-          profile: prepared.route.profile,
-          reason: `Fallback: ${prepared.route.model} nicht nutzbar`,
-        },
-      });
-    }
-    throw err;
   }
+  throw lastError;
 }
-
-/*
- * Modelle, die dieser Account gerade nicht nutzen kann. Nur im Speicher und
- * mit Ablauf: nach einem Neustart oder einer Stunde wird es erneut versucht —
- * eine Freischaltung soll nicht bis zum naechsten Deploy unbemerkt bleiben.
- */
 const brokenModels = new Map<string, number>();
 const BROKEN_TTL_MS = 60 * 60 * 1000;
-
-export function isModelBroken(model: string): boolean {
-  const until = brokenModels.get(model);
+export function isModelBroken(model: string, provider = "openai"): boolean {
+  const key = provider + ":" + model;
+  const until = brokenModels.get(key);
   if (until === undefined) return false;
-  if (Date.now() > until) {
-    brokenModels.delete(model);
-    return false;
-  }
+  if (Date.now() >= until) { brokenModels.delete(key); return false; }
   return true;
 }
-
-function markModelBroken(model: string, err: unknown): void {
-  brokenModels.set(model, Date.now() + BROKEN_TTL_MS);
-  logger.error(
-    { model, err },
-    "Modell nicht nutzbar — Lukas arbeitet vorerst mit dem Core-Modell weiter",
-  );
+function markModelBroken(route: ModelRoute, err: unknown): void {
+  brokenModels.set(route.provider + ":" + route.model, Date.now() + BROKEN_TTL_MS);
+  logger.warn({ ...route, err }, "Modell eine Stunde uebersprungen; profiltreuer Ersatz wird versucht");
 }
-
-/** Fehlerbilder, bei denen ein anderes Modell nicht hilft, dieses aber tot ist. */
 function isModelUnavailable(err: unknown): boolean {
-  const status = (err as { status?: number })?.status;
-  const message = String((err as { message?: string })?.message ?? "").toLowerCase();
-  if (status === 404) return true;
-  if (status === 403 && message.includes("model")) return true;
-  return (
-    message.includes("does not exist") ||
-    message.includes("do not have access") ||
-    message.includes("unknown model") ||
-    message.includes("unsupported model") ||
-    message.includes("invalid model")
-  );
+  const e = err as { status?: number; code?: string; error?: { code?: string }; message?: string };
+  const message = String(e?.message ?? "").toLowerCase();
+  const code = e?.code ?? e?.error?.code;
+  if (code === "model_not_found" || code === "invalid_model") return true;
+  if (!message.includes("model")) return false;
+  return e?.status === 404 || e?.status === 403 ||
+    /does not exist|do not have access|unknown model|unsupported model|invalid model|model not found/.test(message);
 }

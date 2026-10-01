@@ -86,6 +86,18 @@ await verbucheTag({ provider: "anthropic", model: "claude", rein: 300, raus: 50 
   pruefe("das lokale Modell zählt nicht aufs Budget", (await tagesstand()).tokens === vorher);
 }
 
+{
+  const before = (await tagesstand()).tokens;
+  await verbucheTag({ provider: "anthropic", model: "cache", rein: 10, raus: 20, ausCache: 100, inCache: 200 });
+  pruefe("Cachetokens zaehlen genau einmal", (await tagesstand()).tokens === before + 330);
+}
+{
+  process.env.LUKAS_LOCAL_BILLABLE = "true";
+  const before = (await tagesstand()).tokens;
+  await verbucheTag({ provider: "local", model: "hosted", rein: 25, raus: 5 });
+  pruefe("Kostenpflichtiger kompatibler Anbieter wird erfasst", (await tagesstand()).tokens === before + 30);
+  delete process.env.LUKAS_LOCAL_BILLABLE;
+}
 // ── 3. Die Schwellen ─────────────────────────────────────────────────────
 process.env.LUKAS_TAGESBUDGET_WARNUNG = "1000";
 delete process.env.LUKAS_TAGESBUDGET_STOPP;
