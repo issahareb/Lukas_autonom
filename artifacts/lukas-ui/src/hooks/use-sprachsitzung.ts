@@ -94,19 +94,21 @@ export function useSprachsitzung() {
       });
 
       /*
-       * Auf die rohen WebRTC-Ereignisse hören, NICHT auf session.on("audio").
-       * Laut SDK wird das Audio-Ereignis "might not be triggered if the
-       * transport layer handles the audio internally" — und genau das ist
-       * hier der Fall. Dadurch feuerte das Stummschalten nie, das Mikro blieb
-       * während der ganzen Antwort offen, und Lukas beantwortete sich selbst.
+       * WebRTC spielt Audio selbst ab; die Transport-Ereignisse steuern nur
+       * die Anzeige. Das Mikro bleibt auch während Lukas' Antwort offen,
+       * damit der Nutzer ihn unterbrechen kann. Gegen Rückkopplung hilft
+       * die Echounterdrückung des Streams, nicht das Sperren des Mikrofons.
+       * Bei einer Unterbrechung kann "cleared" statt "stopped" kommen.
        */
       s.on("transport_event", (event) => {
         if (event.type === "output_audio_buffer.started") {
           setStatus("spricht");
-          s.mute(true);
-        } else if (event.type === "output_audio_buffer.stopped") {
+        } else if (
+          event.type === "output_audio_buffer.stopped" ||
+          event.type === "output_audio_buffer.cleared" ||
+          event.type === "input_audio_buffer.speech_started"
+        ) {
           setStatus("hoert");
-          s.mute(false);
         }
       });
 
