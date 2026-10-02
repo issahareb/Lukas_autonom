@@ -7,6 +7,7 @@ import { startConsolidationWorker, stopConsolidationWorker } from "./lib/consoli
 import { seedPublicFactsOnce } from "./lib/seed-public-facts";
 import { richteAbschiedEin } from "./lib/abschied";
 import { logger } from "./lib/logger";
+import { istTelnyx, telnyxStand, telnyxXml } from "./lib/telnyx";
 
 const rawPort = process.env["PORT"];
 
@@ -52,6 +53,15 @@ const server = app.listen(port, (err) => {
   }
   if (!process.env.LUKAS_API_TOKEN) {
     logger.warn("LUKAS_API_TOKEN fehlt — die private API ist UNGESCHÜTZT. Vor echtem Betrieb setzen!");
+  }
+
+  // One read-only provider check per startup; never log keys or the signed XML.
+  if (istTelnyx()) {
+    void Promise.resolve().then(() => {
+      telnyxXml("", "eingehend"); // Validate the configured OpenAI SIP destination.
+      return telnyxStand();
+    }).then(stand => logger.info(stand, "Telnyx-Status"))
+      .catch(err => logger.warn({ grund: err instanceof Error ? err.message : "Konfiguration unvollständig" }, "Telnyx-Status"));
   }
 
   startMoltbookWorker();

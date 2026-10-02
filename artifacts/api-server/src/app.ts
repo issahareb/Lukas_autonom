@@ -58,7 +58,9 @@ app.use(
     },
   }),
 );
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: false, verify: (req, _res, buf) => {
+  (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+} }));
 
 // widget.js ändert sich während aktiver Entwicklung häufig — Browser dürfen
 // es nie ungefragt aus dem Cache servieren, sonst testet man versehentlich

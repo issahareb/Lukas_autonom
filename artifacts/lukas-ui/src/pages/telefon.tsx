@@ -39,6 +39,7 @@ type Antwort = {
   nummern: Nummer[];
   anrufe: Anruf[];
   bereit: { webhook: boolean; anrufen: boolean };
+  anbieter?: "twilio" | "telnyx";
 };
 
 const STUFE: Record<Stufe, { label: string; cls: string; hilfe: string }> = {
@@ -306,6 +307,38 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
 }
 
 
+type TelnyxStatus = {
+  nummer: string; status: string; verbunden: boolean; konfiguriert: boolean;
+  freigeschaltet: boolean; bereit: boolean; hinweis: string;
+};
+
+function TelnyxEinrichtung() {
+  const [stand, setStand] = useState<TelnyxStatus | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const laden = useCallback(async () => {
+    setBusy(true);
+    try { setStand(await api("/telnyx")); setFehler(null); }
+    catch (err) { setFehler(err instanceof Error ? err.message : "Telnyx nicht erreichbar"); }
+    finally { setBusy(false); }
+  }, []);
+  useEffect(() => { void laden(); }, [laden]);
+  return <div className="card-soft rounded-3xl p-5 space-y-3">
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="flex items-center gap-2 font-medium"><Phone className="size-4" /> Telnyx · Ein- und ausgehende Anrufe</h2>
+      <Button size="sm" variant="outline" disabled={busy} onClick={laden}>{busy ? "Prüft…" : "Status prüfen"}</Button>
+    </div>
+    {stand && <>
+      <p className="font-mono text-sm">{stand.nummer}</p>
+      <p className={stand.bereit ? "text-sm text-emerald-300" : "text-sm text-amber-300"}>{stand.hinweis}</p>
+      <p className="text-sm text-muted-foreground">Technik: {stand.konfiguriert ? "eingerichtet" : "unvollständig"} · Rufnummer: {stand.freigeschaltet ? "aktiv" : "Freischaltung ausstehend"}</p>
+      {!stand.freigeschaltet && <a className="inline-block text-sm underline" href="https://portal.telnyx.com/" target="_blank" rel="noreferrer">Rufnummer in Telnyx freischalten</a>}
+    </>}
+    {fehler && <p role="alert" className="text-sm text-red-400">{fehler}</p>}
+  </div>;
+}
+
+
 type SmsZeile = {
   id: number;
   richtung: string;
@@ -544,13 +577,11 @@ export default function Telefon() {
           )}
           {daten && daten.bereit.webhook && !daten.bereit.anrufen && (
             <div className="card-soft rounded-3xl p-5 text-sm text-muted-foreground">
-              Eingehende Anrufe funktionieren. Damit Lukas selbst anrufen kann, fehlen noch
-              <code className="mx-1">TWILIO_ACCOUNT_SID</code>,<code className="mx-1">TWILIO_AUTH_TOKEN</code>,
-              <code className="mx-1">TWILIO_NUMMER</code> und <code className="mx-1">OPENAI_PROJECT_ID</code>.
+              Die Telefonie-Konfiguration ist noch unvollständig. Prüfe die Einrichtung des ausgewählten Anbieters.
             </div>
           )}
 
-          <Einrichtung onChange={laden} />
+          {daten?.anbieter === "telnyx" ? <TelnyxEinrichtung /> : daten && <Einrichtung onChange={laden} />}
 
           <div className="card-soft rounded-3xl p-5">
             <h2 className="mb-3 flex items-center gap-2 font-medium">

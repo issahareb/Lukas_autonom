@@ -8,6 +8,7 @@
  * hier gar nichts.
  */
 import { Router } from "express";
+import { istTelnyx, telnyxBereit, telnyxSignatur, telnyxXml, telnyxStand, pruefeTelefonKontext } from "../lib/telnyx";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { telefonNummern } from "@workspace/db";
@@ -23,6 +24,28 @@ import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
 
 export const telefonWebhookRouter = Router();
+
+telefonWebhookRouter.post("/telefon/telnyx/texml", async (req, res) => {
+  const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
+  if (!telnyxSignatur(raw, req.get("telnyx-timestamp") ?? "", req.get("telnyx-signature-ed25519") ?? "")) {
+    return void res.status(401).send("ungültige Signatur");
+  }
+  // A valid signature from another application in this account is not enough.
+  if (!istTelnyx() || !telnyxBereit() || req.body?.ConnectionId !== process.env.TELNYX_APP_ID ||
+    req.body?.To !== process.env.TELNYX_NUMMER) {
+    return void res.status(403).type("text/xml").send('<Response><Reject/></Response>');
+  }
+  try {
+    const from = typeof req.body.From === "string" && /^\+[1-9]\d{5,14}$/.test(req.body.From) ? req.body.From : "";
+    res.setHeader("Cache-Control", "no-store");
+    res.type("text/xml").send(telnyxXml(from, "eingehend"));
+  } catch {
+    res.status(503).type("text/xml").send('<Response><Reject/></Response>');
+  }
+});
+
+// Provider retries must not accept the same OpenAI call twice.
+const bearbeiteteAnrufe = new Map<string, number>();
 
 /*
  * Eingehende SMS von ClickSend.
@@ -96,7 +119,17 @@ telefonWebhookRouter.post("/telefon/eingehend", async (req, res) => {
   if (!callId) return void res.status(400).send("call_id fehlt");
 
   const from = ereignis.data?.sip_headers?.find((h) => h.name.toLowerCase() === "from")?.value ?? "";
-  const nummer = nummerAusSip(from);
+  const contextHeader = ereignis.data?.sip_headers?.find(h => h.name.toLowerCase() === "x-lukas-context")?.value ?? "";
+  const kontext = pruefeTelefonKontext(contextHeader);
+  if (istTelnyx() && !kontext) {
+    await weiseAb(callId, "Telnyx-Anruf ohne gültigen Gesprächskontext");
+    return void res.status(200).send("abgewiesen");
+  }
+  const nummer = kontext?.nummer ?? nummerAusSip(from);
+  const jetzt = Date.now();
+  for (const [id, zeit] of bearbeiteteAnrufe) if (jetzt - zeit > 600000) bearbeiteteAnrufe.delete(id);
+  if (bearbeiteteAnrufe.has(callId)) return void res.status(200).send("bereits bearbeitet");
+  bearbeiteteAnrufe.set(callId, jetzt);
 
   /*
    * Sofort bestaetigen, dann annehmen.
@@ -109,7 +142,7 @@ telefonWebhookRouter.post("/telefon/eingehend", async (req, res) => {
   res.status(200).send("ok");
 
   try {
-    const stufe = await nimmAn(callId, nummer);
+    const stufe = await nimmAn(callId, nummer, kontext ?? undefined);
     logger.info({ nummer, stufe }, "Anruf angenommen");
   } catch (err) {
     logger.error({ err, nummer }, "Anruf annehmen fehlgeschlagen");
@@ -149,9 +182,10 @@ router.get("/lukas/telefon", async (_req, res) => {
       nummern: nummern.map(serialize),
       anrufe: anrufe.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
       // Damit das Dashboard sagen kann, was noch fehlt, statt still nichts zu tun.
+      anbieter: istTelnyx() ? "telnyx" : "twilio",
       bereit: {
         webhook: Boolean(process.env.OPENAI_WEBHOOK_SECRET),
-        anrufen: Boolean(twilioZugang() && process.env.TWILIO_NUMMER && process.env.OPENAI_PROJECT_ID),
+        anrufen: istTelnyx() ? telnyxBereit() : Boolean(twilioZugang() && process.env.TWILIO_NUMMER && process.env.OPENAI_PROJECT_ID),
       },
     });
   } catch (err) {
@@ -167,6 +201,11 @@ router.get("/lukas/telefon", async (_req, res) => {
  * die Zugangsdaten irgendwo landen, wo sie nicht hingehoeren: der Server hat
  * sie als Umgebungsvariablen ohnehin.
  */
+router.get("/lukas/telefon/telnyx", async (_req, res) => {
+  try { res.json(await telnyxStand()); }
+  catch (err) { res.status(502).json({ error: err instanceof Error ? err.message : "Telnyx nicht erreichbar" }); }
+});
+
 router.get("/lukas/telefon/twilio", async (_req, res) => {
   try {
     res.json(await twilioStand());

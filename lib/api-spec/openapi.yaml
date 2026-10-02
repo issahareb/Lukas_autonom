@@ -18,6 +18,51 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /lukas/telefon/telnyx:
+    get:
+      operationId: getTelnyxStatus
+      tags: [lukas]
+      summary: Telnyx-Konfiguration und Rufnummerfreigabe prüfen
+      security:
+        - LukasBearer: []
+      responses:
+        "200":
+          description: Technischer Status; bereit bestätigt keinen Live-Gesprächstest.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [anbieter, nummer, status, verbunden, konfiguriert, freigeschaltet, bereit, hinweis]
+                properties:
+                  anbieter:
+                    type: string
+                    enum: [telnyx]
+                  nummer:
+                    type: string
+                  status:
+                    type: string
+                  verbunden:
+                    type: boolean
+                  konfiguriert:
+                    type: boolean
+                  freigeschaltet:
+                    type: boolean
+                  bereit:
+                    type: boolean
+                  hinweis:
+                    type: string
+        "401":
+          description: Lukas-Anmeldung erforderlich.
+        "502":
+          description: Telnyx nicht erreichbar oder Konfiguration unvollständig.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
   /healthz:
     get:
       operationId: healthCheck
@@ -877,6 +922,10 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    LukasBearer:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object

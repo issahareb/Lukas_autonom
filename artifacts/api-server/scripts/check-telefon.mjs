@@ -43,7 +43,7 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && args.path !== "./telnyx" ? { path: attrappe } : undefined,
         );
       },
     },

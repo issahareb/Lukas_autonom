@@ -3,8 +3,8 @@
  *
  * Zwei Richtungen, aber nur EIN Weg durch den Code:
  *
- *   Eingehend  Anrufer -> Twilio-Nummer -> SIP-Trunk -> OpenAI -> Webhook hier
- *   Ausgehend  Lukas -> Twilio waehlt -> verbindet in denselben SIP-Trunk
+ *   Eingehend  Anrufer -> Telnyx/TeXML oder Twilio/SIP -> OpenAI -> Webhook hier
+ *   Ausgehend  Lukas -> ausgewaehlter Anbieter waehlt -> verbindet zu OpenAI
  *              -> OpenAI -> derselbe Webhook hier
  *
  * Das ist der Grund, warum "Lukas ruft an" ueberhaupt geht: OpenAI selbst kann
@@ -24,6 +24,7 @@ import { buildSystemPrompt } from "./system-prompt";
 import { buildPublicSystemPrompt } from "./public-prompt";
 import { SPRACH_REGEL, sprachAudio, sprachModell } from "./ai/sprach-sitzung";
 import { logger } from "./logger";
+import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
 
@@ -223,10 +224,12 @@ export function tatsaechlicheStufe(
  * Der Anrufer haengt waehrenddessen in der Leitung und hoert Stille — deshalb
  * passiert hier nichts, was warten kann.
  */
-export async function nimmAn(callId: string, vonNummer: string): Promise<Stufe> {
+export async function nimmAn(callId: string, vonNummer: string, kontext?: TelefonKontext): Promise<Stufe> {
+  vonNummer = kontext?.nummer ?? vonNummer;
   const { stufe: eingetragen, name } = await stufeFuer(vonNummer);
-  const anlass = holeAnlass(vonNummer);
-  const stufe = tatsaechlicheStufe(eingetragen, anlass !== null, vonNummer);
+  const anlass = kontext ? (kontext.richtung === "ausgehend" ? kontext.anlass : null) : holeAnlass(vonNummer);
+  const ausgehend = kontext ? kontext.richtung === "ausgehend" : anlass !== null;
+  const stufe = tatsaechlicheStufe(eingetragen, ausgehend, vonNummer);
 
   if (stufe === "gesperrt") {
     await weiseAb(callId, "Gesperrte Nummer");
@@ -242,7 +245,7 @@ export async function nimmAn(callId: string, vonNummer: string): Promise<Stufe> 
     },
     body: JSON.stringify({
       type: "realtime",
-      model: sprachModell(),
+      model: process.env.LUKAS_TELEFON_MODELL ?? sprachModell(),
       instructions: await anweisungen(stufe, name, anlass),
       audio: sprachAudio(true),
     }),
@@ -255,7 +258,7 @@ export async function nimmAn(callId: string, vonNummer: string): Promise<Stufe> 
   }
 
   await protokolliere({
-    richtung: anlass ? "ausgehend" : "eingehend",
+    richtung: ausgehend ? "ausgehend" : "eingehend",
     nummer: vonNummer,
     ergebnis: "angenommen",
     stufe,
@@ -316,14 +319,13 @@ export async function starteAnruf(nummer: string, anlass: string): Promise<strin
   const von = process.env.TWILIO_NUMMER?.trim();
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
 
-  if (!zugang || !von || !projekt) {
+  if (!istTelnyx() && (!zugang || !von || !projekt)) {
     return (
       "Zum Anrufen fehlen noch Zugangsdaten. Gebraucht werden TWILIO_ACCOUNT_SID (AC…), " +
       "TWILIO_NUMMER, OPENAI_PROJECT_ID — und zur Anmeldung entweder TWILIO_API_KEY " +
       "plus TWILIO_API_SECRET oder TWILIO_AUTH_TOKEN."
     );
   }
-  const { sid } = zugang;
 
   const ziel = normalisiere(nummer);
   const [eintrag] = await db
@@ -333,11 +335,24 @@ export async function starteAnruf(nummer: string, anlass: string): Promise<strin
     .limit(1);
 
   // Von sich aus anrufen darf er nur, wo Issa das ausdruecklich erlaubt hat.
-  if (!eintrag?.darfAngerufenWerden) {
+  if (!eintrag?.darfAngerufenWerden || eintrag.stufe === "gesperrt") {
     await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "abgewiesen", anlass });
     return `Diese Nummer ist nicht zum Anrufen freigegeben. Issa kann sie im Dashboard unter Telefon freischalten.`;
   }
 
+  if (istTelnyx()) {
+    try {
+      await telnyxWaehle(`+${ziel}`, anlass);
+      await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "gewaehlt", anlass });
+      return `Ich rufe ${eintrag.name || "+" + ziel} gerade an.`;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Telnyx-Anruf fehlgeschlagen";
+      await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "fehlgeschlagen", anlass, detail });
+      throw new Error(detail);
+    }
+  }
+  if (!zugang || !von || !projekt) throw new Error("Twilio-Zugangsdaten fehlen.");
+  const { sid } = zugang;
   const sipZiel = `sip:${projekt}@${process.env.OPENAI_SIP_HOST ?? "sip.api.openai.com"};transport=tls`;
   const twiml = `<Response><Dial answerOnBridge="true"><Sip>${sipZiel}</Sip></Dial></Response>`;
 
