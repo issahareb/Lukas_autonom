@@ -1,3 +1,4 @@
+import { repairTelefonWebhookOnce } from "./lib/telefon-webhook-repair";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { inspectTelefonSetup } from "./lib/telefon-diagnose";
@@ -68,10 +69,14 @@ const server = app.listen(port, (err) => {
       .catch(err => logger.warn({ grund: err instanceof Error ? err.message : "Konfiguration unvollständig" }, "Telnyx-Status"));
   }
 
-  if (process.env.LUKAS_TELEFON_DIAGNOSE === "true") {
-    void inspectTelefonSetup({ publicBaseUrl: process.env.LUKAS_PUBLIC_URL })
-      .then(report => logger.info(report, "Telefonie-Konfigurationsprüfung"))
-      .catch(() => logger.warn("Telefonie-Konfigurationsprüfung fehlgeschlagen"));
+  if (process.env.LUKAS_TELEFON_DIAGNOSE === "true" || process.env.LUKAS_TELEFON_WEBHOOK_REPAIR === "true") {
+    void (async () => {
+      const options = { publicBaseUrl: process.env.LUKAS_PUBLIC_URL };
+      const repair = await repairTelefonWebhookOnce(options);
+      if (repair.enabled) logger.info(repair, "Telefonie-Webhook-Einrichtung");
+      const report = await inspectTelefonSetup(options);
+      logger.info(report, "Telefonie-Konfigurationsprüfung");
+    })().catch(() => logger.warn("Telefonie-Konfigurationsprüfung fehlgeschlagen"));
   }
 
   if (process.env.LUKAS_BACKGROUND_PAUSED === "true" && process.env.LUKAS_PAUSE_VPS_BACKGROUND === "true") {

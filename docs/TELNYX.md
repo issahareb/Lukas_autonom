@@ -23,3 +23,30 @@ Der Server nimmt mit `POST /v1/live/sessions/{session_id}/accept` an und verbind
 GPT Live übernimmt den Gesprächsfluss. Wissensfragen werden serverseitig über Lukas' bestehenden Modellrouter beantwortet. Telefonate erhalten ausdrücklich keine Werkzeuge; die bisherige Caller-ID-Abwaegung berechtigt weiterhin nicht zu Aktionen. Der authentifizierte Dashboard-Sprachkanal kann dagegen Lukas-Werkzeuge über dessen bestehende Freigabeprüfung nutzen.
 
 Vor dem ersten produktiven Gespräch sind die Freischaltung von GPT Live im OpenAI-Projekt, der Live-Webhook und eine aktive Telnyx-Nummer zu prüfen. Automatisierte Tests verwenden lokale Provider-Attrappen und lösen keine echten Anrufe aus.
+
+## Telefonietest bei pausierter Autonomie
+
+`LUKAS_BACKGROUND_PAUSED=true` stoppt die selbst gestarteten Railway-Laeufe:
+Autonomie, Moltbook, Selbstheilung, Gedächtnis-Konsolidierung und automatische
+Reflexion. Telefonie und ausdrücklich angeforderte Chat-Antworten bleiben verfügbar.
+Die Einstellung gilt über Neustarts hinweg; ein Deployment beendet auch vorherige
+Prozesse. Für die Wiederaufnahme müssen zusätzlich gegebenenfalls gesetzte
+`LUKAS_AUTONOMY_ENABLED=false` und `LUKAS_HEILUNG_ENABLED=false` zurückgesetzt werden.
+
+Mit `LUKAS_TELEFON_DIAGNOSE=true` prüft der Server beim Start ausschließlich
+Metadaten: OpenAI-Modellzugriff, verfügbare Ereignisse, Webhook-Abonnement sowie
+Telnyx-Nummer, TeXML-Voice-URL und Outbound-Profil. Das erzeugt keine Sprachsitzung.
+Ein positives Ergebnis bestätigt weder Guthaben noch die Audioverbindung.
+
+Die separaten Python-Agenten auf dem VPS benötigen eine eigene Pause. Der durch
+`LUKAS_PAUSE_VPS_BACKGROUND=true` freigeschaltete Inventarhelfer prüft zunächst nur
+die vorhandenen Prozesse und Startmechanismen über den bestehenden SSH-Zugang;
+`mode=inventory, paused=false` ist ausdrücklich keine Stoppbestätigung.
+Trading und Datenbanken sind nicht Teil dieser Prüfung.
+
+`LUKAS_TELEFON_WEBHOOK_REPAIR=true` ist ein bewusst aktivierter Einrichtungsschritt:
+Er ergänzt nur `live.transport.incoming` an genau einem bereits vorhandenen
+Webhook mit der erwarteten URL und erhält dessen sonstige Ereignisse. Danach
+prüft er den gespeicherten Stand und sendet ein harmloses Testereignis zur
+Signaturprüfung. Es entstehen keine Anrufe. Nach erfolgreicher Einrichtung den
+Schalter wieder auf `false` setzen.
