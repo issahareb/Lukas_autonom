@@ -8,7 +8,7 @@ const stub = join(dir, "stub.mjs"), entry = join(dir, "entry.mjs");
 writeFileSync(stub, [
   "export const logger = { info(){}, warn(){}, error(){}, debug(){} };",
   "export const verbucheTag = async (u) => { globalThis.__booked.push(u); };",
-  "export const openai = { responses: { create: async (r) => { globalThis.__requests.push(r); return globalThis.__reply(r); } } };",
+  "export const openai = { responses: { create: async (r, options) => { globalThis.__requests.push(r); return globalThis.__reply(r, options); } } };",
 ].join("\n"));
 writeFileSync(entry, ["model-router", "model-client", "context-window", "voice-renderer"]
   .map((n) => 'export * from "../src/lib/ai/' + n + '.ts";').join("\n"));
@@ -106,6 +106,90 @@ try {
   await new Promise((r) => setTimeout(r, 0));
   equal("Verbrauch dauerhaft gebucht", globalThis.__booked.length, 1);
 
+  // Caller cancellation must not start another paid provider.
+  reset();
+  {
+    const controller = new AbortController(); let receivedSignal;
+    globalThis.__reply = async (_request, options) => {
+      receivedSignal = options.signal; controller.abort(); throw controller.signal.reason;
+    };
+    await assert.rejects(call("fast", { signal: controller.signal }), { name: "AbortError" });
+    equal("OpenAI bekommt das Abbruchsignal", receivedSignal, controller.signal);
+    equal("OpenAI-Abbruch startet keinen Ersatz", globalThis.__requests.length, 1);
+    await assert.rejects(call("fast", { signal: controller.signal }), { name: "AbortError" });
+    equal("Bereits abgebrochen startet keinen Request", globalThis.__requests.length, 1);
+  }
+  reset();
+  {
+    const originalFetch = globalThis.fetch;
+    try {
+      process.env.ANTHROPIC_API_KEY = "test-only";
+      process.env.GEMINI_API_KEY = "test-only";
+      process.env.LUKAS_LOCAL_BASE_URL = "http://test.invalid/v1";
+      for (const provider of ["anthropic", "google", "local"]) {
+        const controller = new AbortController(); let fetches = 0, receivedSignal;
+        globalThis.fetch = async (_url, options) => {
+          fetches++; receivedSignal = options.signal; controller.abort(); throw controller.signal.reason;
+        };
+        await assert.rejects(call("fast", {
+          route: { provider, model: "abort-test", profile: "fast", reason: "test" }, signal: controller.signal,
+        }), { name: "AbortError" });
+        equal(provider + " beginnt genau einen Request", fetches, 1);
+        ok(provider + " kombiniert Caller-Abbruch mit Timeout", receivedSignal.aborted);
+        equal(provider + " startet bei Abbruch kein OpenAI", globalThis.__requests.length, 0);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+      for (const key of ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "LUKAS_LOCAL_BASE_URL"]) {
+        if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key];
+      }
+    }
+  }
+  // Exercise the actual tool dispatcher across an asynchronous policy boundary.
+  {
+    const source = readFileSync("src/lib/lukas-tools.ts", "utf8");
+    const start = source.indexOf("export async function executeLukasTool("), end = source.indexOf("\n}\n", start);
+    assert.ok(start >= 0 && end > start);
+    const toolEntry = join(dir, "tool-abort.mjs");
+    await build({
+      stdin: {
+        contents: [
+          'const MCP_TOOL_PREFIX = "mcp__";',
+          'const checkPolicy = (...args) => globalThis.__abortPolicy(...args);',
+          'const executeCommand = (...args) => globalThis.__abortExecute(...args);',
+          source.slice(start, end + 3),
+        ].join("\n"), loader: "ts", resolveDir: process.cwd(),
+      },
+      outfile: toolEntry, bundle: false, format: "esm", platform: "node", logLevel: "silent",
+    });
+    const { executeLukasTool } = await import(pathToFileURL(toolEntry));
+    let policyCalls = 0, effects = 0;
+    globalThis.__abortExecute = async () => { effects++; return "executed"; };
+    globalThis.__abortPolicy = async () => { policyCalls++; return { allow: true }; };
+    const cancelled = new AbortController(); cancelled.abort();
+    await assert.rejects(executeLukasTool("execute_command", { command: "test-only" }, {
+      conversationId: 1, signal: cancelled.signal,
+    }), { name: "AbortError" });
+    equal("Abbruch vor Policy startet keine Prüfung", policyCalls, 0);
+    equal("Abbruch vor Policy startet keinen Effekt", effects, 0);
+    let releasePolicy, markPolicyStarted;
+    const policyStarted = new Promise((resolve) => { markPolicyStarted = resolve; });
+    globalThis.__abortPolicy = () => {
+      policyCalls++; markPolicyStarted();
+      return new Promise((resolve) => { releasePolicy = resolve; });
+    };
+    const controller = new AbortController();
+    const pending = executeLukasTool("execute_command", { command: "test-only" }, { conversationId: 1, signal: controller.signal });
+    await policyStarted; controller.abort(); releasePolicy({ allow: true });
+    await assert.rejects(pending, { name: "AbortError" });
+    equal("Auflegen während Policy verhindert Effekt", effects, 0);
+    globalThis.__abortPolicy = async () => ({ allow: true });
+    equal("Ohne Abbruch bleibt Tool erreichbar", await executeLukasTool(
+      "execute_command", { command: "test-only" }, { conversationId: 1, signal: new AbortController().signal },
+    ), "executed");
+    equal("Kontrollfall hat genau einen Effekt", effects, 1);
+    delete globalThis.__abortPolicy; delete globalThis.__abortExecute;
+  }
   reset();
   const voiceOpts = { systemPrompt: "Du bist Lukas", conversation: messages, draft: "Fertig: Ergebnis 42." };
   equal("Fertige Antwort bleibt erhalten", await renderLukasVoice(voiceOpts), voiceOpts.draft);
