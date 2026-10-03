@@ -300,7 +300,7 @@ try {
       assert.ok(encodedContext);
       const context = pruefeTelefonKontext(decodeURIComponent(encodedContext));
       assert.ok(context);
-      providerCalls.push({ provider: "telnyx", to: body.To, context });
+      providerCalls.push({ provider: "telnyx", from: body.From, to: body.To, context });
     } else {
       assert.equal(url.href, "https://api.twilio.com/2010-04-01/Accounts/AC_test_only/Calls.json", "Unexpected network request");
       providerCalls.push({ provider: "twilio", to: options.body.get("To"), context: undefined });
@@ -367,6 +367,35 @@ try {
     assert.deepEqual(globalThis.telefonNummernSchreibversuche, []);
   }
   console.log("OK — Owner one-off calls: both providers, exact target, one-shot use, blocked contacts, no persistent permission and public SIP context.");
+
+  // Two independent owner requests can dial through one DID before either
+  // conversation is accepted. Answering in reverse order must keep context.
+  process.env.LUKAS_TELEFON_ANBIETER = "telnyx";
+  globalThis.telefonEintrag = undefined;
+  const targets = ["+4915112345678", "+493012345678"];
+  const reasons = ["Termin für die Besichtigung vereinbaren", "Lieferzeit für das Ersatzteil erfragen"];
+  const parallelStart = providerCalls.length, acceptedBeforeParallel = globalThis.telefonAnnahmen.length;
+  const results = await Promise.all(targets.map((target, index) =>
+    starteAnruf(target, reasons[index], ownerCallGrantFromMessage(`Ruf ${target} an`))));
+  assert.ok(results.every(result => /Ich rufe/.test(result)));
+  assert.equal(globalThis.telefonAnnahmen.length, acceptedBeforeParallel, "Dial returns before a conversation is accepted");
+  const parallelDials = providerCalls.slice(parallelStart);
+  assert.equal(parallelDials.length, 2);
+  assert.ok(parallelDials.every(dial => dial.from === process.env.TELNYX_NUMMER), "One DID is used for both calls");
+  assert.notEqual(parallelDials[0].context.id, parallelDials[1].context.id);
+  for (const index of [1, 0]) {
+    const dial = parallelDials.find(call => call.to === targets[index]);
+    assert.ok(dial);
+    assert.equal(dial.context.nummer, targets[index]);
+    assert.equal(dial.context.anlass, reasons[index]);
+    await nimmAn(`live_parallel_${index}`, targets[index], dial.context);
+    const accepted = globalThis.telefonAnnahmen.at(-1);
+    assert.ok(accepted.instructions.includes(reasons[index]));
+    assert.ok(!accepted.instructions.includes(reasons[1 - index]));
+    assert.equal(accepted.visibility, "public");
+    assert.equal(accepted.allowTools, false);
+  }
+  console.log("OK — Parallel Telnyx dials: one DID, separate signed contexts, non-blocking start and reversed answer order.");
 } finally {
   globalThis.fetch = oneOffPreviousFetch;
   for (const [key, value] of oneOffPreviousEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
