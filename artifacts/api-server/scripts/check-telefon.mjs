@@ -10,6 +10,7 @@
  * Schreibweisen an. Alle muessen auf denselben Schluessel fallen.
  */
 import { build } from "esbuild";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -20,7 +21,11 @@ const attrappe = join(dir, "attrappe.mjs");
 writeFileSync(
   attrappe,
   `
-export const db = new Proxy({}, { get: () => () => ({}) });
+export const db = {
+  select: () => ({ from: () => ({ where: () => ({ limit: async () => [globalThis.telefonEintrag] }) }) }),
+  update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+  insert: () => ({ values: (row) => { globalThis.telefonProtokoll.push(row); return Promise.resolve(); } }),
+};
 export const telefonNummern = {}; export const telefonAnrufe = {};
 export const eq = () => ({}); export const desc = () => ({});
 export const logger = { warn() {}, info() {}, error() {} };
@@ -28,7 +33,11 @@ export const buildSystemPrompt = async () => "privat";
 export const buildPublicSystemPrompt = async () => "oeffentlich";
 export const SPRACH_REGEL = ""; export const sprachAudio = () => ({});
 export const sprachModell = () => "gpt-live-1";
-export const acceptLiveSipSession = async () => {}; export const rejectLiveSipSession = async () => {};
+export const acceptLiveSipSession = async (options) => {
+  globalThis.telefonAnnahmen.push(options);
+  if (globalThis.telefonAnnahmeFehler) throw new Error("temporary accept failure");
+};
+export const rejectLiveSipSession = async () => {};
 `,
 );
 
@@ -51,7 +60,7 @@ await build({
   ],
 });
 
-const { normalisiere, nummerAusSip, tatsaechlicheStufe } = await import(out);
+const { normalisiere, nummerAusSip, tatsaechlicheStufe, starteAnruf, nimmAn } = await import(out);
 
 let fehler = 0;
 const pruefe = (bedingung, text) => {
@@ -157,6 +166,48 @@ pruefe(
   "und öffentlich wird durch den Schalter nicht privater",
 );
 delete process.env.LUKAS_TELEFON_STRENG;
+
+// Accept retries retain outgoing context; successful calls consume it.
+const telefonEnv = ["LUKAS_TELEFON_STRENG", "LUKAS_TELEFON_ANBIETER", "TWILIO_ACCOUNT_SID",
+  "TWILIO_AUTH_TOKEN", "TWILIO_API_KEY", "TWILIO_API_SECRET", "TWILIO_NUMMER", "OPENAI_PROJECT_ID"];
+const vorigeEnv = new Map(telefonEnv.map(key => [key, process.env[key]])), vorigesFetch = globalThis.fetch;
+try {
+  Object.assign(process.env, { LUKAS_TELEFON_STRENG: "true", LUKAS_TELEFON_ANBIETER: "twilio",
+    TWILIO_ACCOUNT_SID: "AC_test_only", TWILIO_AUTH_TOKEN: "local-test-only", TWILIO_NUMMER: "+49201123456", OPENAI_PROJECT_ID: "proj_test_only" });
+  delete process.env.TWILIO_API_KEY; delete process.env.TWILIO_API_SECRET;
+  globalThis.telefonEintrag = { id: 1, nummer: ERWARTET, name: "Testkontakt", stufe: "privat", darfAngerufenWerden: true };
+  globalThis.telefonAnnahmen = []; globalThis.telefonProtokoll = []; globalThis.telefonAnnahmeFehler = true;
+  const gewaehlt = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "https://api.twilio.com/2010-04-01/Accounts/AC_test_only/Calls.json");
+    assert.equal(options.method, "POST"); gewaehlt.push(options);
+    return new Response(JSON.stringify({ sid: "CA_test_only" }), { status: 201 });
+  };
+  const anlass = "Besprechung zum Rückruf";
+  await starteAnruf("+" + ERWARTET, anlass);
+  assert.equal(gewaehlt.length, 1); assert.equal(gewaehlt[0].body.get("To"), "+" + ERWARTET);
+  await assert.rejects(nimmAn("live_retry", "+" + ERWARTET), /temporary accept failure/);
+  assert.equal(globalThis.telefonAnnahmen[0].visibility, "private");
+  assert.ok(globalThis.telefonAnnahmen[0].instructions.includes(anlass));
+  globalThis.telefonAnnahmeFehler = false;
+  assert.equal(await nimmAn("live_retry", "+" + ERWARTET), "privat");
+  const wiederholung = globalThis.telefonAnnahmen[1];
+  assert.equal(wiederholung.visibility, "private"); assert.equal(wiederholung.allowTools, false);
+  assert.ok(wiederholung.instructions.includes(anlass)); assert.match(wiederholung.instructions, /DU HAST ANGERUFEN/);
+  assert.ok(wiederholung.initialCommentary.includes(anlass));
+  assert.equal(globalThis.telefonProtokoll.at(-1).richtung, "ausgehend");
+  assert.equal(globalThis.telefonProtokoll.at(-1).anlass, anlass);
+  assert.equal(await nimmAn("live_unrelated_incoming", "+" + ERWARTET), "oeffentlich");
+  const danach = globalThis.telefonAnnahmen[2];
+  assert.equal(danach.visibility, "public"); assert.equal(danach.allowTools, false);
+  assert.ok(!danach.instructions.includes(anlass)); assert.doesNotMatch(danach.instructions, /DU HAST ANGERUFEN/);
+  assert.equal(globalThis.telefonProtokoll.at(-1).richtung, "eingehend");
+  assert.equal(gewaehlt.length, 1, "Retry must not dial again");
+} finally {
+  globalThis.fetch = vorigesFetch;
+  for (const [key, value] of vorigeEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
+}
 
 rmSync(dir, { recursive: true, force: true });
 

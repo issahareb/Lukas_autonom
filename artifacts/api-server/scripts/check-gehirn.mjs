@@ -130,7 +130,7 @@ const nach = new Map(g.knoten.map((k) => [k.id, k]));
 const httpDir = mkdtempSync(join(process.cwd(), ".gehirn-http-check-"));
 const routeSource = readFileSync("src/routes/lukas.ts", "utf8");
 const exports = [...new Set([...routeSource.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)]
-  .filter((m) => m[2] !== "express")
+  .filter((m) => !["express", "zod"].includes(m[2]))
   .flatMap((m) => m[1].split(",").map((name) => name.trim()).filter(Boolean)))];
 const fake = exports.map((name) => `export const ${name} = ${name === "baueGehirn" ? "async () => globalThis.__brainHttpFixture" : name === "logger" ? "{ error() {} }" : "() => {}"};`).join("\n");
 const langerText = "Cully Hill Boys: feste Referenzen und räumliche Anker. ".repeat(40) + "VOLLSTÄNDIGES ENDE";
@@ -139,9 +139,9 @@ let server;
 try {
   await build({
     entryPoints: ["src/routes/lukas.ts"], outfile: join(httpDir, "route.mjs"),
-    bundle: true, format: "esm", platform: "node", external: ["express"], logLevel: "silent",
+    bundle: true, format: "esm", platform: "node", external: ["express", "zod"], logLevel: "silent",
     plugins: [{ name: "isolierte-dienste", setup(b) {
-      b.onResolve({ filter: /.*/ }, (args) => args.importer.endsWith("/routes/lukas.ts") && args.path !== "express" ? { path: args.path, namespace: "attrappe" } : undefined);
+      b.onResolve({ filter: /.*/ }, (args) => args.importer.endsWith("/routes/lukas.ts") && !["express", "zod"].includes(args.path) ? { path: args.path, namespace: "attrappe" } : undefined);
       b.onLoad({ filter: /.*/, namespace: "attrappe" }, () => ({ contents: fake, loader: "js" }));
     } }],
   });
