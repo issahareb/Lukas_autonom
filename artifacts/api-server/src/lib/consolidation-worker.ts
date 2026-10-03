@@ -1,3 +1,4 @@
+import { backgroundPaused } from "./background-pause";
 /*
  * Konsolidierungs-Worker — der "nächtliche" Gedächtnispfleger.
  *
@@ -86,6 +87,7 @@ function runGraphifyIfAvailable(vaultDir: string): void {
 }
 
 export async function runConsolidation(): Promise<void> {
+  if (backgroundPaused()) return;
   const decayed = await decayUnverifiedClaims();
   await evaluateStrategies();
   const embedded = await embedNewRows();
@@ -96,8 +98,14 @@ export async function runConsolidation(): Promise<void> {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startConsolidationWorker(): void {
+  if (backgroundPaused()) {
+    logger.info("startConsolidationWorker: pausiert (LUKAS_BACKGROUND_PAUSED=true)");
+    return;
+  }
+  if (timer || startupTimer) return;
   // Unter Sperre: die Konsolidierung fasst Erinnerungen zusammen und loescht
   // dabei. Zwei Laeufe gleichzeitig wuerden dieselbe Zusammenfassung doppelt
   // anlegen.
@@ -106,12 +114,14 @@ export function startConsolidationWorker(): void {
       logger.warn({ err }, "Konsolidierung fehlgeschlagen"),
     );
   // Erster Lauf 5 min nach Boot, danach täglich
-  setTimeout(safeRun, 5 * 60 * 1000);
+  startupTimer = setTimeout(() => { startupTimer = null; safeRun(); }, 5 * 60 * 1000);
   timer = setInterval(safeRun, CYCLE_MS);
   logger.info("Konsolidierungs-Worker gestartet (täglich)");
 }
 
 export function stopConsolidationWorker(): void {
+  if (startupTimer) clearTimeout(startupTimer);
+  startupTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
 }

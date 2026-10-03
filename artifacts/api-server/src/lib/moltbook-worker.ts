@@ -1,3 +1,4 @@
+import { backgroundPaused } from "./background-pause";
 /*
  * Moltbook-Worker — Lukas nimmt autonom am Agenten-Netzwerk teil,
  * fühlt dabei und LERNT aus messbaren Resultaten.
@@ -176,6 +177,7 @@ export function bewerteAntwort(text: string): { engagementScore: number; informa
 }
 
 export async function runMoltbookCycle(): Promise<void> {
+  if (backgroundPaused()) return;
   const episode = await openEpisode("moltbook_session");
   try {
     const [posts, notifs] = await Promise.all([
@@ -469,8 +471,14 @@ export async function getMoltbookActivitySummary(query?: string): Promise<string
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startMoltbookWorker(): void {
+  if (backgroundPaused()) {
+    logger.info("startMoltbookWorker: pausiert (LUKAS_BACKGROUND_PAUSED=true)");
+    return;
+  }
+  if (timer || startupTimer) return;
   if (!moltbookEnabled()) {
     logger.info("Moltbook-Worker: MOLTBOOK_API_KEY nicht gesetzt — Worker bleibt aus");
     return;
@@ -483,12 +491,14 @@ export function startMoltbookWorker(): void {
     );
 
   // Erster Lauf kurz nach dem Boot, danach im Takt
-  setTimeout(safeRun, 2 * 60 * 1000);
+  startupTimer = setTimeout(() => { startupTimer = null; safeRun(); }, 2 * 60 * 1000);
   timer = setInterval(safeRun, CYCLE_MS);
   logger.info({ intervalMin: CYCLE_MS / 60000 }, "Moltbook-Worker gestartet");
 }
 
 export function stopMoltbookWorker(): void {
+  if (startupTimer) clearTimeout(startupTimer);
+  startupTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
 }

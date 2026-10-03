@@ -1,3 +1,4 @@
+import { backgroundPaused } from "./background-pause";
 import { db } from "@workspace/db";
 import { goalsTable, diaryTable, approvals } from "@workspace/db";
 import { eq, desc, and, gt, inArray } from "drizzle-orm";
@@ -190,6 +191,7 @@ Wichtig, damit das hier nicht zur Beschäftigungstherapie wird:
 }
 
 export async function runAutonomyCycle(): Promise<void> {
+  if (backgroundPaused()) return;
   /*
    * Erst nachsehen, ob es etwas zu tun gibt — das kostet vier kleine Abfragen
    * und kein Token. Ohne diese Frage lief alle 30 Minuten ein voller Lauf,
@@ -276,8 +278,14 @@ export async function runAutonomyCycle(): Promise<void> {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startAutonomy(): void {
+  if (backgroundPaused()) {
+    logger.info("startAutonomy: pausiert (LUKAS_BACKGROUND_PAUSED=true)");
+    return;
+  }
+  if (timer || startupTimer) return;
   if (!enabled()) {
     logger.info("Autonomie deaktiviert (LUKAS_AUTONOMY_ENABLED=false)");
     return;
@@ -294,12 +302,15 @@ export function startAutonomy(): void {
     );
   };
   // Nicht sofort beim Start: erst soll das Deployment stehen.
-  setTimeout(safeRun, 3 * 60 * 1000).unref?.();
+  startupTimer = setTimeout(() => { startupTimer = null; safeRun(); }, 3 * 60 * 1000);
+  startupTimer.unref?.();
   timer = setInterval(safeRun, CYCLE_MS);
   logger.info({ minuten: CYCLE_MS / 60000 }, "Autonomie gestartet");
 }
 
 export function stopAutonomy(): void {
+  if (startupTimer) clearTimeout(startupTimer);
+  startupTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
 }

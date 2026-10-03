@@ -1,3 +1,4 @@
+import { backgroundPaused } from "./background-pause";
 import { fehlerGruppen, recordDebugEvent, type Fehlergruppe } from "./debug-log";
 import { fixError } from "./subagents";
 import { runLukasTurn } from "./lukas-brain";
@@ -73,6 +74,7 @@ export async function naechsterFehler(): Promise<Fehlergruppe | null> {
 }
 
 export async function runSelbstheilung(): Promise<void> {
+  if (backgroundPaused()) return;
   let gruppe: Fehlergruppe | null = null;
   try {
     gruppe = await naechsterFehler();
@@ -135,8 +137,14 @@ export async function runSelbstheilung(): Promise<void> {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startSelbstheilung(): void {
+  if (backgroundPaused()) {
+    logger.info("startSelbstheilung: pausiert (LUKAS_BACKGROUND_PAUSED=true)");
+    return;
+  }
+  if (timer || startupTimer) return;
   if ((process.env.LUKAS_HEILUNG_ENABLED ?? "true").trim().toLowerCase() === "false") {
     logger.info("Selbstheilung deaktiviert (LUKAS_HEILUNG_ENABLED=false)");
     return;
@@ -153,12 +161,14 @@ export function startSelbstheilung(): void {
 
   // Nicht sofort beim Start: erst soll etwas Betrieb stattgefunden haben, sonst
   // untersucht er die Fehler des vorigen Deploys.
-  setTimeout(lauf, 10 * 60 * 1000);
+  startupTimer = setTimeout(() => { startupTimer = null; lauf(); }, 10 * 60 * 1000);
   timer = setInterval(lauf, ZYKLUS_MS);
   logger.info({ alleMinuten: ZYKLUS_MS / 60000, schwelle: SCHWELLE }, "Selbstheilung aktiv");
 }
 
 export function stopSelbstheilung(): void {
+  if (startupTimer) clearTimeout(startupTimer);
+  startupTimer = null;
   if (timer) clearInterval(timer);
   timer = null;
 }
