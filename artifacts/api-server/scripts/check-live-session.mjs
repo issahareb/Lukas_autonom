@@ -245,6 +245,51 @@ try {
   assert.equal(fixture.requests.filter((r) => r.url.endsWith("/live_phone_attach_failure/accept")).length, 1);
   await api.rejectLiveSipSession("live_phone_rejected"); assert.deepEqual(fixture.requests.at(-1).body, { status_code: 603 });
 
+  // Keep an owner voice session open while four external phone conversations
+  // run. One slow backend turn must not block or contaminate another call.
+  const ownerDuringCalls = await api.createLiveWebRtcSession(createOptions);
+  const parallelIds = ["live_parallel_a", "live_parallel_b", "live_parallel_c", "live_parallel_d"];
+  await Promise.all(parallelIds.map((sessionId, index) => api.acceptLiveSipSession({
+    sessionId, instructions: `CALL_CONTEXT_${index}`, visibility: "public",
+    initialCommentary: `Auftrag ${index}`,
+  })));
+  let releaseSlowCall;
+  fixture.backend = (options) => options.userText === "Frage 0"
+    ? new Promise(resolve => { releaseSlowCall = () => resolve("Antwort 0"); })
+    : Promise.resolve(options.userText.replace("Frage", "Antwort"));
+  const beforeParallelWork = fixture.calls.length;
+  for (const [index, id] of parallelIds.entries()) {
+    input(socketFor(id), `Frage ${index}`);
+    delegate(socketFor(id), "same_id_in_separate_sessions");
+  }
+  await settle();
+  const parallelWork = fixture.calls.slice(beforeParallelWork);
+  assert.equal(parallelWork.length, 4);
+  assert.equal(new Set(parallelWork.map(call => call.conversationId)).size, 4);
+  for (const [index, id] of parallelIds.entries()) {
+    const work = parallelWork.find(call => call.userText === `Frage ${index}`);
+    assert.ok(work.systemPromptOverride.startsWith(`CALL_CONTEXT_${index}`));
+    assert.deepEqual(work.tools, []);
+    for (const other of [0, 1, 2, 3].filter(value => value !== index)) {
+      assert.ok(!JSON.stringify(work.history).includes(`Frage ${other}`));
+    }
+    const replies = socketFor(id).sent.filter(event => event.delegation_id === "same_id_in_separate_sessions");
+    assert.equal(replies.map(event => event.content).join(""), index === 0 ? "" : `Antwort ${index}`);
+  }
+  const beforeOverflow = fixture.requests.length;
+  const fifthCall = { sessionId: "live_parallel_e", instructions: "Fifth call", visibility: "public" };
+  await assert.rejects(api.acceptLiveSipSession(fifthCall), /belegt/);
+  assert.equal(fixture.requests.length, beforeOverflow, "Public capacity is enforced before another remote accept");
+  releaseSlowCall(); await settle(); fixture.backend = null;
+  assert.equal(socketFor(parallelIds[0]).sent.filter(event => event.delegation_id === "same_id_in_separate_sessions")
+    .map(event => event.content).join(""), "Antwort 0");
+  socketFor(parallelIds[0]).emit({ type: "session.closed" });
+  await api.acceptLiveSipSession(fifthCall);
+  assert.equal(socketFor(ownerDuringCalls.sessionId).readyState, 1, "Owner session stays open");
+  for (const id of [...parallelIds.slice(1), fifthCall.sessionId]) socketFor(id).emit({ type: "session.closed" });
+  await api.closeLiveSession(ownerDuringCalls.sessionId, ownerDuringCalls.closeToken);
+  console.log("Parallel SIP regressions passed: isolated calls, independent backend turns and shared public capacity.");
+
   const shutdownSession = await api.createLiveWebRtcSession(createOptions);
   // Shutdown must wait for a still-pending create and its remote cleanup.
   const originalFetch = globalThis.fetch; let releaseCreate;
