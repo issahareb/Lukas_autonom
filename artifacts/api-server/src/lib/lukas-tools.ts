@@ -15,6 +15,7 @@ import { MCP_TOOL_PREFIX, activeServers, callMcpTool } from "./mcp";
 import { runSubagent, subagentUebersicht, createSubagent, fixError } from "./subagents";
 import { meldeDichBeiIssa } from "./melden";
 import { starteAnruf } from "./telefon";
+import type { OwnerCallGrant } from "./owner-call-grant";
 import { fehlerGruppen } from "./debug-log";
 import { verbrauchsUebersicht } from "./ai/model-client";
 import { logger } from "./logger";
@@ -354,13 +355,13 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "ruf_an",
       description:
-        "Rufe eine freigegebene Telefonnummer an und sprich direkt mit der Person. Nutze das nur, wenn etwas wirklich ein Gespräch braucht — dringend, komplex oder zeitkritisch. Für alles andere reicht melde_dich_bei_issa. Ein klingelndes Telefon unterbricht jemanden.",
+        "Rufe eine Telefonnummer an und sprich mit der Person. Verkäufer wegen einer Anzeige anzurufen und freundlich, aber hartnäckig über den Preis zu verhandeln ist ein normaler Auftrag. Beachte dabei Issas Preislimit und den Umfang seines Auftrags. Nenne gegenüber Dritten seinen Namen nicht; Lukas, KI-Assistent im Auftrag eines Interessenten genügt. Gib Preisrahmen, Verhandlungsziel und Namensschutz im Gesprächsanlass weiter. Ein ausdrücklicher Anrufauftrag von Issa im privaten Dashboard-Chat reicht auch für kurze Tests und harmlose spielerische Gespräche; dafür ist keine Dringlichkeit nötig. Eine neue Nummer kann er einmalig anrufen lassen, indem er Nummer mit Ländervorwahl und Anrufauftrag in derselben Nachricht nennt, etwa: Ruf +4915112345678 wegen der Online-Anzeige an. Die neue Nummer wird dadurch nicht dauerhaft freigegeben. Eine bloße Erwähnung ist kein Auftrag. Gesperrte Nummern bleiben gesperrt. Ohne ausdrücklichen Auftrag gelten die bestehende Nummernfreigabe, ein dringender Gesprächsbedarf und eine bestehende Autonomiepause. Übernimm den gewünschten Gesprächsanlass in anlass und behaupte einen Anruf erst nach erfolgreichem Werkzeugergebnis.",
       parameters: {
         type: "object",
         properties: {
           nummer: {
             type: "string",
-            description: "Die Nummer, z.B. '+4915112345678'. Muss im Dashboard zum Anrufen freigegeben sein.",
+            description: "Die Zielnummer mit Ländervorwahl, z.B. '+4915112345678'. Entweder bereits zum Anrufen freigegeben oder als neue Nummer ausdrücklich in der aktuellen privaten Dashboard-Nachricht beauftragt.",
           },
           anlass: {
             type: "string",
@@ -1177,7 +1178,7 @@ async function githubSearchCode(repoInput: string, query: string): Promise<strin
 export async function executeLukasTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal } = {},
+  ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal; ownerCallGrant?: OwnerCallGrant } = {},
 ): Promise<string> {
   /*
    * Policy-Gate. Bewusst HIER, an der einen Stelle, durch die jeder
@@ -1307,7 +1308,7 @@ export async function executeLukasTool(
     case "github_list_repos":
       return await githubListRepos();
     case "ruf_an":
-      return await starteAnruf(String(input.nummer), String(input.anlass ?? ""));
+      return await starteAnruf(String(input.nummer), String(input.anlass ?? ""), ctx.ownerCallGrant);
     case "github_read_path":
       return await githubReadPath(
         String(input.repo),

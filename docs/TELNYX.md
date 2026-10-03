@@ -8,7 +8,7 @@ Die TeXML-Anwendung benötigt ein aktives Outbound Voice Profile und eine zugeor
 
 Eingehende TeXML-Anfragen werden über Ed25519 und den Zeitstempel geprüft. Der exakte form-encoded Body bleibt dafür erhalten. Nur die konfigurierte Connection und Rufnummer werden akzeptiert. Die Antwort verbindet zum OpenAI-SIP-Ziel über TLS. Der signierte `X-Lukas-Context` korreliert Richtung, Teilnehmer und Anlass; OpenAI muss diesen SIP-Header im signierten Incoming-Webhook zustellen. Ein fehlender oder manipulierter Kontext wird im Telnyx-Modus abgewiesen. SIP-Caller-ID allein beweist weiterhin keine Identität: `LUKAS_TELEFON_STRENG` behält seine bestehende Wirkung.
 
-Ausgehend prüft LUKAS zuerst die Kontaktfreigabe einschließlich Sperrstatus und dann den tatsächlichen Aktivierungsstatus der Telnyx-Nummer. `POST /v2/texml/calls/{connection_id}` erhält `From`, `To` und inline `Texml`. Der Teilnehmerkontext ist HMAC-signiert und drei Minuten gültig; er überlebt einen Serverneustart. OpenAI-Webhook-Duplikate derselben `live_…`-Session-ID teilen sich während der Annahme dieselbe Arbeit und werden nach Erfolg im Prozess für zehn Minuten ignoriert. Die Webhook-Antwort bestätigt erst nach erfolgreicher Verarbeitung. Realtime-Ereignisse werden ignoriert, damit nicht versehentlich das falsche Protokoll gewählt wird. Die Deduplizierung ist pro Prozess; bei mehreren Replikas muss sie in einen gemeinsam genutzten Speicher umziehen.
+Ausgehend prüft LUKAS zuerst die Kontaktfreigabe oder einen einmaligen Auftrag aus dem privaten Dashboard-Chat einschließlich Sperrstatus und dann den tatsächlichen Aktivierungsstatus der Telnyx-Nummer. `POST /v2/texml/calls/{connection_id}` erhält `From`, `To` und inline `Texml`. Der Teilnehmerkontext ist HMAC-signiert und drei Minuten gültig; er überlebt einen Serverneustart. OpenAI-Webhook-Duplikate derselben `live_…`-Session-ID teilen sich während der Annahme dieselbe Arbeit und werden nach Erfolg im Prozess für zehn Minuten ignoriert. Die Webhook-Antwort bestätigt erst nach erfolgreicher Verarbeitung. Realtime-Ereignisse werden ignoriert, damit nicht versehentlich das falsche Protokoll gewählt wird. Die Deduplizierung ist pro Prozess; bei mehreren Replikas muss sie in einen gemeinsam genutzten Speicher umziehen.
 
 Das geschützte `GET /api/lukas/telefon/telnyx` und die Telefonseite unterscheiden technische Einrichtung und Rufnummerfreigabe. Ein Startup-Check protokolliert den Providerstatus ohne Schlüssel oder signierte TeXML-Inhalte. `requirement-info-pending` ist keine aktive Rufnummer; Unterlagen müssen bei Telnyx eingereicht und bestätigt werden.
 
@@ -58,3 +58,27 @@ Das gemeinsame TeXML für eingehende und ausgehende Anrufe verwendet `;transport
 Der Telnyx-Hinweis „This is an automated call generated on the Telnyx platform …“ ist davon unabhängig: Er gilt laut Telnyx auch für Paid-Konten. Dafür ist die Kontoverifizierung auf Verified beziehungsweise Level 2 maßgeblich; eine Einzahlung allein entfernt den Hinweis nicht.
 
 Quellen: [Telnyx SIP-URI-Verschlüsselung](https://github.com/team-telnyx/telnyx-node/blob/b697a5ac3b86173a2ca2c837dd51ab7ce7c4db25/src/resources/calls/calls.ts), [Paid-Beschränkungen](https://developers.telnyx.com/docs/account-setup/levels-and-capabilities/paid).
+
+## Neue Nummer direkt im privaten Chat anrufen
+
+Eine neue, noch nicht gespeicherte Nummer lässt sich mit einem ausdrücklichen
+Anrufauftrag in derselben Dashboard-Nachricht einmalig wählen, zum Beispiel:
+„Ruf +4915112345678 wegen der Garten-Anzeige an und verhandle freundlich über den Preis.“
+Die Nummer benötigt eine Ländervorwahl. Ein bloßes Erwähnen der Nummer erteilt
+keinen Auftrag. Der Server bindet die einmalige Freigabe an genau diese Nummer;
+ein Tool-Parameter kann sie nicht erzeugen. Sie wird vor dem Provideraufruf
+verbraucht, damit wiederholte Tool-Aufrufe nicht mehrfach wählen.
+
+Das legt keinen Kontakt an und erteilt keine dauerhafte Anruferlaubnis.
+Unbekannte Gesprächspartner erhalten den öffentlichen Lukas ohne Werkzeuge.
+Bestehende Kontaktsperren und deaktivierte Anruferlaubnisse bleiben wirksam.
+Andere Kanäle und autonome Läufe erhalten diese einmalige Freigabe nicht.
+Explizite Verkäufergespräche, Verhandlungen und kurze Tests benötigen keine
+Dringlichkeit. Die Hintergrundpause bleibt davon unabhängig aktiv.
+
+Externe Telefonate verwenden einen eigenen öffentlichen Prompt ohne Owner-Biografie,
+Portfolio-Fakten oder Gedächtnisabfragen. Lukas stellt sich als KI-Assistent vor;
+der Name des Auftraggebers und interne Preisobergrenzen bleiben im Gespräch privat.
+Der Chat gibt Gesprächsziel, Angebot und Namensschutz als Anlass weiter. Eine
+Preisabsage beendet nicht automatisch jede Verhandlung; ein ausdrücklicher Wunsch
+nach keinen weiteren Verhandlungen oder Kontakten wird respektiert.

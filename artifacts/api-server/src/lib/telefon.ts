@@ -22,6 +22,7 @@ import { buildPublicSystemPrompt } from "./public-prompt";
 import { SPRACH_REGEL } from "./ai/sprach-sitzung";
 import { acceptLiveSipSession, rejectLiveSipSession } from "./ai/live-session";
 import { logger } from "./logger";
+import type { OwnerCallGrant } from "./owner-call-grant";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
@@ -124,7 +125,7 @@ export async function protokolliere(eintrag: {
 /** Die Anweisungen fuer genau diesen Anrufer. */
 async function anweisungen(stufe: Stufe, name: string, anlass: string | null): Promise<string> {
   const basis =
-    stufe === "privat" ? await buildSystemPrompt() : await buildPublicSystemPrompt("web");
+    stufe === "privat" ? await buildSystemPrompt() : await buildPublicSystemPrompt("telefon");
 
   const wer = name ? `Du sprichst mit ${name}.` : "";
 
@@ -307,7 +308,7 @@ export function twilioZugang(): { sid: string; nutzer: string; geheim: string } 
   return null;
 }
 
-export async function starteAnruf(nummer: string, anlass: string): Promise<string> {
+export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant): Promise<string> {
   const zugang = twilioZugang();
   const von = process.env.TWILIO_NUMMER?.trim();
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
@@ -327,17 +328,22 @@ export async function starteAnruf(nummer: string, anlass: string): Promise<strin
     .where(eq(telefonNummern.nummer, ziel))
     .limit(1);
 
-  // Von sich aus anrufen darf er nur, wo Issa das ausdruecklich erlaubt hat.
-  if (!eintrag?.darfAngerufenWerden || eintrag.stufe === "gesperrt") {
+  // Only an authenticated Dashboard request may authorize an unknown target.
+  // Consume its exact-target capability before any provider side effect.
+  // Existing contact restrictions always win; no contact permissions are saved.
+  const einmalig = !eintrag && ownerCallGrant?.(ziel) === true;
+  if (!einmalig && (!eintrag?.darfAngerufenWerden || eintrag.stufe === "gesperrt")) {
     await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "abgewiesen", anlass });
-    return `Diese Nummer ist nicht zum Anrufen freigegeben. Issa kann sie im Dashboard unter Telefon freischalten.`;
+    return eintrag
+      ? "Diese Nummer ist nicht zum Anrufen freigegeben. Issa kann sie im Dashboard unter Telefon freischalten."
+      : "Für diese neue Nummer brauche ich einen ausdrücklichen Anrufauftrag in deiner aktuellen Dashboard-Nachricht, zum Beispiel: Ruf +4915112345678 an und verhandle über den Garten. Die Nummer muss dafür nicht gespeichert werden. Ein bereits verbrauchter Auftrag braucht eine neue Nachricht.";
   }
 
   if (istTelnyx()) {
     try {
       await telnyxWaehle(`+${ziel}`, anlass);
       await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "gewaehlt", anlass });
-      return `Ich rufe ${eintrag.name || "+" + ziel} gerade an.`;
+      return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an.`;
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Telnyx-Anruf fehlgeschlagen";
       await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "fehlgeschlagen", anlass, detail });
@@ -374,7 +380,7 @@ export async function starteAnruf(nummer: string, anlass: string): Promise<strin
   }
 
   await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "gewaehlt", anlass });
-  return `Ich rufe ${eintrag.name || "+" + ziel} gerade an.`;
+  return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an.`;
 }
 
 /** Die letzten Anrufe fuer das Dashboard. */

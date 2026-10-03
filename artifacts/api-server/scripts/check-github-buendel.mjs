@@ -70,7 +70,7 @@ export const createProposal = async () => ({});
 export const runSubagent = async () => ""; export const subagentUebersicht = async () => "";
 export const createSubagent = async () => ""; export const fixError = async () => "";
 export const meldeDichBeiIssa = async () => "";
-export const starteAnruf = async () => "";
+export const starteAnruf = async (...args) => { globalThis.__phoneArgs = args; return "mock call"; };
 export const fehlerGruppen = async () => [];
 export const verbrauchsUebersicht = () => [];
 `,
@@ -154,6 +154,15 @@ await executeLukasTool("github_read_path", {
   paths: Array.from({ length: 20 }, (_, i) => `src/f${i}.ts`),
 });
 pruefe(abrufe.length <= 6, `Hoechstens 6 Pfade je Aufruf, waren: ${abrufe.length}`);
+
+// Model-generated tool fields cannot mint the server-only call capability.
+await executeLukasTool("ruf_an", { nummer: "+4915112345678", anlass: "Test", ownerCallGrant: true, ownerApproved: true },
+  { rawUserMessage: "Ruf +4915112345678 an", conversationId: 7 });
+pruefe(globalThis.__phoneArgs[2] === undefined, "User text/tool flags alone cannot authorize an unknown call");
+const serverGrant = () => true;
+await executeLukasTool("ruf_an", { nummer: "+4915112345678", anlass: "Test" }, { ownerCallGrant: serverGrant });
+pruefe(globalThis.__phoneArgs[2] === serverGrant, "Only the server context passes its call capability");
+delete globalThis.__phoneArgs;
 
 rmSync(dir, { recursive: true, force: true });
 

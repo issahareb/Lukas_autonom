@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { conversations, messages, attachments as attachmentsTable } from "@workspace/db";
 import { eq, desc, asc, and, isNull } from "drizzle-orm";
 import { allLukasTools, executeLukasTool } from "../lib/lukas-tools";
+import { ownerCallGrantFromMessage } from "../lib/owner-call-grant";
 import { nimmBilder, entwerteAlteBilder, BILD_MARKE } from "../lib/bildablage";
 import { merkeErfahrung } from "../lib/lernen";
 import { fuehleWerkzeug } from "../lib/emotion-engine";
@@ -269,6 +270,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     const convId = parseInt(req.params.id);
     const { content } = req.body;
     if (!content) return void res.status(400).json({ error: "content required" });
+    // This route is behind lukasAuth. Never mint this capability from model output.
+    const ownerCallGrant = ownerCallGrantFromMessage(String(content));
 
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, convId));
     if (!conv) return void res.status(404).json({ error: "Conversation not found" });
@@ -444,6 +447,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
           const toolResult = await executeLukasTool(toolCall.name, input, {
             rawUserMessage: String(content),
             conversationId: convId,
+            ownerCallGrant,
           });
           convo.push({ role: "tool", tool_call_id: toolCall.id, content: toolResult });
           // Ausgang merken — siehe lib/lernen.ts. Kein Modellaufruf, keine

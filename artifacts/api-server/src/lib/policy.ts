@@ -94,8 +94,10 @@ export const TOOL_RISK: Record<string, RiskTier> = {
    * Anrufen steht auf R1, obwohl es nach aussen wirkt.
    *
    * Der Grund: die eigentliche Sperre sitzt woanders. Anrufen kann er nur
-   * Nummern, die Issa im Dashboard ausdruecklich dafuer freigegeben hat —
-   * eine Liste, die Lukas selbst nicht aendern kann. Stuende das zusaetzlich
+   * dauerhaft freigegebene Nummern oder eine neue Nummer mit einmaligem,
+   * zielgebundenem Auftrag aus dem authentifizierten Dashboard-Chat.
+   * Das Modell kann diese Freigabe nicht als Tool-Parameter erzeugen.
+   * Gesperrte Kontakte bleiben gesperrt. Stuende das zusaetzlich
    * auf R2, muesste Issa jeden Anruf im Dashboard freigeben; dann koennte er
    * aber auch gleich selbst nachsehen, und "Lukas meldet sich von sich aus"
    * waere sinnlos. Wer das anders will, stellt hier auf R2.

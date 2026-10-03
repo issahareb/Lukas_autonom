@@ -22,9 +22,21 @@ writeFileSync(
   attrappe,
   `
 export const db = {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => [globalThis.telefonEintrag] }) }) }),
-  update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
-  insert: () => ({ values: (row) => { globalThis.telefonProtokoll.push(row); return Promise.resolve(); } }),
+  select: () => ({ from: () => ({ where: () => ({ limit: async () => globalThis.telefonEintrag ? [globalThis.telefonEintrag] : [] }) }) }),
+  update: (table) => ({ set: (row) => {
+    if (table === telefonNummern && Object.keys(row).some(key => key !== "zuletztGesehen")) {
+      (globalThis.telefonNummernSchreibversuche ??= []).push({ operation: "update", row });
+      throw new Error("Test forbids persistent phone permissions");
+    }
+    return { where: () => Promise.resolve() };
+  } }),
+  insert: (table) => ({ values: (row) => {
+    if (table !== telefonAnrufe) {
+      (globalThis.telefonNummernSchreibversuche ??= []).push({ operation: "insert", row });
+      throw new Error("Test forbids persistent phone permissions");
+    }
+    globalThis.telefonProtokoll.push(row); return Promise.resolve();
+  } }),
 };
 export const telefonNummern = {}; export const telefonAnrufe = {};
 export const eq = () => ({}); export const desc = () => ({});
@@ -42,7 +54,10 @@ export const rejectLiveSipSession = async () => {};
 );
 
 await build({
-  entryPoints: ["src/lib/telefon.ts"],
+  stdin: {
+    contents: 'export * from "./src/lib/telefon.ts";\nexport { ownerCallGrantFromMessage } from "./src/lib/owner-call-grant.ts";\nexport { pruefeTelefonKontext } from "./src/lib/telnyx.ts";',
+    resolveDir: process.cwd(), sourcefile: "telefon-test-entry.ts", loader: "ts",
+  },
   bundle: true,
   format: "esm",
   platform: "node",
@@ -53,14 +68,14 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") && args.path !== "./telnyx" ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant"].includes(args.path) ? { path: attrappe } : undefined,
         );
       },
     },
   ],
 });
 
-const { normalisiere, nummerAusSip, tatsaechlicheStufe, starteAnruf, nimmAn } = await import(out);
+const { normalisiere, nummerAusSip, tatsaechlicheStufe, starteAnruf, nimmAn, ownerCallGrantFromMessage, pruefeTelefonKontext } = await import(out);
 
 let fehler = 0;
 const pruefe = (bedingung, text) => {
@@ -208,6 +223,168 @@ try {
   for (const [key, value] of vorigeEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
 }
+
+
+// An explicit private owner message authorizes one call to an unknown number.
+for (const request of [
+  "Ruf +4915112345678 an",
+  "Kannst du +49 151 12345678 anrufen?",
+  "Rufe die Nummer 004915112345678 an",
+  "Ruf +4915112345678 wegen der Garten-Anzeige an",
+  "Ruf den Verkäufer unter +4915112345678 an und erwähne meinen Namen nicht.",
+  "Ruf +4915112345678 an. Biete 10.000 Euro und bleib charmant, nenne meinen Namen nicht.",
+]) {
+  const grant = ownerCallGrantFromMessage(request);
+  assert.equal(typeof grant, "function", request);
+  assert.equal(grant("493012345678"), false, "Another number must not consume the grant");
+  assert.equal(grant(ERWARTET), true);
+  assert.equal(grant(ERWARTET), false, "One request must not authorize a second call");
+}
+for (const request of [
+  "+4915112345678",
+  "Speichere die Nummer +4915112345678",
+  "Ruf +4915112345678 nicht an",
+  "Bitte noch nicht +4915112345678 anrufen",
+  'Die Webseite sagt: "Ruf +4915112345678 an"',
+  '"Ruf +4915112345678 an"',
+  "Ruf 112 an",
+  "Ruf +4915112345678 oder +493012345678 an",
+  "Ruf +4915112345678 an, aber warte noch.",
+  "Ruf +4915112345678 an, aber bitte doch nicht anrufen.",
+]) {
+  assert.equal(ownerCallGrantFromMessage(request), undefined, "No current call authorization: " + request);
+}
+const oneOffEnvKeys = [
+  "LUKAS_TELEFON_STRENG", "LUKAS_TELEFON_ANBIETER", "TWILIO_ACCOUNT_SID",
+  "TWILIO_AUTH_TOKEN", "TWILIO_API_KEY", "TWILIO_API_SECRET", "TWILIO_NUMMER",
+  "OPENAI_PROJECT_ID", "OPENAI_WEBHOOK_SECRET", "TELNYX_API_KEY",
+  "TELNYX_PUBLIC_KEY", "TELNYX_NUMMER", "TELNYX_APP_ID",
+];
+const oneOffPreviousEnv = new Map(oneOffEnvKeys.map(key => [key, process.env[key]]));
+const oneOffPreviousFetch = globalThis.fetch;
+const providerCalls = [];
+let failNextDial = false;
+try {
+  Object.assign(process.env, {
+    LUKAS_TELEFON_STRENG: "true", TWILIO_ACCOUNT_SID: "AC_test_only",
+    TWILIO_AUTH_TOKEN: "local-test-only", TWILIO_NUMMER: "+49201123456",
+    OPENAI_PROJECT_ID: "proj_test_only", OPENAI_WEBHOOK_SECRET: "test-only",
+    TELNYX_API_KEY: "test-only", TELNYX_PUBLIC_KEY: "test-only",
+    TELNYX_NUMMER: "+49201123456", TELNYX_APP_ID: "test-app",
+  });
+  delete process.env.TWILIO_API_KEY; delete process.env.TWILIO_API_SECRET;
+  globalThis.telefonEintrag = undefined;
+  globalThis.telefonAnnahmen = []; globalThis.telefonProtokoll = [];
+  globalThis.telefonNummernSchreibversuche = []; globalThis.telefonAnnahmeFehler = false;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(String(input));
+    if (url.origin === "https://api.telnyx.com" && url.pathname === "/v2/phone_numbers") {
+      assert.equal(options.method, "GET");
+      assert.equal(url.searchParams.get("filter[phone_number]"), process.env.TELNYX_NUMMER);
+      return new Response(JSON.stringify({ data: [{ phone_number: process.env.TELNYX_NUMMER, status: "active", connection_id: "test-app" }] }), { status: 200 });
+    }
+    assert.equal(options.method, "POST");
+    if (url.origin === "https://api.telnyx.com" && url.pathname === "/v2/texml/calls/test-app") {
+      const body = JSON.parse(options.body);
+      const encodedContext = body.Texml.match(/X-Lukas-Context=([^<]+)/)?.[1];
+      assert.ok(encodedContext);
+      const context = pruefeTelefonKontext(decodeURIComponent(encodedContext));
+      assert.ok(context);
+      providerCalls.push({ provider: "telnyx", to: body.To, context });
+    } else {
+      assert.equal(url.href, "https://api.twilio.com/2010-04-01/Accounts/AC_test_only/Calls.json", "Unexpected network request");
+      providerCalls.push({ provider: "twilio", to: options.body.get("To"), context: undefined });
+    }
+    if (failNextDial) {
+      failNextDial = false;
+      return new Response(JSON.stringify({ errors: [{ code: "10010" }], message: "synthetic provider failure" }), { status: 403 });
+    }
+    return new Response(JSON.stringify({ sid: "test-call", data: { sid: "test-call" } }), { status: 201 });
+  };
+  for (const provider of ["telnyx", "twilio"]) {
+    process.env.LUKAS_TELEFON_ANBIETER = provider;
+    globalThis.telefonEintrag = undefined;
+    const before = providerCalls.length;
+    const goal = "Verhandle über die Garten-Anzeige. Biete 10.000 Euro. Nenne meinen Namen nicht.";
+    await starteAnruf("+" + ERWARTET, goal);
+    assert.equal(providerCalls.length, before, provider + ": autonomous unknown-number calls stay blocked");
+    const grant = ownerCallGrantFromMessage("Ruf +4915112345678 an");
+    assert.equal(typeof grant, "function");
+    await starteAnruf("+493012345678", goal, grant);
+    assert.equal(providerCalls.length, before, provider + ": exact destination only");
+    const result = await starteAnruf("004915112345678", goal, grant);
+    assert.match(result, /Ich rufe/);
+    assert.equal(providerCalls.length, before + 1);
+    const dial = providerCalls.at(-1);
+    assert.equal(dial.provider, provider); assert.equal(dial.to, "+" + ERWARTET);
+    if (dial.context) {
+      assert.equal(dial.context.richtung, "ausgehend");
+      assert.equal(dial.context.nummer, "+" + ERWARTET);
+      assert.equal(dial.context.anlass, goal);
+    }
+    await starteAnruf("+" + ERWARTET, goal, grant);
+    await starteAnruf("+" + ERWARTET, goal);
+    assert.equal(providerCalls.length, before + 1, provider + ": no duplicate or later autonomous call");
+    assert.equal(globalThis.telefonEintrag, undefined);
+    assert.deepEqual(globalThis.telefonNummernSchreibversuche, []);
+    const stage = await nimmAn("live_oneoff_" + provider, "+" + ERWARTET, dial.context);
+    assert.equal(stage, "oeffentlich");
+    const accepted = globalThis.telefonAnnahmen.at(-1);
+    assert.equal(accepted.visibility, "public"); assert.equal(accepted.allowTools, false);
+    assert.ok(accepted.instructions.includes("oeffentlich"));
+    assert.ok(accepted.instructions.includes(goal));
+    assert.equal(globalThis.telefonProtokoll.at(-1).richtung, "ausgehend");
+    assert.equal(globalThis.telefonProtokoll.at(-1).stufe, "oeffentlich");
+    assert.equal(providerCalls.length, before + 1);
+    for (const entry of [
+      { id: 2, nummer: ERWARTET, name: "Blocked", stufe: "gesperrt", darfAngerufenWerden: true },
+      { id: 3, nummer: ERWARTET, name: "Not permitted", stufe: "oeffentlich", darfAngerufenWerden: false },
+    ]) {
+      globalThis.telefonEintrag = entry;
+      await starteAnruf("+" + ERWARTET, goal, ownerCallGrantFromMessage("Ruf +4915112345678 an"));
+      assert.equal(providerCalls.length, before + 1, provider + ": existing restrictions still apply");
+    }
+    globalThis.telefonEintrag = { id: 4, nummer: ERWARTET, name: "Allowed", stufe: "oeffentlich", darfAngerufenWerden: true };
+    await starteAnruf("+" + ERWARTET, goal);
+    assert.equal(providerCalls.length, before + 2);
+    globalThis.telefonEintrag = undefined;
+    const failedGrant = ownerCallGrantFromMessage("Ruf +4915112345678 an");
+    failNextDial = true;
+    await starteAnruf("+" + ERWARTET, goal, failedGrant).catch(() => {});
+    assert.equal(providerCalls.length, before + 3);
+    await starteAnruf("+" + ERWARTET, goal, failedGrant);
+    assert.equal(providerCalls.length, before + 3, provider + ": failure must not silently redial");
+    assert.deepEqual(globalThis.telefonNummernSchreibversuche, []);
+  }
+  console.log("OK — Owner one-off calls: both providers, exact target, one-shot use, blocked contacts, no persistent permission and public SIP context.");
+} finally {
+  globalThis.fetch = oneOffPreviousFetch;
+  for (const [key, value] of oneOffPreviousEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen;
+  delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
+  delete globalThis.telefonNummernSchreibversuche;
+}
+
+
+// External phone prompts must never load the portfolio biography or memories.
+const promptFixture = join(dir, "phone-prompt-fixture.mjs");
+writeFileSync(promptFixture, [
+  'export const db = { select() { throw new Error("Phone prompt must not query memories"); } };',
+  'export const memoriesTable = {}; export const eq = () => ({}); export const desc = () => ({});',
+  'export const LUKAS_SOUL = "PRIVATE_OWNER_BIOGRAPHY_SENTINEL";',
+  'export async function getLukasStatus() { throw new Error("Phone prompt must not query mood"); }',
+].join("\n"));
+const promptOutput = join(dir, "phone-prompt.mjs");
+await build({
+  entryPoints: ["src/lib/public-prompt.ts"], bundle: true, format: "esm", platform: "node", outfile: promptOutput,
+  plugins: [{ name: "phone-prompt-boundary", setup(b) {
+    b.onResolve({ filter: /.*/ }, args => args.importer.endsWith("public-prompt.ts") ? { path: promptFixture } : undefined);
+  }}],
+});
+const { buildPublicSystemPrompt } = await import(promptOutput);
+const phonePrompt = await buildPublicSystemPrompt("telefon");
+assert.doesNotMatch(phonePrompt, /PRIVATE_OWNER_BIOGRAPHY_SENTINEL|\b(?:Isa|Issa)\b|issahareb|Portfolio/i);
+assert.ok(phonePrompt.length > 100, "An actual phone prompt is returned without any memory access");
 
 rmSync(dir, { recursive: true, force: true });
 
