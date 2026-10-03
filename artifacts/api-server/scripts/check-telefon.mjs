@@ -42,7 +42,7 @@ export const telefonNummern = {}; export const telefonAnrufe = {};
 export const eq = () => ({}); export const desc = () => ({});
 export const logger = { warn() {}, info() {}, error() {} };
 export const buildSystemPrompt = async () => "privat";
-export const buildPublicSystemPrompt = async () => "oeffentlich";
+export const buildPublicSystemPrompt = async (channel) => { if (channel !== "telefon") throw new Error("External calls must use the phone prompt"); return "oeffentlich"; };
 export const SPRACH_REGEL = ""; export const sprachAudio = () => ({});
 export const sprachModell = () => "gpt-live-1";
 export const acceptLiveSipSession = async (options) => {
@@ -233,6 +233,7 @@ for (const request of [
   "Ruf +4915112345678 wegen der Garten-Anzeige an",
   "Ruf den Verkäufer unter +4915112345678 an und erwähne meinen Namen nicht.",
   "Ruf +4915112345678 an. Biete 10.000 Euro und bleib charmant, nenne meinen Namen nicht.",
+  "Ruf +4915112345678 an. Wenn er den Preis ablehnt, frag nach seinem Gegenangebot.",
 ]) {
   const grant = ownerCallGrantFromMessage(request);
   assert.equal(typeof grant, "function", request);
@@ -251,6 +252,15 @@ for (const request of [
   "Ruf +4915112345678 oder +493012345678 an",
   "Ruf +4915112345678 an, aber warte noch.",
   "Ruf +4915112345678 an, aber bitte doch nicht anrufen.",
+  "Ruf +4915112345678 an. Aber nicht jetzt.",
+  "Ruf +4915112345678 an, aber erst morgen.",
+  "Ruf +4915112345678 an, aber erst nach meiner Bestätigung.",
+  "Ruf +4915112345678 an. Nein, bitte nicht.",
+  "Ruf +4915112345678 an. Tu das nicht.",
+  "Ruf +4915112345678 an. Das ist nur ein Beispielsatz.",
+  "Ruf +4915112345678 an. Ich habe es mir anders überlegt, bitte nicht.",
+  "Ruf +4915112345678 an. Nein.",
+  "Ruf +4915112345678 an. Noch nicht.",
 ]) {
   assert.equal(ownerCallGrantFromMessage(request), undefined, "No current call authorization: " + request);
 }

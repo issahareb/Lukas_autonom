@@ -7,7 +7,7 @@ export function ownerCallGrantFromMessage(raw: string): OwnerCallGrant | undefin
   const plain = text.replace(/```[\s\S]*?```|"[^"\n]*"|„[^“\n]*“|»[^«\n]*«|`[^`\n]*`/g, " ");
   const head = /^(?:lukas[,!:]?\s+)?(?:bitte\s+)?(ruf(?:e)?\s+|(?:kannst|könntest|würdest)\s+du\s+)/iu.exec(plain);
   if (!head) return undefined;
-  if (/\b(?:falls|wenn|sofern|durchwahl|extension|ext)\b|[#;]/iu.test(plain)) return undefined;
+  if (/\b(?:durchwahl|extension|ext)\b|[#;]/iu.test(plain)) return undefined;
   const phones = [...plain.matchAll(new RegExp(PHONE, "gu"))];
   if (phones.length !== 1) return undefined;
   const phone = phones[0];
@@ -22,9 +22,16 @@ export function ownerCallGrantFromMessage(raw: string): OwnerCallGrant | undefin
   if (/[.!?\n]/.test(plain.slice(phoneEnd, phoneEnd + ending.index))) return undefined;
   const end = phoneEnd + ending.index + ending[0].length;
   const directive = plain.slice(0, end), tail = plain.slice(end).trim();
-  if (/\b(?:nicht|nie|niemals|keinesfalls|kein\w*|stopp?|warte|abbrechen|morgen|später|spaeter)\b/iu.test(directive)) return undefined;
+  if (/\b(?:nicht|nie|niemals|keinesfalls|kein\w*|stopp?|warte|abbrechen|morgen|später|spaeter|falls|wenn|sofern|sobald)\b/iu.test(directive)) return undefined;
   if (tail && !/^(?:[.!?](?:\s|$)|,?\s*(?:wegen|für|zum|und|aber|sag(?:e)?|frag(?:e)?|sprich|verhandle)\b)/iu.test(tail)) return undefined;
   if (/\b(?:stopp?|warte|abbrechen|abbruch)\b|\b(?:doch|lieber)\s+nicht\b|\b(?:nicht|nie|niemals)\b[^.!?\n]{0,40}\b(?:anrufen|wählen|telefonieren)\b|\baber\s+nicht[.!?\s]*$/iu.test(tail)) return undefined;
+  // A postponed/retracted call is not an immediate instruction. Scope this
+  // to call-related clauses so "nenne meinen Namen nicht" still works.
+  if (/^(?:,\s*)?(?:(?:aber|und)\s+)?(?:erst\s+|wenn\s+|falls\s+|sofern\s+|sobald\s+)/iu.test(tail)) return undefined;
+  const clauses = tail.split(/[.!?]\s+|,\s*/u).map((part) => part.replace(/^[.!?,\s]+|[.!?,\s]+$/gu, ""));
+  if (clauses.some((part) => /^(?:(?:aber|bitte|doch|lieber|also|okay)\s+)*(?:nein(?:\b|$)|(?:noch\s+)?nicht(?:\s+(?:jetzt|heute|sofort|mehr))?$|erst\s+(?:morgen|später|spaeter|nach|ab|um)\b|(?:morgen|später|spaeter)\b|(?:tu|tue|mach|mache)\s+(?:das|es)\s+(?:bitte\s+)?nicht\b|lass\s+(?:das|es)\b)/iu.test(part))) return undefined;
+  if (/\b(?:ich\s+)?(?:habe|hab)\s+(?:es\s+)?mir\s+anders\s+überlegt\b/iu.test(tail)) return undefined;
+  if (/\b(?:nur\s+ein\s+beispiel\w*|beispielsatz|kein\s+(?:echter\s+)?auftrag)\b/iu.test(tail)) return undefined;
   const target = phone[0].replace(/[^0-9]/g, "").replace(/^00/, "");
   if (!/^[1-9][0-9]{6,14}$/.test(target)) return undefined;
   let used = false;
