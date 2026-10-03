@@ -31,7 +31,7 @@ try {
   assert.equal(t.pruefeTelefonKontext(token), null);
   Date.now = now;
   assert.throws(() => t.telnyxXml('"/><Say>bad', 'eingehend'));
-  assert.match(t.telnyxXml('', 'eingehend'), /transport=tls\?X-Lukas-Context=/);
+  assert.match(t.telnyxXml('', 'eingehend'), /transport=tls;secure=srtp\?X-Lukas-Context=/);
   let calls = [], numberStatus = 'requirement-info-pending';
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options });
@@ -43,6 +43,7 @@ try {
   const dial = calls.find(c => c.options.method === 'POST');
   assert.equal(dial.url, 'https://api.telnyx.com/v2/texml/calls/test-app');
   const payload = JSON.parse(dial.options.body);
+  assert.match(payload.Texml, /<Sip>sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "outbound bridge requires TLS signaling and SRTP audio");
   assert.equal(payload.From, process.env.TELNYX_NUMMER); assert.equal(payload.To, '+4915112345678');
   const context = t.pruefeTelefonKontext(payload.Texml.match(/X-Lukas-Context=([^<]+)/)[1]);
   assert.equal(context.nummer, payload.To); assert.equal(context.richtung, 'ausgehend');
@@ -113,7 +114,9 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   const incoming = await request(body); assert.equal(incoming.status, 200);
   assert.deepEqual(globalThis.telefonLogs.at(-1)[0], { route: 'telnyx/texml', outcome: 'xml_returned', httpStatus: 200 });
   assert.doesNotMatch(JSON.stringify(globalThis.telefonLogs), /4915112345678|49201123456|test-app|test-only|X-Lukas-Context|local-webhook-regression-secret/);
-  const incomingToken = (await incoming.text()).match(/X-Lukas-Context=([^<]+)/)[1];
+  const incomingXml = await incoming.text();
+  assert.match(incomingXml, /<Sip>sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "incoming bridge requires TLS signaling and SRTP audio");
+  const incomingToken = incomingXml.match(/X-Lukas-Context=([^<]+)/)[1];
   assert.equal(t.pruefeTelefonKontext(incomingToken).richtung, 'eingehend');
   const event = { type: 'live.transport.incoming', data: { type: 'sip', session_id: 'live_one', sip_headers: [{ name: 'X-Lukas-Context', value: token }] } };
   const sendEvent = (options = {}) => {

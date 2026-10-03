@@ -90,7 +90,8 @@ export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], 
   const host = process.env.OPENAI_SIP_HOST ?? "sip.api.openai.com";
   if (!/^[a-zA-Z0-9.-]+$/.test(host)) throw new Error("Ungültiger SIP-Host.");
   const token = telefonKontext(nummer, richtung, anlass);
-  const target = `sip:${projekt}@${host};transport=tls?X-Lukas-Context=${encodeURIComponent(token)}`;
+  // TLS schützt die SIP-Signalisierung; GPT Live verlangt zusätzlich SRTP für Audio.
+  const target = `sip:${projekt}@${host};transport=tls;secure=srtp?X-Lukas-Context=${encodeURIComponent(token)}`;
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial answerOnBridge="true" timeout="30"><Sip>${xml(target)}</Sip></Dial></Response>`;
 }
 

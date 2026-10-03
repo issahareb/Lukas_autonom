@@ -50,3 +50,11 @@ Webhook mit der erwarteten URL und erhält dessen sonstige Ereignisse. Danach
 prüft er den gespeicherten Stand und sendet ein harmloses Testereignis zur
 Signaturprüfung. Es entstehen keine Anrufe. Nach erfolgreicher Einrichtung den
 Schalter wieder auf `false` setzen.
+
+## GPT Live benötigt verschlüsseltes SIP-Audio
+
+Das gemeinsame TeXML für eingehende und ausgehende Anrufe verwendet `;transport=tls;secure=srtp` im OpenAI-SIP-Ziel. TLS schützt die Signalisierung, SRTP die Audiospur. TLS allein führt bei der Live-Annahme zu HTTP 400: `Live SIP calls require SRTP.` Der signierte `X-Lukas-Context` bleibt nach den URI-Parametern erhalten.
+
+Der Telnyx-Hinweis „This is an automated call generated on the Telnyx platform …“ ist davon unabhängig: Er gilt laut Telnyx auch für Paid-Konten. Dafür ist die Kontoverifizierung auf Verified beziehungsweise Level 2 maßgeblich; eine Einzahlung allein entfernt den Hinweis nicht.
+
+Quellen: [Telnyx SIP-URI-Verschlüsselung](https://github.com/team-telnyx/telnyx-node/blob/b697a5ac3b86173a2ca2c837dd51ab7ce7c4db25/src/resources/calls/calls.ts), [Paid-Beschränkungen](https://developers.telnyx.com/docs/account-setup/levels-and-capabilities/paid).

@@ -151,7 +151,7 @@ function liveApiFailure(path: string, status: number, data: unknown, connection:
     "invalid_request_error", "invalid_value", "invalid_parameter", "unsupported_parameter", "unknown_parameter",
     "missing_required_parameter", "model_not_found", "unsupported_model", "permission_denied", "insufficient_quota",
     "rate_limit_exceeded", "session_not_found", "call_not_found", "session_already_accepted", "unsupported_voice",
-    "invalid_model", "invalid_api_key", "billing_hard_limit_reached", "organization_restricted", "credit_balance_exhausted",
+    "invalid_model", "invalid_api_key", "billing_hard_limit_reached", "organization_restricted", "credit_balance_exhausted", "srtp_required",
   ]);
   const errorType = pick(error?.type, [
     "invalid_request_error", "authentication_error", "permission_error", "rate_limit_error", "server_error", "insufficient_quota",
