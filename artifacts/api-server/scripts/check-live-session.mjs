@@ -49,6 +49,7 @@ globalThis.clearTimeout = (token) => { timers.delete(token); };
 globalThis.fetch = async (url, options) => {
   const request = { url: String(url), ...options, body: options.body ? JSON.parse(options.body) : undefined };
   fixture.requests.push(request);
+  if (fixture.apiError) return Response.json({ error: fixture.apiError }, { status: 400 });
   if (request.url.endsWith("/live/sessions")) {
     if (fixture.failCreate) { fixture.failCreate = false; return new Response("untrusted provider details", { status: 500 }); }
     const id = "opaque_session_" + ++fixture.sequence;
@@ -184,6 +185,28 @@ try {
   fixture.failCreate = true; const beforeFailed = fixture.requests.length;
   await assert.rejects(api.createLiveWebRtcSession(createOptions), /HTTP 500/);
   assert.equal(fixture.requests.length, beforeFailed + 1);
+
+
+  const privateErrorText = "PRIVATE_PROVIDER_DETAILS_DO_NOT_LOG";
+  fixture.apiError = { code: "invalid_value", type: "invalid_request_error", param: "session.audio.output.voice",
+    message: "Unsupported voice " + privateErrorText };
+  await assert.rejects(api.acceptLiveSipSession({ sessionId: "live_error_probe", instructions: "PRIVATE_BACKEND_ONLY", visibility: "private" }),
+    error => /HTTP 400/.test(error.message) && /invalid_value/.test(error.message) && !error.message.includes(privateErrorText));
+  const voiceError = fixture.logs.filter(row => row.message === "OpenAI Live HTTP-Anfrage abgewiesen").at(-1);
+  assert.equal(voiceError.data.operation, "sip_accept");
+  assert.equal(voiceError.data.code, "invalid_value");
+  assert.equal(voiceError.data.param, "session.audio.output.voice");
+  assert.equal(voiceError.data.hints.voice, true); assert.equal(voiceError.data.hints.unsupported, true);
+  assert.ok(!JSON.stringify(voiceError).includes(privateErrorText));
+  fixture.apiError = { code: privateErrorText, type: privateErrorText, param: privateErrorText, message: privateErrorText };
+  await assert.rejects(api.acceptLiveSipSession({ sessionId: "live_error_private", instructions: "PRIVATE_BACKEND_ONLY", visibility: "private" }), /HTTP 400/);
+  const hiddenError = fixture.logs.filter(row => row.message === "OpenAI Live HTTP-Anfrage abgewiesen").at(-1);
+  assert.equal(hiddenError.data.code, "unknown"); assert.equal(hiddenError.data.param, "unknown");
+  assert.equal(hiddenError.data.errorType, "unknown"); assert.ok(!JSON.stringify(hiddenError).includes(privateErrorText));
+  fixture.apiError = { code: "credit_balance_exhausted", type: "invalid_request_error", message: "Insufficient credit balance." };
+  await assert.rejects(api.createLiveWebRtcSession(createOptions), /credit_balance_exhausted/);
+  assert.equal(fixture.logs.at(-1).data.hints.credit, true);
+  fixture.apiError = null;
 
   const sipOptions = { sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
     initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };

@@ -29,18 +29,26 @@ export const telefonWebhookRouter = Router();
 telefonWebhookRouter.post("/telefon/telnyx/texml", async (req, res) => {
   const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
   if (!telnyxSignatur(raw, req.get("telnyx-timestamp") ?? "", req.get("telnyx-signature-ed25519") ?? "")) {
+    logger.warn({ route: "telnyx/texml", outcome: "rejected", reason: "invalid_signature", httpStatus: 401 }, "Telnyx-TeXML-Eingang abgewiesen");
     return void res.status(401).send("ungültige Signatur");
   }
   // A valid signature from another application in this account is not enough.
-  if (!istTelnyx() || !telnyxBereit() || req.body?.ConnectionId !== process.env.TELNYX_APP_ID ||
-    req.body?.To !== process.env.TELNYX_NUMMER) {
+  const checks = {
+    providerSelected: istTelnyx(), configured: telnyxBereit(),
+    connectionMatches: req.body?.ConnectionId === process.env.TELNYX_APP_ID,
+    destinationMatches: req.body?.To === process.env.TELNYX_NUMMER,
+  };
+  if (!checks.providerSelected || !checks.configured || !checks.connectionMatches || !checks.destinationMatches) {
+    logger.warn({ route: "telnyx/texml", outcome: "rejected", reason: "configuration_mismatch", httpStatus: 403, ...checks }, "Telnyx-TeXML-Eingang abgewiesen");
     return void res.status(403).type("text/xml").send('<Response><Reject/></Response>');
   }
   try {
     const from = typeof req.body.From === "string" && /^\+[1-9]\d{5,14}$/.test(req.body.From) ? req.body.From : "";
     res.setHeader("Cache-Control", "no-store");
     res.type("text/xml").send(telnyxXml(from, "eingehend"));
+    logger.info({ route: "telnyx/texml", outcome: "xml_returned", httpStatus: 200 }, "Telnyx-TeXML für SIP-Weiterleitung ausgeliefert");
   } catch {
+    logger.warn({ route: "telnyx/texml", outcome: "rejected", reason: "xml_generation_failed", httpStatus: 503 }, "Telnyx-TeXML konnte nicht erstellt werden");
     res.status(503).type("text/xml").send('<Response><Reject/></Response>');
   }
 });

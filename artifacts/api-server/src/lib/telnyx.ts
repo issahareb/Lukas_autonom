@@ -7,6 +7,14 @@ export const telnyxBereit = () => Boolean(process.env.TELNYX_API_KEY && process.
   process.env.TELNYX_APP_ID && process.env.TELNYX_PUBLIC_KEY && process.env.OPENAI_PROJECT_ID &&
   process.env.OPENAI_WEBHOOK_SECRET);
 
+function telnyxOperation(pfad: string): string {
+  if (/^\/phone_numbers(?:[/?]|$)/.test(pfad)) return "Nummernstatus";
+  if (/^\/texml\/calls\//.test(pfad)) return "Anrufaufbau";
+  if (/^\/texml_applications(?:[/?]|$)/.test(pfad)) return "TeXML-Konfiguration";
+  if (/^\/outbound_voice_profiles(?:[/?]|$)/.test(pfad)) return "Sprachprofil";
+  return "API-Anfrage";
+}
+
 export async function telnyxAnfrage<T>(pfad: string, body?: unknown): Promise<T> {
   const key = process.env.TELNYX_API_KEY?.trim();
   if (!key) throw new Error("TELNYX_API_KEY fehlt.");
@@ -18,9 +26,15 @@ export async function telnyxAnfrage<T>(pfad: string, body?: unknown): Promise<T>
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const code = (data as { errors?: Array<{ code?: string }> }).errors?.[0]?.code ?? "unbekannt";
-    // Provider payloads can contain credentials/URLs. Return only status + error code.
-    throw new Error(`Telnyx ${res.status} (Code ${code}).`);
+    const rawCode = (data as { errors?: Array<{ code?: unknown }> } | null)?.errors?.[0]?.code;
+    // Never reflect raw provider descriptions, request paths, credentials or URLs.
+    const code = typeof rawCode === "string" && /^\d{5}$/.test(rawCode) ? rawCode :
+      typeof rawCode === "number" && Number.isInteger(rawCode) && rawCode >= 10000 && rawCode <= 99999
+        ? String(rawCode) : "unbekannt";
+    const hinweis = code === "10010"
+      ? " Telnyx verweigert die Berechtigung für diese Aktion. API-Zugriffsrechte und die Freigabe der betroffenen Voice-Anwendung prüfen."
+      : "";
+    throw new Error(`Telnyx ${res.status} bei „${telnyxOperation(pfad)}“ (Code ${code}).${hinweis}`);
   }
   return data as T;
 }
@@ -99,7 +113,7 @@ export async function telnyxStand(): Promise<TelnyxStand> {
   return { anbieter: "telnyx", nummer, status: n.status, verbunden, konfiguriert, freigeschaltet,
     bereit: konfiguriert && freigeschaltet,
     hinweis: !freigeschaltet ? `Telnyx hat die Rufnummer noch nicht freigeschaltet (${n.status}).` :
-      !konfiguriert ? "Die technische Einrichtung ist noch unvollständig." : "Für ein- und ausgehende Anrufe eingerichtet. Ein Gesprächstest bestätigt die Audioverbindung.",
+      !konfiguriert ? "Die technische Einrichtung ist noch unvollständig." : "Rufnummer aktiv und der Anwendung zugeordnet. Anrufberechtigung, SIP-Verbindung und Audio sind damit noch nicht geprüft.",
   };
 }
 

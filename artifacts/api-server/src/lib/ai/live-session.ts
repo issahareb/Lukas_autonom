@@ -107,6 +107,44 @@ function sessionConfig(config: { model: string; voice: string }, browser: boolea
     } } } : { type: "live" }),
   };
 }
+function liveApiFailure(path: string, status: number, data: unknown) {
+  const error = object(object(data)?.error);
+  const pick = (value: unknown, allowed: readonly string[]) =>
+    typeof value === "string" && allowed.includes(value) ? value : "unknown";
+  const code = pick(error?.code, [
+    "invalid_request_error", "invalid_value", "invalid_parameter", "unsupported_parameter", "unknown_parameter",
+    "missing_required_parameter", "model_not_found", "unsupported_model", "permission_denied", "insufficient_quota",
+    "rate_limit_exceeded", "session_not_found", "call_not_found", "session_already_accepted", "unsupported_voice",
+    "invalid_model", "invalid_api_key", "billing_hard_limit_reached", "organization_restricted", "credit_balance_exhausted",
+  ]);
+  const errorType = pick(error?.type, [
+    "invalid_request_error", "authentication_error", "permission_error", "rate_limit_error", "server_error", "insufficient_quota",
+  ]);
+  const param = pick(error?.param, [
+    "session", "session.type", "session.model", "session.audio", "session.audio.output", "session.audio.output.voice",
+    "session.delegation", "session.delegation.type", "session.instructions", "session.store", "session_id",
+    "model", "type", "audio", "audio.output.voice", "voice", "delegation", "delegation.type", "instructions", "store",
+    "transport", "transport.type", "transport.sdp",
+  ]);
+  // Provider messages can echo private input. Return classifications only.
+  const message = typeof error?.message === "string" ? error.message.slice(0, 4000).toLowerCase() : "";
+  const hints = {
+    credit: /credit|billing|balance|payment/.test(message),
+    quota: /quota|rate.?limit|capacity/.test(message),
+    model: /model/.test(message),
+    voice: /voice/.test(message),
+    session: /session|call/.test(message),
+    unsupported: /unsupported|not supported|does not support|unknown parameter/.test(message),
+    missing: /missing|required/.test(message),
+    invalid: /invalid|expected/.test(message),
+    access: /permission|access|authorized|verification|verified/.test(message),
+    expired: /expired|no longer|not found|does not exist/.test(message),
+  };
+  const operation = path === "/live/sessions" ? "create" :
+    path.endsWith("/accept") ? "sip_accept" : path.endsWith("/reject") ? "sip_reject" :
+    path.endsWith("/hangup") ? "sip_hangup" : "request";
+  return { operation, status, code, errorType, param, hints };
+}
 async function apiRequest(
   connection: ReturnType<typeof connectionConfig>, path: string, body?: unknown, timeout = 15_000,
 ): Promise<Response> {
@@ -116,8 +154,9 @@ async function apiRequest(
     signal: AbortSignal.timeout(timeout),
   });
   if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
-    throw new LiveSessionError("OpenAI Live antwortet mit HTTP " + response.status + ".");
+    const diagnostic = liveApiFailure(path, response.status, await response.json().catch(() => undefined));
+    logger.warn(diagnostic, "OpenAI Live HTTP-Anfrage abgewiesen");
+    throw new LiveSessionError(`OpenAI Live ${diagnostic.operation}: HTTP ${response.status} (Code ${diagnostic.code}, Parameter ${diagnostic.param}).`);
   }
   return response;
 }

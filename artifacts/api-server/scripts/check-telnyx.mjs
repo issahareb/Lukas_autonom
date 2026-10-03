@@ -46,11 +46,36 @@ try {
   assert.equal(payload.From, process.env.TELNYX_NUMMER); assert.equal(payload.To, '+4915112345678');
   const context = t.pruefeTelefonKontext(payload.Texml.match(/X-Lukas-Context=([^<]+)/)[1]);
   assert.equal(context.nummer, payload.To); assert.equal(context.richtung, 'ausgehend');
+  assert.match((await t.telnyxStand()).hinweis, /noch nicht geprüft/);
+  let providerErrorCode = '10010';
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    errors: [{ code: providerErrorCode, detail: 'secret-provider-detail', title: 'secret-provider-title' }],
+  }), { status: 403 });
+  await assert.rejects(t.telnyxAnfrage('/texml/calls/secret-app-id', {}), error => {
+    assert.match(error.message, /Telnyx 403/);
+    assert.match(error.message, /Anrufaufbau/);
+    assert.match(error.message, /Code 10010/);
+    assert.match(error.message, /Berechtigung/);
+    assert.doesNotMatch(error.message, /secret|trial|Guthaben/i);
+    return true;
+  });
+  await assert.rejects(t.telnyxAnfrage('/phone_numbers?filter[phone_number]=secret-number'), /Nummernstatus/);
+  providerErrorCode = 10010;
+  await assert.rejects(t.telnyxAnfrage('/texml/calls/test', {}), /Code 10010/);
+  for (const invalid of ['10010\nsecret', 'https://secret.invalid/key', '123456789012345', { value: 'secret' }, null]) {
+    providerErrorCode = invalid;
+    await assert.rejects(t.telnyxAnfrage('/secret-unknown-path'), error => {
+      assert.match(error.message, /API-Anfrage/);
+      assert.match(error.message, /Code unbekannt/);
+      assert.doesNotMatch(error.message, /secret/);
+      return true;
+    });
+  }
   globalThis.fetch = oldFetch;
   const stub = join(dir, 'stub.mjs');
   writeFileSync(stub, `
 export const db = {}, telefonNummern = {}, desc = () => {}, eq = () => {};
-export const logger = { warn(){}, info(){}, error(){} };
+export const logger = { warn(...args){ globalThis.telefonLogs?.push(args); }, info(...args){ globalThis.telefonLogs?.push(args); }, error(){} };
 import OpenAI from "openai";
 export const openai = new OpenAI({ apiKey: "local-test-only", webhookSecret: process.env.OPENAI_WEBHOOK_SECRET });
 export class LiveSessionError extends Error { constructor(message, accepted = false) { super(message); this.accepted = accepted; } }
@@ -74,15 +99,20 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   const require = createRequire(import.meta.url);
   symlinkSync(require.resolve('express/package.json').replace(/\/express\/package.json$/, ''), join(dir, 'node_modules'));
   const { telefonWebhookRouter } = await import(routes);
-  globalThis.acceptedCalls = []; globalThis.rejectedCalls = 0;
+  globalThis.acceptedCalls = []; globalThis.rejectedCalls = 0; globalThis.telefonLogs = [];
   const app = express(), capture = (req, _res, bytes) => { req.rawBody = bytes; };
   app.use(express.json({ verify: capture })); app.use(express.urlencoded({ extended: false, verify: capture })); app.use('/api', telefonWebhookRouter);
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
   const request = (bytes, signature = signed(bytes)) => oldFetch(base + '/telefon/telnyx/texml', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': signature }, body: bytes });
   assert.equal((await request(body, '')).status, 401);
+  assert.equal(globalThis.telefonLogs.at(-1)[0].reason, 'invalid_signature');
   assert.equal((await request(Buffer.from(body + '&ConnectionId=other'))).status, 403);
+  assert.equal(globalThis.telefonLogs.at(-1)[0].reason, 'configuration_mismatch');
+  assert.equal(globalThis.telefonLogs.at(-1)[0].connectionMatches, false);
   const incoming = await request(body); assert.equal(incoming.status, 200);
+  assert.deepEqual(globalThis.telefonLogs.at(-1)[0], { route: 'telnyx/texml', outcome: 'xml_returned', httpStatus: 200 });
+  assert.doesNotMatch(JSON.stringify(globalThis.telefonLogs), /4915112345678|49201123456|test-app|test-only|X-Lukas-Context|local-webhook-regression-secret/);
   const incomingToken = (await incoming.text()).match(/X-Lukas-Context=([^<]+)/)[1];
   assert.equal(t.pruefeTelefonKontext(incomingToken).richtung, 'eingehend');
   const event = { type: 'live.transport.incoming', data: { type: 'sip', session_id: 'live_one', sip_headers: [{ name: 'X-Lukas-Context', value: token }] } };
@@ -140,5 +170,6 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
 } finally {
   globalThis.fetch = oldFetch;
   if (server) await new Promise(resolve => server.close(resolve));
+  delete globalThis.telefonLogs;
   rmSync(dir, { recursive: true, force: true });
 }
