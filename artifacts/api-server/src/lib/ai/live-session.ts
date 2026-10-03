@@ -72,7 +72,11 @@ function connectionConfig() {
     throw new LiveSessionError("GPT Live benötigt eine HTTPS-API-Adresse.");
   }
   if (url.username || url.password || url.search || url.hash) throw new LiveSessionError("Ungültige GPT-Live-API-Adresse.");
-  return { base, headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" } };
+  const project = process.env.OPENAI_PROJECT_ID?.trim();
+  if (project && !/^proj_[A-Za-z0-9_-]+$/.test(project)) throw new LiveSessionError("Ungültiges OpenAI-Projekt.");
+  const headers: Record<string, string> = { Authorization: "Bearer " + key, "Content-Type": "application/json" };
+  if (project) headers["OpenAI-Project"] = project;
+  return { base, headers };
 }
 function liveConfig() {
   const model = sprachModell().trim();

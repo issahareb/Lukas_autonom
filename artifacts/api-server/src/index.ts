@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { join } from "node:path";
+import { inspectTelefonSetup } from "./lib/telefon-diagnose";
 import app from "./app";
 import { startMoltbookWorker, stopMoltbookWorker } from "./lib/moltbook-worker";
 import { startAutonomy, stopAutonomy } from "./lib/autonomy";
@@ -63,6 +66,24 @@ const server = app.listen(port, (err) => {
       return telnyxStand();
     }).then(stand => logger.info(stand, "Telnyx-Status"))
       .catch(err => logger.warn({ grund: err instanceof Error ? err.message : "Konfiguration unvollständig" }, "Telnyx-Status"));
+  }
+
+  if (process.env.LUKAS_TELEFON_DIAGNOSE === "true") {
+    void inspectTelefonSetup({ publicBaseUrl: process.env.LUKAS_PUBLIC_URL })
+      .then(report => logger.info(report, "Telefonie-Konfigurationsprüfung"))
+      .catch(() => logger.warn("Telefonie-Konfigurationsprüfung fehlgeschlagen"));
+  }
+
+  if (process.env.LUKAS_BACKGROUND_PAUSED === "true" && process.env.LUKAS_PAUSE_VPS_BACKGROUND === "true") {
+    // Fixed operational helper: uses existing SSH credentials without exposing them.
+    execFile(process.execPath, [join(__dirname, "../scripts/pause-vps-background.mjs")],
+      { timeout: 95_000, maxBuffer: 131072 }, (error, stdout, stderr) => {
+        try {
+          const report = JSON.parse(stdout.trim() || stderr.trim());
+          if (error || !report.ok) logger.warn(report, "VPS-Hintergrundprüfung");
+          else logger.info(report, "VPS-Hintergrundprüfung");
+        } catch { logger.warn("VPS-Hintergrundprüfung ohne gültigen Bericht"); }
+      });
   }
 
   startMoltbookWorker();

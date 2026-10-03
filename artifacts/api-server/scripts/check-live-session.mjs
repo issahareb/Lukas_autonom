@@ -37,7 +37,7 @@ await build({
   } }],
 });
 const previous = { fetch: globalThis.fetch, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
-const envKeys = ["OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS"];
+const envKeys = ["OPENAI_PROJECT_ID", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS"];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 for (const key of envKeys) delete process.env[key];
 const timers = new Map();
@@ -80,11 +80,17 @@ try {
   await assert.rejects(api.createLiveWebRtcSession(createOptions), /anderes Protokoll/);
   delete process.env.LUKAS_LIVE_MODEL; assert.equal(fixture.requests.length, 0);
 
+  process.env.OPENAI_PROJECT_ID = "invalid-project";
+  await assert.rejects(api.createLiveWebRtcSession(createOptions), /OpenAI-Projekt/);
+  assert.equal(fixture.requests.length, 0);
+  process.env.OPENAI_PROJECT_ID = "proj_phone_test";
   const first = await api.createLiveWebRtcSession(createOptions);
   assert.equal(first.model, "gpt-live-1"); assert.equal(first.voice, "cedar");
   assert.match(first.closeToken, /^[a-f0-9]{64}$/); assert.ok(!JSON.stringify(first).includes("fake-test-key"));
   const request = fixture.requests.at(-1), socket = socketFor(first.sessionId);
   assert.equal(request.headers.Authorization, "Bearer fake-test-key-do-not-use");
+  assert.equal(request.headers["OpenAI-Project"], "proj_phone_test");
+  assert.equal(socket.options.headers["OpenAI-Project"], "proj_phone_test");
   assert.equal(request.body.session.delegation.type, "client"); assert.equal(request.body.session.store, false);
   assert.deepEqual(request.body.session.audio, { output: { voice: "cedar" } });
   assert.ok(!request.body.session.instructions.includes("PRIVATE_BACKEND_ONLY"));
