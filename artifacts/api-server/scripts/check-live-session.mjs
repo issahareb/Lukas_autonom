@@ -206,6 +206,19 @@ try {
   fixture.apiError = { code: "credit_balance_exhausted", type: "invalid_request_error", message: "Insufficient credit balance." };
   await assert.rejects(api.createLiveWebRtcSession(createOptions), /credit_balance_exhausted/);
   assert.equal(fixture.logs.at(-1).data.hints.credit, true);
+  fixture.apiError = { type: "invalid_request_error", message: "The SIP session cannot be accepted in its current state. " +
+    "fake-test-key-do-not-use live_redaction_session https://private.example/token +4915112345678 " + '"private words should stay private"' };
+  await assert.rejects(api.acceptLiveSipSession({ sessionId: "live_redaction_session", instructions: "PRIVATE_BACKEND_ONLY", visibility: "private" }), /HTTP 400/);
+  const stateMessage = fixture.logs.at(-1).data.message;
+  assert.match(stateMessage, /The SIP session cannot be accepted in its current state/);
+  assert.doesNotMatch(stateMessage, /fake-test-key|live_redaction_session|private.example|491511|private words/);
+  fixture.apiError = { type: "invalid_request_error", message: "Cannot start session: " + request.body.session.instructions };
+  await assert.rejects(api.createLiveWebRtcSession(createOptions), /HTTP 400/);
+  assert.ok(!fixture.logs.at(-1).data.message.includes(request.body.session.instructions));
+  assert.match(fixture.logs.at(-1).data.message, /redacted/);
+  fixture.apiError = { type: "invalid_request_error", message: "session ".repeat(200) };
+  await assert.rejects(api.createLiveWebRtcSession(createOptions), /HTTP 400/);
+  assert.ok(fixture.logs.at(-1).data.message.length <= 500);
   fixture.apiError = null;
 
   const sipOptions = { sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,

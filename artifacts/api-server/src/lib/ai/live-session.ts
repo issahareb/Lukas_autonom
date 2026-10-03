@@ -107,7 +107,43 @@ function sessionConfig(config: { model: string; voice: string }, browser: boolea
     } } } : { type: "live" }),
   };
 }
-function liveApiFailure(path: string, status: number, data: unknown) {
+function safeLiveProviderMessage(
+  value: unknown, path: string, connection: ReturnType<typeof connectionConfig>, body?: unknown,
+): string {
+  if (typeof value !== "string") return "";
+  let message = value.slice(0, 20_000);
+  const secrets = new Set<string>();
+  const add = (candidate: unknown) => { if (typeof candidate === "string" && candidate.length >= 4) secrets.add(candidate); };
+  add(connection.headers.Authorization);
+  add(connection.headers.Authorization?.replace(/^Bearer\s+/i, ""));
+  for (const [name, candidate] of Object.entries(process.env)) {
+    if (/(?:^|_)(?:KEY|SECRET|TOKEN|PASSWORD|PASS)$/i.test(name)) add(candidate);
+  }
+  const encodedId = path.match(/^\/live\/sessions\/([^/?]+)/)?.[1];
+  if (encodedId) { add(encodedId); try { add(decodeURIComponent(encodedId)); } catch {} }
+  const collect = (node: unknown, sensitive = false, depth = 0): void => {
+    if (depth > 8) return;
+    if (typeof node === "string") { if (sensitive) add(node); return; }
+    if (Array.isArray(node)) { for (const item of node.slice(0, 128)) collect(item, sensitive, depth + 1); return; }
+    const record = object(node); if (!record) return;
+    for (const [key, item] of Object.entries(record)) {
+      collect(item, sensitive || /instructions|input|content|sdp|token|authorization|session_id|call_id|api_key|secret|password/i.test(key), depth + 1);
+    }
+  };
+  collect(body);
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) message = message.split(secret).join("[redacted]");
+  message = message
+    .replace(/(?:https?|wss?|sip|sips):\S+/gi, "[url]")
+    .replace(/\b(?:sk|ek|whsec|sess|session|call|live|req|proj|org)[_-][A-Za-z0-9_-]{6,}\b/g, "[id]")
+    .replace(/"[^"]*(?:"|$)|`[^`]*(?:`|$)|“[^”]*(?:”|$)|‘[^’]*(?:’|$)/g, "[quoted]")
+    .replace(/(^|[\s([{:=])'[^']*(?:'|$)/g, "$1[quoted]")
+    .replace(/[A-Za-z0-9_+/=-]{24,}/g, "[token]")
+    .replace(/\+?\b\d{7,}\b/g, "[number]")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  return message.length > 500 ? message.slice(0, 499) + "…" : message;
+}
+function liveApiFailure(path: string, status: number, data: unknown, connection: ReturnType<typeof connectionConfig>, body?: unknown) {
   const error = object(object(data)?.error);
   const pick = (value: unknown, allowed: readonly string[]) =>
     typeof value === "string" && allowed.includes(value) ? value : "unknown";
@@ -143,7 +179,7 @@ function liveApiFailure(path: string, status: number, data: unknown) {
   const operation = path === "/live/sessions" ? "create" :
     path.endsWith("/accept") ? "sip_accept" : path.endsWith("/reject") ? "sip_reject" :
     path.endsWith("/hangup") ? "sip_hangup" : "request";
-  return { operation, status, code, errorType, param, hints };
+  return { operation, status, code, errorType, param, hints, message: safeLiveProviderMessage(error?.message, path, connection, body) };
 }
 async function apiRequest(
   connection: ReturnType<typeof connectionConfig>, path: string, body?: unknown, timeout = 15_000,
@@ -154,7 +190,7 @@ async function apiRequest(
     signal: AbortSignal.timeout(timeout),
   });
   if (!response.ok) {
-    const diagnostic = liveApiFailure(path, response.status, await response.json().catch(() => undefined));
+    const diagnostic = liveApiFailure(path, response.status, await response.json().catch(() => undefined), connection, body);
     logger.warn(diagnostic, "OpenAI Live HTTP-Anfrage abgewiesen");
     throw new LiveSessionError(`OpenAI Live ${diagnostic.operation}: HTTP ${response.status} (Code ${diagnostic.code}, Parameter ${diagnostic.param}).`);
   }
