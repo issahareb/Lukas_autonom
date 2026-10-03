@@ -27,7 +27,7 @@ type Transcript = { role: "user" | "assistant"; text: string; endMs: number };
 type Work = { id: string; messages: Message[]; userText: string };
 type ManagedSession = {
   id: string; token: string; options: LiveSessionOptions;
-  connection: { base: string; headers: Record<string, string> };
+  connection: ReturnType<typeof connectionConfig>;
   model: string; voice: string; transport: "webrtc" | "sip";
   controller: AbortController; conversationId: number; socket?: Socket;
   socketGeneration: number; lifetime: ReturnType<typeof setTimeout>;
