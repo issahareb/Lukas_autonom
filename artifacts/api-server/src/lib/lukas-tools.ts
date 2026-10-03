@@ -1177,7 +1177,7 @@ async function githubSearchCode(repoInput: string, query: string): Promise<strin
 export async function executeLukasTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { rawUserMessage?: string; conversationId?: number } = {},
+  ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal } = {},
 ): Promise<string> {
   /*
    * Policy-Gate. Bewusst HIER, an der einen Stelle, durch die jeder
@@ -1185,7 +1185,10 @@ export async function executeLukasTool(
    * einem autonomen Hintergrund-Task. Eine Prüfung, die man an einem Kanal
    * vorbeischleusen kann, ist keine Prüfung.
    */
+  ctx.signal?.throwIfAborted();
   const decision = await checkPolicy(name, input, ctx.conversationId, ctx.rawUserMessage);
+  // A session can close while the policy/database lookup is still pending.
+  ctx.signal?.throwIfAborted();
   if (!decision.allow) return decision.message;
 
   // Werkzeuge fremder MCP-Server. Erst NACH dem Policy-Gate — sie sind kein

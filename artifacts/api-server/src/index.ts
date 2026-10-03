@@ -7,6 +7,7 @@ import { startConsolidationWorker, stopConsolidationWorker } from "./lib/consoli
 import { seedPublicFactsOnce } from "./lib/seed-public-facts";
 import { richteAbschiedEin } from "./lib/abschied";
 import { logger } from "./lib/logger";
+import { shutdownLiveSessions } from "./lib/ai/live-session";
 import { istTelnyx, telnyxStand, telnyxXml } from "./lib/telnyx";
 
 const rawPort = process.env["PORT"];
@@ -82,5 +83,6 @@ const server = app.listen(port, (err) => {
     stopSelbstheilung();
     stopConsolidationWorker();
     stopSandboxCleanup();
+    return shutdownLiveSessions();
   });
 });

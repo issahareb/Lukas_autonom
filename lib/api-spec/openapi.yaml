@@ -18,6 +18,168 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /lukas/live-session:
+    post:
+      operationId: createPrivateLiveSession
+      tags: [lukas]
+      summary: GPT-Live-Sprachkanal über WebRTC einrichten
+      security:
+        - LukasBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp]
+              properties:
+                sdp:
+                  type: string
+                  minLength: 1
+                  maxLength: 64000
+                  pattern: '^v=0'
+      responses:
+        "200":
+          description: SDP-Antwort; Backend-Steuerung bleibt ausschließlich serverseitig.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sdp, sessionId, closeToken, model, voice]
+                properties:
+                  sdp:
+                    type: string
+                  sessionId:
+                    type: string
+                  closeToken:
+                    type: string
+                    description: Berechtigung ausschließlich zum Beenden dieser Sitzung.
+                  model:
+                    type: string
+                  voice:
+                    type: string
+        "400":
+          description: Ungültiges SDP-Angebot.
+        "403":
+          description: Herkunft nicht erlaubt.
+        "429":
+          description: Zu viele Sprachsitzungen.
+        "502":
+          description: Live-Sitzung nicht verfügbar.
+  /lukas/live-session/{sessionId}/close:
+    post:
+      operationId: closePrivateLiveSession
+      tags: [lukas]
+      summary: GPT-Live-Sprachkanal beenden
+      security:
+        - LukasBearer: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [closeToken]
+              properties:
+                closeToken:
+                  type: string
+                  minLength: 32
+                  maxLength: 128
+      responses:
+        "204":
+          description: Sitzung beendet.
+        "400":
+          description: Ungültige Berechtigung.
+        "404":
+          description: Sitzung nicht vorhanden oder Berechtigung unpassend.
+        "502":
+          description: Beenden fehlgeschlagen.
+  /public/live-session:
+    post:
+      operationId: createPublicLiveSession
+      tags: [lukas]
+      summary: GPT-Live-Sprachkanal über WebRTC einrichten
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp]
+              properties:
+                sdp:
+                  type: string
+                  minLength: 1
+                  maxLength: 64000
+                  pattern: '^v=0'
+      responses:
+        "200":
+          description: SDP-Antwort; Backend-Steuerung bleibt ausschließlich serverseitig.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sdp, sessionId, closeToken, model, voice]
+                properties:
+                  sdp:
+                    type: string
+                  sessionId:
+                    type: string
+                  closeToken:
+                    type: string
+                    description: Berechtigung ausschließlich zum Beenden dieser Sitzung.
+                  model:
+                    type: string
+                  voice:
+                    type: string
+        "400":
+          description: Ungültiges SDP-Angebot.
+        "403":
+          description: Herkunft nicht erlaubt.
+        "429":
+          description: Zu viele Sprachsitzungen.
+        "502":
+          description: Live-Sitzung nicht verfügbar.
+  /public/live-session/{sessionId}/close:
+    post:
+      operationId: closePublicLiveSession
+      tags: [lukas]
+      summary: GPT-Live-Sprachkanal beenden
+      security: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [closeToken]
+              properties:
+                closeToken:
+                  type: string
+                  minLength: 32
+                  maxLength: 128
+      responses:
+        "204":
+          description: Sitzung beendet.
+        "400":
+          description: Ungültige Berechtigung.
+        "404":
+          description: Sitzung nicht vorhanden oder Berechtigung unpassend.
+        "502":
+          description: Beenden fehlgeschlagen.
   /lukas/telefon/telnyx:
     get:
       operationId: getTelnyxStatus

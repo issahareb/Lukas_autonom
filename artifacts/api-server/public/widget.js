@@ -28,7 +28,7 @@
  * --lukas-height --lukas-font
  *
  * ── Stimme ─────────────────────────────────────────────────────────────────
- *   data-voice="agent"   OpenAI Realtime API — direkte WebRTC-Verbindung im
+ *   data-voice="agent"   OpenAI GPT Live API — direkte WebRTC-Verbindung im
  *                        Browser (keine externe SDK-Abhängigkeit), echtes
  *                        Speech-to-Speech, Millisekunden-Latenz. Aus
  *                        Kostenschutz-Gründen ist das Gespräch auf ein paar
@@ -211,34 +211,8 @@
     });
   }
 
-  // ── Realtime-Client-Secret vorladen (Latenz): schon beim Öffnen des
-  // Panels anfordern, nicht erst beim Mikro-Klick — sonst zieht sich das
-  // "Verbinden…" spürbar hin, weil dann erst noch eine Session vom Server
-  // geholt werden muss, bevor die WebRTC-Verbindung überhaupt starten kann.
-  var pendingSession = null;
-  var pendingSessionAt = 0;
-  var SESSION_PREFETCH_MAX_AGE_MS = 4 * 60 * 1000; // Secret läuft nach 5min ab
-  function prefetchSession() {
-    var age = Date.now() - pendingSessionAt;
-    if (pendingSession && age < SESSION_PREFETCH_MAX_AGE_MS) return pendingSession;
-    pendingSessionAt = Date.now();
-    pendingSession = fetch(API + "/api/public/realtime-session", { method: "POST" }).then(function (r) {
-      if (!r.ok) {
-        return r
-          .json()
-          .catch(function () { return null; })
-          .then(function (body) {
-            var detail = body && (body.detail || body.error);
-            throw new Error(detail || "Session " + r.status);
-          });
-      }
-      return r.json();
-    });
-    pendingSession.catch(function () {
-      pendingSession = null;
-    });
-    return pendingSession;
-  }
+  // Erst der Mikro-Klick startet eine Sprachsitzung.
+  var stopVoiceAgent = function () {};
 
   function setOpen(open) {
     panel.classList.toggle("open", open);
@@ -248,7 +222,8 @@
         addMsg("a", cfg.greeting);
         renderChips(STARTER_QUESTIONS);
       }
-      if (cfg.voice === "agent") prefetchSession();
+    } else {
+      stopVoiceAgent();
     }
   }
 
@@ -273,24 +248,9 @@
     statusBar.textContent = text || "";
   }
 
-  // Die Eingabe-Transkription (gpt-4o-mini-transcribe) halluziniert bei sehr
-  // kurzen, leisen oder abgeschnittenen Audio-Schnipseln gelegentlich Text in
-  // einer völlig fremden Schrift. Auf issahareb.me tauchte so mitten in einem
-  // deutschen Gespräch eine koreanische Zeile in der eigenen Sprechblase auf.
-  //
-  // Der language-Hinweis der Session (transcription.language = "de", siehe
-  // routes/public.ts) ist bereits gesetzt und verhindert das NICHT: er
-  // gewichtet die Erkennung, er erzwingt sie nicht.
-  //
-  // Verwerfen ist hier gefahrlos, weil das Transkript reine Anzeige ist: das
-  // Modell hört das Audio direkt (Speech-to-Speech). Genau deshalb war die
-  // Antwort im Fehlerfall auch inhaltlich korrekt, während die Blase Unsinn
-  // zeigte. Dem Nutzer Worte anzuzeigen, die er nie gesagt hat, ist schlimmer
-  // als gar keine Blase — der Gesprächsfluss bleibt unberührt.
-  //
-  // Gilt ausdrücklich nur für den Sprach-Pfad. Getippter Text (siehe send())
-  // wird nie gefiltert: den hat der Nutzer bewusst so eingegeben, in welcher
-  // Schrift auch immer.
+  // Transkripte dienen nur der Anzeige. Der bestehende Filter blendet
+  // überwiegend nichtlateinische ASR-Artefakte im deutschen Widget aus.
+  // Das Sprachmodell hört unabhängig davon das Audio.
   function isHallucinatedTranscript(text) {
     var letters = text.match(/\p{L}/gu);
     // Zu kurz für eine belastbare Aussage — im Zweifel anzeigen.
@@ -408,151 +368,155 @@
   if (cfg.voice === "off") {
     micBtn.style.display = "none";
   } else if (cfg.voice === "agent") {
-    // OpenAI Realtime API: direkte WebRTC-Verbindung im Browser, ohne
-    // externe SDK-Abhängigkeit (bewusst kein CDN-Import — das erwies sich
-    // als unzuverlässig: das Mikro blinkte kurz rot auf und tat dann
-    // nichts, weil das dynamisch geladene SDK-Bundle in freier Wildbahn
-    // nicht zuverlässig funktionierte). Das Verbindungsprotokoll (POST der
-    // SDP-Offer an /v1/realtime/calls mit dem ephemeren Client-Secret als
-    // Bearer-Token) ist 1:1 aus dem echten SDK-Quellcode übernommen.
-    var pc = null;
-    var dc = null;
-    var micStream = null;
-    var audioEl = null;
-    var sessionTimer = null;
-    var SESSION_MAX_MS = 3 * 60 * 1000; // Kostenschutz: harte Kappung pro Gespräch
 
-    function stopAgent() {
-      if (sessionTimer) {
-        window.clearTimeout(sessionTimer);
-        sessionTimer = null;
-      }
-      if (dc) {
-        try { dc.close(); } catch (e) {}
-        dc = null;
-      }
-      if (pc) {
-        try { pc.close(); } catch (e) {}
-        pc = null;
-      }
-      if (micStream) {
-        micStream.getTracks().forEach(function (tr) { tr.stop(); });
-        micStream = null;
-      }
-      if (audioEl) {
-        try { audioEl.pause(); } catch (e) {}
-        audioEl.srcObject = null;
-        audioEl.remove();
-        audioEl = null;
-      }
-      micBtn.classList.remove("rec");
-      mainBtn.classList.remove("lukas-live");
-      setStatus("");
+    // GPT Live: SDP über Lukas; API-Schlüssel bleiben auf dem Server.
+    var activeAgent = null;
+    var SESSION_MAX_MS = 3 * 60 * 1000;
+    function closeRemoteSession(session) {
+      if (!session || !session.sessionId || !session.closeToken) return;
+      fetch(API + "/api/public/live-session/" + encodeURIComponent(session.sessionId) + "/close", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ closeToken: session.closeToken }), keepalive: true,
+      }).catch(function () {});
     }
-
+    function stopAgent(agent) {
+      agent = agent || activeAgent;
+      if (!agent || agent.stopped) return;
+      agent.stopped = true;
+      if (activeAgent === agent) {
+        activeAgent = null; micBtn.classList.remove("rec");
+        mainBtn.classList.remove("lukas-live"); setStatus("");
+      }
+      if (agent.timer) window.clearTimeout(agent.timer);
+      if (agent.connectTimer) window.clearTimeout(agent.connectTimer);
+      if (agent.disconnectTimer) window.clearTimeout(agent.disconnectTimer);
+      if (agent.dc) {
+        try {
+          if (agent.started && agent.dc.readyState === "open") agent.dc.send(JSON.stringify({ type: "session.close" }));
+          agent.dc.close();
+        } catch (e) {}
+      }
+      if (agent.pc) { try { agent.pc.close(); } catch (e) {} }
+      if (agent.mic) agent.mic.getTracks().forEach(function (track) { track.stop(); });
+      if (agent.audio) {
+        try { agent.audio.pause(); } catch (e) {}
+        agent.audio.srcObject = null; agent.audio.remove();
+      }
+      closeRemoteSession(agent.session);
+    }
+    stopVoiceAgent = function () { stopAgent(activeAgent); };
+    window.addEventListener("pagehide", stopVoiceAgent);
+    function markAgentReady(agent) {
+      if (agent.stopped || !agent.started || agent.pc.connectionState !== "connected") return;
+      if (agent.connectTimer) window.clearTimeout(agent.connectTimer);
+      if (agent.disconnectTimer) window.clearTimeout(agent.disconnectTimer);
+      agent.disconnectTimer = null;
+      setStatus("Sprich einfach — Lukas hört zu."); mainBtn.classList.add("lukas-live");
+    }
+    function showLiveTranscript(agent, evt) {
+      var role = evt.type === "session.input_transcript.delta" ? "user" : "assistant";
+      if (typeof evt.delta !== "string" || !evt.delta) return;
+      if (typeof evt.event_id === "string") {
+        if (agent.eventIds.has(evt.event_id)) return;
+        agent.eventIds.add(evt.event_id);
+        if (agent.eventIds.size > 512) agent.eventIds.delete(agent.eventIds.values().next().value);
+      }
+      var start = typeof evt.start_ms === "number" ? evt.start_ms : null;
+      var end = typeof evt.end_ms === "number" ? evt.end_ms : start;
+      var segment = agent.transcripts[role];
+      if (!segment || (start !== null && segment.end !== null &&
+          (start < segment.start || start - segment.end > 750))) {
+        segment = { text: "", element: null, start: start, end: end };
+        agent.transcripts[role] = segment;
+      }
+      segment.text += evt.delta; segment.end = end;
+      var hidden = role === "user" && isHallucinatedTranscript(segment.text);
+      if (!segment.element && !hidden) segment.element = addMsg(role, "");
+      if (segment.element) {
+        segment.element.textContent = segment.text;
+        segment.element.style.display = hidden ? "none" : "";
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+    }
     micBtn.addEventListener("click", function () {
-      if (pc) return stopAgent();
-      micBtn.classList.add("rec");
-      setStatus("Verbinde…");
-
-      // Mikro-Berechtigung SOFORT anfragen, im selben Tick wie der Klick —
-      // Mobile Browser (v.a. iOS Safari) verlangen, dass getUserMedia
-      // direkt auf eine Nutzergeste folgt, sonst wird die Anfrage nach
-      // async Arbeit dazwischen stillschweigend blockiert. Explizite Echo-
-      // Unterdrückung: sonst hört das Mikro (v.a. am Handylautsprecher)
-      // Lukas' eigene Stimme mit und "antwortet" sich selbst in einer Schleife.
-      var micPromise =
-        navigator.mediaDevices && navigator.mediaDevices.getUserMedia
-          ? navigator.mediaDevices
-              .getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-              })
-              .then(function (stream) {
-                micStream = stream;
-                return true;
-              })
-              .catch(function () { return false; })
-          : Promise.resolve(false);
-
-      Promise.all([micPromise, prefetchSession()])
-        .then(function (results) {
-          var micOk = results[0];
-          var s = results[1];
-          pendingSession = null; // Client-Secret ist Einweg — nächstes Mal frisch holen
-          if (!micOk || !micStream) throw new Error("Mikrofonzugriff verweigert");
-
-          pc = new RTCPeerConnection();
-          audioEl = document.createElement("audio");
-          audioEl.autoplay = true;
-          pc.ontrack = function (e) {
-            audioEl.srcObject = e.streams[0];
-          };
-          pc.addTrack(micStream.getAudioTracks()[0], micStream);
-
-          dc = pc.createDataChannel("oai-events");
-          dc.addEventListener("message", function (ev) {
-            var evt;
-            try { evt = JSON.parse(ev.data); } catch (e) { return; }
-            if (!evt || !evt.type) return;
-            if (evt.type === "response.created") {
-              mainBtn.classList.add("lukas-live");
-              setStatus("Lukas spricht…");
-            } else if (evt.type === "output_audio_buffer.started") {
-              // Mikro stummschalten, solange Lukas' eigene Stimme über den
-              // Lautsprecher läuft — echoCancellation allein reicht auf vielen
-              // Geräten (v.a. ohne Headset/Bluetooth) nicht aus, das Mikro hört
-              // dann Lukas mit, der sich selbst "hört" und sich unterbricht
-              // bzw. auf sich selbst antwortet.
-              if (micStream) micStream.getAudioTracks().forEach(function (t) { t.enabled = false; });
-            } else if (evt.type === "output_audio_buffer.stopped") {
-              if (micStream) micStream.getAudioTracks().forEach(function (t) { t.enabled = true; });
-            } else if (evt.type === "response.done") {
-              setStatus("Lukas hört zu…");
-            } else if (evt.type === "response.output_audio_transcript.done" && evt.transcript) {
-              addMsg("a", evt.transcript);
-            } else if (evt.type === "conversation.item.input_audio_transcription.completed" && evt.transcript) {
-              if (!isHallucinatedTranscript(evt.transcript)) addMsg("user", evt.transcript);
-            } else if (evt.type === "error") {
-              addMsg("a", "Sprachfehler: " + (evt.error && evt.error.message ? evt.error.message : "unbekannt"));
-            }
+      if (activeAgent) return stopAgent(activeAgent);
+      var agent = {
+        stopped: false, started: false, pc: null, dc: null, mic: null, audio: null, session: null,
+        timer: null, connectTimer: null, disconnectTimer: null, transcripts: {}, eventIds: new Set(),
+      };
+      activeAgent = agent; micBtn.classList.add("rec"); setStatus("Verbinde…");
+      agent.connectTimer = window.setTimeout(function () {
+        if (activeAgent !== agent || agent.stopped) return;
+        stopAgent(agent); addMsg("a", "Die Sprachverbindung dauert zu lange. Bitte erneut versuchen.");
+      }, 30000);
+      var micPromise = navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+        ? navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+        : Promise.reject(new Error("Dieser Browser unterstützt kein Mikrofon."));
+      micPromise.then(function (stream) {
+        if (agent.stopped) { stream.getTracks().forEach(function (track) { track.stop(); }); return; }
+        agent.mic = stream; agent.pc = new RTCPeerConnection();
+        agent.audio = document.createElement("audio"); agent.audio.autoplay = true;
+        agent.audio.setAttribute("playsinline", ""); agent.audio.style.display = "none";
+        document.body.appendChild(agent.audio);
+        agent.pc.ontrack = function (event) {
+          if (agent.stopped) return;
+          agent.audio.srcObject = event.streams[0] || new MediaStream([event.track]);
+          agent.audio.play().catch(function () {
+            if (!agent.stopped) setStatus("Ton im Browser freigeben, um Lukas zu hören.");
           });
-          dc.addEventListener("close", function () {
-            if (pc) stopAgent();
-          });
-
-          return pc
-            .createOffer()
-            .then(function (offer) {
-              return pc.setLocalDescription(offer).then(function () {
-                return offer;
-              });
-            })
-            .then(function (offer) {
-              return fetch("https://api.openai.com/v1/realtime/calls", {
-                method: "POST",
-                body: offer.sdp,
-                headers: { "Content-Type": "application/sdp", Authorization: "Bearer " + s.value },
-              });
-            })
-            .then(function (resp) {
-              if (!resp.ok) throw new Error("Verbindung fehlgeschlagen (" + resp.status + ")");
-              return resp.text();
-            })
-            .then(function (answerSdp) {
-              return pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-            })
-            .then(function () {
-              setStatus("Sprich einfach — Lukas hört zu.");
-              sessionTimer = window.setTimeout(function () {
-                stopAgent();
-                addMsg("a", "Die Zeit für dieses Gespräch ist um — gerne nochmal starten!");
-              }, SESSION_MAX_MS);
-            });
-        })
-        .catch(function (err) {
-          stopAgent();
-          addMsg("a", "Voice nicht verfügbar: " + (err && err.message ? err.message : "unbekannt"));
+        };
+        agent.pc.onconnectionstatechange = function () {
+          if (agent.stopped) return;
+          if (agent.pc.connectionState === "connected") markAgentReady(agent);
+          else if (agent.pc.connectionState === "failed" || agent.pc.connectionState === "closed") {
+            stopAgent(agent); addMsg("a", "Die Sprachverbindung wurde beendet.");
+          } else if (agent.pc.connectionState === "disconnected" && !agent.disconnectTimer) {
+            setStatus("Verbindung wird wiederhergestellt…");
+            agent.disconnectTimer = window.setTimeout(function () { stopAgent(agent); }, 10000);
+          }
+        };
+        stream.getAudioTracks().forEach(function (track) { agent.pc.addTrack(track, stream); });
+        agent.dc = agent.pc.createDataChannel("oai-events");
+        agent.dc.addEventListener("message", function (event) {
+          if (agent.stopped) return;
+          var evt; try { evt = JSON.parse(event.data); } catch (e) { return; }
+          if (!evt || typeof evt.type !== "string") return;
+          if (evt.type === "session.started") { agent.started = true; markAgentReady(agent); }
+          else if (evt.type === "session.input_transcript.delta" || evt.type === "session.output_transcript.delta") showLiveTranscript(agent, evt);
+          else if (evt.type === "session.closed") stopAgent(agent);
+          else if (evt.type === "error") {
+            stopAgent(agent); addMsg("a", "Die Sprachverbindung ist fehlgeschlagen. Bitte erneut versuchen.");
+          }
         });
+        agent.dc.addEventListener("close", function () { stopAgent(agent); });
+        agent.dc.addEventListener("error", function () {
+          stopAgent(agent); addMsg("a", "Die Sprachverbindung ist fehlgeschlagen. Bitte erneut versuchen.");
+        });
+        return agent.pc.createOffer().then(function (offer) {
+          if (agent.stopped) return null;
+          return agent.pc.setLocalDescription(offer).then(function () { return offer; });
+        }).then(function (offer) {
+          if (!offer || agent.stopped) return null;
+          return fetch(API + "/api/public/live-session", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sdp: offer.sdp }),
+          }).then(function (response) {
+            if (!response.ok) throw new Error("Sprachverbindung fehlgeschlagen (" + response.status + ")");
+            return response.json();
+          });
+        }).then(function (session) {
+          if (!session) return;
+          agent.session = session;
+          if (agent.stopped) { closeRemoteSession(session); return; }
+          if (typeof session.sdp !== "string" || !session.sessionId || !session.closeToken) throw new Error("Ungültige Antwort für die Sprachverbindung.");
+          agent.timer = window.setTimeout(function () {
+            stopAgent(agent); addMsg("a", "Die Zeit für dieses Gespräch ist um — gerne nochmal starten!");
+          }, SESSION_MAX_MS);
+          return agent.pc.setRemoteDescription({ type: "answer", sdp: session.sdp });
+        });
+      }).catch(function (err) {
+        if (agent.stopped) return;
+        stopAgent(agent); addMsg("a", "Voice nicht verfügbar: " + (err && err.message ? err.message : "unbekannt"));
+      });
     });
   } else {
     // Klassisch: Browser-Spracherkennung + Server-TTS

@@ -582,6 +582,11 @@ export default function Telefon() {
           )}
 
           {daten?.anbieter === "telnyx" ? <TelnyxEinrichtung /> : daten && <Einrichtung onChange={laden} />}
+          <p className="px-1 text-sm text-muted-foreground">
+            Für GPT Live muss der OpenAI-Webhook das Ereignis <code>live.transport.incoming</code>{" "}
+            an <code>/api/telefon/eingehend</code> zustellen. Ein hinterlegter Signaturschlüssel
+            bestätigt noch nicht, dass dieses Ereignis im OpenAI-Projekt aktiviert ist.
+          </p>
 
           <div className="card-soft rounded-3xl p-5">
             <h2 className="mb-3 flex items-center gap-2 font-medium">

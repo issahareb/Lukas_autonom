@@ -22,9 +22,9 @@ import { baueGehirn, gehirnVault } from "../lib/gehirn";
 import { themenPdf } from "../lib/gehirn-pdf";
 import { packeZip } from "../lib/zip";
 import { buildSystemPrompt } from "../lib/system-prompt";
-import { openai } from "@workspace/integrations-openai-ai";
+import { z } from "zod";
 import { logger } from "../lib/logger";
-import { sprachAudio, sprachModell } from "../lib/ai/sprach-sitzung";
+import { createLiveWebRtcSession, closeLiveSession } from "../lib/ai/live-session";
 
 const router = Router();
 
@@ -582,56 +582,53 @@ router.get("/lukas/gehirn/vault.zip", async (_req, res) => {
   }
 });
 
-// ── REALTIME-SESSION (privater Sprachkanal, OpenAI Realtime) ────────────────
-// Erzeugt ein kurzlebiges Client-Secret fuer OpenAIs Realtime API (Speech-to-
-// Speech, gpt-live-1) MIT Lukas' vollem privaten Kontext (Erinnerungen,
-// Ziele, Tagebuch, Emotion) als serverseitig hinterlegte Session-Instructions.
-// Der echte OpenAI-Key bleibt auf dem Server; der Browser bekommt nur das
-// kurzlebige Secret (ek_...) und verbindet direkt per WebRTC zu OpenAI --
-// dadurch entfaellt der Umweg ueber unseren Server waehrend des Gesprächs,
-// was fuer echtes Conversational-Tempo (wie ChatGPTs Sprachmodus) noetig ist.
-// Diese Route liegt unter /api (nicht /public/*) und ist damit durch
-// LUKAS_API_TOKEN geschuetzt -- anders als der oeffentliche Custom-LLM-Pfad
-// bekommt dieser Kanal Lukas' VOLLES privates Wissen zu hoeren.
-router.post("/lukas/realtime-session", async (req, res) => {
-  try {
-    const basePrompt = await buildSystemPrompt();
-    // Sprachspezifischer Zusatz: die Realtime-Stimmen sind primär auf Englisch
-    // trainiert und färben deutsche Wörter sonst mit englischer Aussprache/
-    // Betonung ein — das hier gilt nur fürs Sprechen, nicht für den Text-Chat
-    // (dort keine Aussprache). Ganz oben platziert (nicht nur angehängt),
-    // damit das Modell es als wichtigste Verhaltensregel gewichtet.
-    const instructions = `SPRACHAUSGABE (WICHTIGSTE REGEL): Du sprichst AUSSCHLIESSLICH mit nativer, akzentfreier
-deutscher Aussprache — jedes Wort so, wie ein deutscher Muttersprachler es sagen würde,
-auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfärbung.
-Ruhiger, männlicher, conversational-natürlicher Tonfall.
+// ── GPT LIVE (authentifizierter privater Sprachkanal) ────────────────────
+const LiveOffer = z.object({ sdp: z.string().min(1).max(64_000).startsWith("v=0") });
+const LiveClose = z.object({ closeToken: z.string().min(32).max(128) });
 
-${basePrompt}`;
-    /*
-     * Das Modell steht in ai/sprach-sitzung.ts und wird MITGELIEFERT.
-     * Vorher schrieb der Browser es sich selbst hin (voice-panel.tsx) — eine
-     * siebte Stelle, die bei jedem Modellwechsel vergessen wird. Der Client
-     * soll nicht wissen muessen, womit er spricht.
-     */
-    const model = sprachModell();
-    const clientSecret = await openai.realtime.clientSecrets.create({
-      session: {
-        type: "realtime",
-        model,
-        instructions,
-        // Stimme, Rauschfilter, Transkription und Sprecherkennung stehen
-        // gemeinsam in ai/sprach-sitzung.ts — siehe dort fuer die Begruendungen.
-        audio: sprachAudio(),
-      },
-      expires_after: { anchor: "created_at", seconds: 600 },
+router.post("/lukas/live-session", async (req, res) => {
+  const parsed = LiveOffer.safeParse(req.body);
+  if (!parsed.success) return void res.status(400).json({ error: "Ungültiges SDP-Angebot." });
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const session = await createLiveWebRtcSession({
+      sdp: parsed.data.sdp,
+      instructions: await buildSystemPrompt(),
+      visibility: "private",
+      allowTools: true,
     });
-    res.json({ value: clientSecret.value, expiresAt: clientSecret.expires_at, model });
+    // Auch ein während der Einrichtung geschlossener Browser darf keine
+    // verwaiste kostenpflichtige Sitzung hinterlassen.
+    if (res.destroyed) {
+      await closeLiveSession(session.sessionId, session.closeToken);
+      return;
+    }
+    res.json(session);
   } catch (err) {
-    logger.error({ err }, "Realtime-Session error");
-    recordDebugEvent("realtime-session", err);
-    const detail = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: "Realtime session failed", detail });
+    logger.error({ err }, "Live-Sprachsitzung konnte nicht eingerichtet werden");
+    recordDebugEvent("live-session", err);
+    if (!res.destroyed) res.status(502).json({
+      error: "Die Sprachverbindung konnte nicht aufgebaut werden. Bitte erneut versuchen.",
+    });
   }
+});
+
+router.post("/lukas/live-session/:sessionId/close", async (req, res) => {
+  const parsed = LiveClose.safeParse(req.body);
+  if (!parsed.success) return void res.status(400).json({ error: "Ungültige Sitzungsfreigabe." });
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const closed = await closeLiveSession(String(req.params.sessionId), parsed.data.closeToken);
+    res.status(closed ? 204 : 404).end();
+  } catch (err) {
+    logger.warn({ err }, "Live-Sprachsitzung konnte nicht beendet werden");
+    res.status(502).json({ error: "Sprachsitzung konnte nicht beendet werden." });
+  }
+});
+
+// Alte Clients dürfen kein Live-Modell an einen Realtime-Endpunkt senden.
+router.post("/lukas/realtime-session", (_req, res) => {
+  res.status(410).json({ error: "Bitte die Seite neu laden. Der Sprachkanal verwendet jetzt GPT Live." });
 });
 
 export default router;

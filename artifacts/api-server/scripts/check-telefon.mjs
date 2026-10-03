@@ -28,6 +28,7 @@ export const buildSystemPrompt = async () => "privat";
 export const buildPublicSystemPrompt = async () => "oeffentlich";
 export const SPRACH_REGEL = ""; export const sprachAudio = () => ({});
 export const sprachModell = () => "gpt-live-1";
+export const acceptLiveSipSession = async () => {}; export const rejectLiveSipSession = async () => {};
 `,
 );
 

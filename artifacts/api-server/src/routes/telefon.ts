@@ -19,6 +19,7 @@ import {
   twilioStand, twilioEinrichten, starteAnruf,
 } from "../lib/telefon";
 import { logger } from "../lib/logger";
+import { LiveSessionError } from "../lib/ai/live-session";
 import { sendeSms, letzteSms, zugangVorhanden, nimmSmsEntgegen } from "../lib/sms";
 import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
@@ -46,6 +47,17 @@ telefonWebhookRouter.post("/telefon/telnyx/texml", async (req, res) => {
 
 // Provider retries must not accept the same OpenAI call twice.
 const bearbeiteteAnrufe = new Map<string, number>();
+const laufendeAnrufe = new Map<string, Promise<void>>();
+const LiveIncoming = z.object({
+  type: z.literal("live.transport.incoming"),
+  data: z.object({
+    type: z.literal("sip"),
+    session_id: z.string().min(1).max(256).regex(/^[^\x00-\x20\x7f]+$/),
+    sip_headers: z.array(z.object({
+      name: z.string().max(256), value: z.string().max(8192),
+    })).max(128),
+  }),
+});
 
 /*
  * Eingehende SMS von ClickSend.
@@ -91,69 +103,75 @@ telefonWebhookRouter.post("/sms/eingehend", async (req, res) => {
 
 telefonWebhookRouter.post("/telefon/eingehend", async (req, res) => {
   const rawBody = (req as typeof req & { rawBody?: Buffer }).rawBody;
-  if (!rawBody) {
-    return void res.status(400).send("kein Body");
-  }
-
-  let ereignis: { type?: string; data?: { call_id?: string; sip_headers?: Array<{ name: string; value: string }> } };
+  if (!rawBody) return void res.status(400).send("kein Body");
+  let ereignis: unknown;
   try {
-    /*
-     * unwrap() prueft die Signatur UND den Zeitstempel und wirft, wenn etwas
-     * nicht stimmt. Ohne OPENAI_WEBHOOK_SECRET wirft es ebenfalls — genau
-     * richtig: ein ungeprueft angenommener Anruf waere ein offenes Mikrofon
-     * in Issas Wohnung.
-     */
-    ereignis = openai.webhooks.unwrap(rawBody.toString("utf8"), req.headers as Record<string, string>) as typeof ereignis;
+    // unwrap ist asynchron: erst nach gültiger Signatur und Zeitstempel weiter.
+    ereignis = await openai.webhooks.unwrap(rawBody.toString("utf8"), req.headers as Record<string, string>);
   } catch (err) {
     recordDebugEvent("telefon/webhook", err);
     return void res.status(401).send("ungültige Signatur");
   }
-
-  if (ereignis.type !== "realtime.call.incoming") {
-    // Andere Ereignisse bestaetigen wir, statt sie als Fehler zu melden —
-    // sonst versucht OpenAI sie endlos erneut zuzustellen.
+  if (!ereignis || typeof ereignis !== "object" ||
+      (ereignis as { type?: unknown }).type !== "live.transport.incoming") {
+    // Derselbe SIP-Anruf kann zusätzlich ein Realtime-Ereignis erzeugen.
+    // Nur Live annehmen; der erste Accept entscheidet über das Protokoll.
     return void res.status(200).send("ignoriert");
   }
-
-  const callId = ereignis.data?.call_id;
-  if (!callId) return void res.status(400).send("call_id fehlt");
-
-  const from = ereignis.data?.sip_headers?.find((h) => h.name.toLowerCase() === "from")?.value ?? "";
-  const contextHeader = ereignis.data?.sip_headers?.find(h => h.name.toLowerCase() === "x-lukas-context")?.value ?? "";
-  const kontext = pruefeTelefonKontext(contextHeader);
-  if (istTelnyx() && !kontext) {
-    await weiseAb(callId, "Telnyx-Anruf ohne gültigen Gesprächskontext");
-    return void res.status(200).send("abgewiesen");
-  }
-  const nummer = kontext?.nummer ?? nummerAusSip(from);
+  const parsed = LiveIncoming.safeParse(ereignis);
+  if (!parsed.success) return void res.status(400).send("ungültiges Live-Ereignis");
+  const { session_id: sessionId, sip_headers: headers } = parsed.data.data;
   const jetzt = Date.now();
-  for (const [id, zeit] of bearbeiteteAnrufe) if (jetzt - zeit > 600000) bearbeiteteAnrufe.delete(id);
-  if (bearbeiteteAnrufe.has(callId)) return void res.status(200).send("bereits bearbeitet");
-  bearbeiteteAnrufe.set(callId, jetzt);
+  for (const [id, zeit] of bearbeiteteAnrufe) {
+    if (jetzt - zeit > 600_000) bearbeiteteAnrufe.delete(id);
+  }
+  if (bearbeiteteAnrufe.has(sessionId)) return void res.status(200).send("bereits bearbeitet");
 
-  /*
-   * Sofort bestaetigen, dann annehmen.
-   *
-   * Das Annehmen holt Erinnerungen aus der Datenbank und baut den Prompt —
-   * das dauert. Wer solange mit der Webhook-Antwort wartet, riskiert, dass
-   * OpenAI die Zustellung fuer gescheitert haelt und ein zweites Mal
-   * zustellt: derselbe Anruf wuerde zweimal angenommen.
-   */
-  res.status(200).send("ok");
-
+  let arbeit = laufendeAnrufe.get(sessionId);
+  if (!arbeit) {
+    if (laufendeAnrufe.size >= 100) return void res.status(503).send("kurz erneut versuchen");
+    arbeit = (async () => {
+      const from = headers.find(h => h.name.toLowerCase() === "from")?.value ?? "";
+      const contextHeader = headers.find(h => h.name.toLowerCase() === "x-lukas-context")?.value ?? "";
+      const kontext = pruefeTelefonKontext(contextHeader);
+      if (istTelnyx() && !kontext) {
+        await weiseAb(sessionId, "Telnyx-Anruf ohne gültigen Gesprächskontext");
+        return;
+      }
+      const nummer = kontext?.nummer ?? nummerAusSip(from);
+      try {
+        const stufe = await nimmAn(sessionId, nummer, kontext ?? undefined);
+        logger.info({ sessionId, stufe }, "Live-Anruf angenommen");
+      } catch (err) {
+        recordDebugEvent("telefon/annehmen", err);
+        await protokolliere({
+          richtung: kontext?.richtung ?? "eingehend", nummer, ergebnis: "fehlgeschlagen",
+          detail: "Live-Annahme oder Verbindung zum Sprach-Backend fehlgeschlagen.",
+        });
+        // Nach erfolgreichem Accept beendet der Manager bei Anschlussfehlern.
+        // Dieser bereits angenommene Anruf darf nicht erneut gestartet werden.
+        if (err instanceof LiveSessionError && err.accepted) return;
+        // Ein Timeout beweist nicht, dass OpenAI nicht angenommen hat.
+        // Deshalb keinen möglicherweise bereits laufenden Anruf abweisen.
+        throw err;
+      }
+    })();
+    laufendeAnrufe.set(sessionId, arbeit);
+  }
   try {
-    const stufe = await nimmAn(callId, nummer, kontext ?? undefined);
-    logger.info({ nummer, stufe }, "Anruf angenommen");
+    // Erst die Annahme sichern, dann bestätigen. Gleichzeitige Wiederholungen
+    // warten auf dieselbe Arbeit und lösen keinen zweiten Accept aus.
+    await arbeit;
+    bearbeiteteAnrufe.set(sessionId, Date.now());
+    if (bearbeiteteAnrufe.size > 2000) {
+      bearbeiteteAnrufe.delete(bearbeiteteAnrufe.keys().next().value!);
+    }
+    res.status(200).send("ok");
   } catch (err) {
-    logger.error({ err, nummer }, "Anruf annehmen fehlgeschlagen");
-    recordDebugEvent("telefon/annehmen", err);
-    await protokolliere({
-      richtung: "eingehend",
-      nummer,
-      ergebnis: "fehlgeschlagen",
-      detail: err instanceof Error ? err.message : String(err),
-    });
-    await weiseAb(callId, "Annehmen fehlgeschlagen");
+    logger.error({ err, sessionId }, "Live-Annahme fehlgeschlagen");
+    res.status(503).send("Annahme fehlgeschlagen; Zustellung wiederholen");
+  } finally {
+    if (laufendeAnrufe.get(sessionId) === arbeit) laufendeAnrufe.delete(sessionId);
   }
 });
 

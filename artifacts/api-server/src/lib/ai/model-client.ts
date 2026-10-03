@@ -37,7 +37,14 @@ type CallInput = {
    * EINES Zuges teilen sich den Praefix.
    */
   cacheKey?: string;
+  /** Cancels a disconnected voice session or an expired delegation. */
+  signal?: AbortSignal;
 };
+
+function modelRequestSignal(input: CallInput, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
+}
 
 function anthropicKey(): string {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
@@ -475,7 +482,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   // Der Verlauf richtet sich danach, ob dieser Aufruf ueberhaupt Werkzeuge hat.
   request.input = toResponsesInput(input.messages, tools.length > 0);
 
-  const response: any = await openai.responses.create(request);
+  const response: any = await openai.responses.create(request, { signal: input.signal });
   const toolCalls: LukasToolCall[] = [];
   for (const item of response.output ?? []) {
     if (item?.type !== "function_call") continue;
@@ -589,7 +596,7 @@ async function callAnthropic(input: CallInput): Promise<LukasModelResult> {
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180000),
+    signal: modelRequestSignal(input, 180000),
   });
 
   const raw = await response.text();
@@ -656,7 +663,7 @@ async function callLocal(input: CallInput): Promise<LukasModelResult> {
       ...(key ? { Authorization: `Bearer ${key}` } : {}),
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(Number(process.env.LUKAS_LOCAL_TIMEOUT_MS ?? 300000)),
+    signal: modelRequestSignal(input, Number(process.env.LUKAS_LOCAL_TIMEOUT_MS ?? 300000)),
   });
 
   const raw = await response.text();
@@ -710,7 +717,7 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180000),
+    signal: modelRequestSignal(input, 180000),
   });
 
   const raw = await response.text();
@@ -738,6 +745,7 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
 
 /** Kontext, Profilgrenzen, Provider und Buchhaltung fuer alle Kanaele. */
 export async function callLukasModel(input: CallInput): Promise<LukasModelResult> {
+  input.signal?.throwIfAborted();
   const messages = fitLukasContext(verdichteWerkzeugErgebnisse(input.messages));
   const clean = messages.map((m: any) =>
     typeof m?.content === "string" && m.content.includes(CACHE_TRENNER)
@@ -746,14 +754,20 @@ export async function callLukasModel(input: CallInput): Promise<LukasModelResult
   const routes = [input.route, ...fallbackRoutes(input.route)];
   let lastError: unknown = new Error("Kein konfiguriertes, erreichbares Modell fuer " + input.route.profile);
   for (const route of routes) {
+    input.signal?.throwIfAborted();
     if (!providerAvailable(route.provider) || isModelBroken(route.model, route.provider)) continue;
     const prepared = { ...input, route, messages: route.provider === "anthropic" ? messages : clean };
     try {
-      if (route.provider === "anthropic") return await callAnthropic(prepared);
-      if (route.provider === "google") return await callGoogle(prepared);
-      if (route.provider === "local") return await callLocal(prepared);
-      return await callOpenAI(prepared);
+      const result = route.provider === "anthropic" ? await callAnthropic(prepared)
+        : route.provider === "google" ? await callGoogle(prepared)
+        : route.provider === "local" ? await callLocal(prepared)
+        : await callOpenAI(prepared);
+      input.signal?.throwIfAborted();
+      return result;
     } catch (err) {
+      // Cancellation must never trigger another paid provider request.
+      input.signal?.throwIfAborted();
+      if (err instanceof Error && err.name === "AbortError") throw err;
       lastError = err;
       const unavailable = isModelUnavailable(err);
       if (unavailable) markModelBroken(route, err);

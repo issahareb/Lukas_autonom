@@ -223,7 +223,12 @@ const pruefe = (was, bedingung) => {
 
   pruefe("vor dem Signal ist alles normal", istImAbschied() === false);
 
-  richteAbschiedEin(server, () => ablauf.push("Taktgeber aus"));
+  let sprachVerbindungenZu;
+  const sprachEnde = new Promise((resolve) => { sprachVerbindungenZu = resolve; });
+  richteAbschiedEin(server, () => {
+    ablauf.push("Taktgeber aus");
+    return sprachEnde;
+  });
   pruefe(
     "auf den Pool wird ein Fehler-Zuhörer gesetzt (sonst stirbt der Prozess an einer Leerlauf-Verbindung)",
     globalThis.__pool.fehlerZuhoerer === 1,
@@ -240,6 +245,10 @@ const pruefe = (was, bedingung) => {
     ablauf.indexOf("Taktgeber aus") < ablauf.indexOf("keine neuen Verbindungen"),
   );
 
+  await new Promise((r) => setTimeout(r, 15));
+  pruefe("Live-Verbindungen werden vor dem Pool-Ende abgewartet", globalThis.__pool.beendet === 0);
+  pruefe("kein Prozessende während Live noch schließt", beendetMit === null);
+  sprachVerbindungenZu();
   await new Promise((r) => setTimeout(r, 40));
   pruefe("die Datenbank wird zuletzt geschlossen", globalThis.__pool.beendet === 1);
   pruefe("und der Prozess endet sauber", beendetMit === 0);

@@ -25,7 +25,9 @@ export async function renderLukasVoice(opts: {
   systemPrompt: string;
   conversation: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   draft: string;
+  signal?: AbortSignal;
 }): Promise<string> {
+  opts.signal?.throwIfAborted();
   const draft = opts.draft.trim();
   if (!draft) return "";
   // Die Arbeitsrunde kennt Lukas bereits; eine zweite Tokenrechnung ist optional.
@@ -115,9 +117,12 @@ export async function renderLukasVoice(opts: {
      * sondern eine Einladung.
      */
     const budget = Math.min(8192, Math.max(1200, Math.ceil(draft.length / 3) + 700));
-    const result = await callLukasModel({ route, messages, maxTokens: budget });
+    const result = await callLukasModel({ route, messages, maxTokens: budget, signal: opts.signal });
+    opts.signal?.throwIfAborted();
     return result.content.trim() || draft;
   } catch (err) {
+    opts.signal?.throwIfAborted();
+    if (err instanceof Error && err.name === "AbortError") throw err;
     logger.warn({ err }, "Ausgabeschicht fehlgeschlagen — der Entwurf geht unveraendert raus");
     return draft;
   }

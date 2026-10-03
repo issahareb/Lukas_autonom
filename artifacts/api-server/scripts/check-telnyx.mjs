@@ -3,7 +3,7 @@ import { build } from 'esbuild';
 import { mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { generateKeyPairSync, sign, createHmac } from 'node:crypto';
 import { createRequire } from 'node:module';
 import express from 'express';
 const dir = mkdtempSync(join(tmpdir(), 'lukas-telnyx-'));
@@ -14,7 +14,7 @@ try {
   await build({ entryPoints: ['src/lib/telnyx.ts'], outfile: out, bundle: true, platform: 'node', format: 'esm' });
   const t = await import(out);
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  Object.assign(process.env, { TELNYX_API_KEY: 'test-only', TELNYX_PUBLIC_KEY: publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64'), TELNYX_NUMMER: '+49201123456', TELNYX_APP_ID: 'test-app', OPENAI_PROJECT_ID: 'proj_test', OPENAI_WEBHOOK_SECRET: 'test-only', LUKAS_TELEFON_ANBIETER: 'telnyx' });
+  Object.assign(process.env, { TELNYX_API_KEY: 'test-only', TELNYX_PUBLIC_KEY: publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('base64'), TELNYX_NUMMER: '+49201123456', TELNYX_APP_ID: 'test-app', OPENAI_PROJECT_ID: 'proj_test', OPENAI_WEBHOOK_SECRET: 'whsec_' + Buffer.from('local-webhook-regression-secret').toString('base64'), LUKAS_TELEFON_ANBIETER: 'telnyx' });
   const body = Buffer.from('From=%2B4915112345678&To=%2B49201123456&ConnectionId=test-app');
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signed = (bytes, time = timestamp) => sign(null, Buffer.concat([Buffer.from(time + '|'), bytes]), privateKey).toString('base64');
@@ -51,8 +51,16 @@ try {
   writeFileSync(stub, `
 export const db = {}, telefonNummern = {}, desc = () => {}, eq = () => {};
 export const logger = { warn(){}, info(){}, error(){} };
-export const openai = { webhooks: { unwrap(body, headers) { if(headers['test-signature'] !== 'valid') throw Error('signature'); return JSON.parse(body); } } };
-export const nimmAn = async (...args) => { globalThis.acceptedCalls.push(args); return 'oeffentlich'; };
+import OpenAI from "openai";
+export const openai = new OpenAI({ apiKey: "local-test-only", webhookSecret: process.env.OPENAI_WEBHOOK_SECRET });
+export class LiveSessionError extends Error { constructor(message, accepted = false) { super(message); this.accepted = accepted; } }
+export const nimmAn = async (...args) => {
+  globalThis.acceptedCalls.push(args);
+  if (globalThis.acceptGate) await globalThis.acceptGate;
+  if (globalThis.acceptFailure) throw new Error("temporary provider failure");
+  if (globalThis.acceptTerminalFailure) throw new LiveSessionError("sideband unavailable after accept", true);
+  return "oeffentlich";
+};
 export const weiseAb = async () => { globalThis.rejectedCalls++; };
 export const nummerAusSip = () => 'untrusted', normalisiere = s => s.replace(/[^0-9]/g, '');
 export const letzteAnrufe = async () => [], protokolliere = async () => {};
@@ -77,14 +85,57 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   const incoming = await request(body); assert.equal(incoming.status, 200);
   const incomingToken = (await incoming.text()).match(/X-Lukas-Context=([^<]+)/)[1];
   assert.equal(t.pruefeTelefonKontext(incomingToken).richtung, 'eingehend');
-  const event = { type: 'realtime.call.incoming', data: { call_id: 'call-one', sip_headers: [{ name: 'X-Lukas-Context', value: token }] } };
-  const sendEvent = () => oldFetch(base + '/telefon/eingehend', { method: 'POST', headers: { 'Content-Type': 'application/json', 'test-signature': 'valid' }, body: JSON.stringify(event) });
-  assert.equal((await sendEvent()).status, 200); assert.equal((await sendEvent()).status, 200);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(globalThis.acceptedCalls.length, 1); assert.equal(globalThis.acceptedCalls[0][1], '+4915112345678');
+  const event = { type: 'live.transport.incoming', data: { type: 'sip', session_id: 'live_one', sip_headers: [{ name: 'X-Lukas-Context', value: token }] } };
+  const sendEvent = (options = {}) => {
+    const bytes = JSON.stringify(event);
+    const ts = String(Math.floor(Date.now() / 1000) - (options.expired ? 600 : 0));
+    const id = 'whmsg_regression';
+    const signature = createHmac('sha256', Buffer.from('local-webhook-regression-secret'))
+      .update(id + '.' + ts + '.' + bytes).digest('base64');
+    return oldFetch(base + '/telefon/eingehend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'webhook-id': id,
+        'webhook-timestamp': ts, 'webhook-signature': 'v1,' + (options.invalid ? 'invalid' : signature) },
+      body: bytes,
+    });
+  };
+  // Real SDK signature verification is asynchronous; missing await breaks this.
+  assert.equal((await sendEvent({ invalid: true })).status, 401);
+  assert.equal((await sendEvent({ expired: true })).status, 401);
+  assert.equal(globalThis.acceptedCalls.length, 0);
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal(globalThis.acceptedCalls.length, 1);
+  assert.equal(globalThis.acceptedCalls[0][0], 'live_one');
+  assert.equal(globalThis.acceptedCalls[0][1], '+4915112345678');
   assert.equal(globalThis.acceptedCalls[0][2].richtung, 'ausgehend');
-  event.data.call_id = 'call-two'; event.data.sip_headers[0].value = 'forged';
-  await sendEvent(); assert.equal(globalThis.rejectedCalls, 1);
+  event.data.session_id = 'live_parallel';
+  let releaseAccept;
+  globalThis.acceptGate = new Promise(resolve => { releaseAccept = resolve; });
+  const parallel = [sendEvent(), sendEvent()];
+  await new Promise(resolve => setTimeout(resolve, 30));
+  releaseAccept(); globalThis.acceptGate = null;
+  assert.deepEqual((await Promise.all(parallel)).map(r => r.status), [200, 200]);
+  assert.equal(globalThis.acceptedCalls.filter(args => args[0] === 'live_parallel').length, 1);
+  event.data.session_id = 'live_retry'; globalThis.acceptFailure = true;
+  assert.equal((await sendEvent()).status, 503);
+  assert.equal(globalThis.rejectedCalls, 0, 'ambiguous accept must not reject a potentially live call');
+  globalThis.acceptFailure = false;
+  assert.equal((await sendEvent()).status, 200);
+  event.data.session_id = 'live_terminal'; globalThis.acceptTerminalFailure = true;
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal(globalThis.acceptedCalls.filter(args => args[0] === 'live_terminal').length, 1);
+  globalThis.acceptTerminalFailure = false;
+  event.data.session_id = 'live_badcontext'; event.data.sip_headers[0].value = 'forged';
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal(globalThis.rejectedCalls, 1);
+  event.data.session_id = 'invalid session id';
+  assert.equal((await sendEvent()).status, 400);
+  const beforeIgnored = globalThis.acceptedCalls.length;
+  event.type = 'realtime.call.incoming'; event.data.call_id = 'legacy_call';
+  assert.equal((await sendEvent()).status, 200);
+  assert.equal(globalThis.acceptedCalls.length, beforeIgnored);
   console.log('OK — Telnyx: form signatures, tamper/expiry rejection, context correlation, webhook deduplication, pending-number guard and outbound payload.');
 } finally {
   globalThis.fetch = oldFetch;

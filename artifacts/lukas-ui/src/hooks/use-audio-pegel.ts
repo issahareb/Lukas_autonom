@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
  *
  * ZWEI QUELLEN, DIESELBE MECHANIK:
  *   - Zuhören: der Mikrofon-Stream (MediaStream).
- *   - Sprechen: das <audio>-Element, in das die Realtime-Verbindung Lukas'
+ *   - Sprechen: das <audio>-Element, in das die Live-Verbindung Lukas'
  *     Stimme schreibt (HTMLAudioElement).
  *
  * WARUM EIN ref UND KEIN state. Der Pegel ändert sich sechzig Mal pro
@@ -65,22 +65,9 @@ export function useAudioPegel({ stream, element, aktiv }: PegelQuelle) {
       if (stream) {
         ctx.createMediaStreamSource(stream).connect(neuerAnalyser());
       }
-      if (element) {
-        /*
-         * ACHTUNG, eine Falle: createMediaElementSource leitet den Ton des
-         * Elements in den Audio-Graphen UM. Wird er dort nicht wieder zum
-         * Ausgang geführt, ist Lukas schlagartig stumm — man misst dann eine
-         * Stimme, die niemand mehr hört.
-         *
-         * Und es geht nur EINMAL pro Element: ein zweiter Aufruf wirft. Die
-         * Quelle wird deshalb am Element selbst vermerkt und wiederverwendet.
-         */
-        const merker = element as HTMLAudioElement & { __quelle?: MediaElementAudioSourceNode };
-        const quelle = merker.__quelle ?? ctx.createMediaElementSource(element);
-        merker.__quelle = quelle;
-        const a = neuerAnalyser();
-        quelle.connect(a);
-        quelle.connect(ctx.destination);
+      if (element?.srcObject && "getAudioTracks" in element.srcObject) {
+        // Den Stream messen, ohne den Wiedergabeweg des Elements umzuleiten.
+        ctx.createMediaStreamSource(element.srcObject as MediaStream).connect(neuerAnalyser());
       }
     } catch {
       // Ein nicht analysierbarer Stream darf das Gespräch nicht kosten.

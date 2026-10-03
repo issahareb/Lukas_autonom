@@ -10,7 +10,7 @@ import { anfrageVonWebsite } from "../lib/melden";
 import { logger } from "../lib/logger";
 import { gleicherToken } from "../middlewares/schutz";
 import { recordDebugEvent } from "../lib/debug-log";
-import { sprachAudio, sprachModell } from "../lib/ai/sprach-sitzung";
+import { createLiveWebRtcSession, closeLiveSession } from "../lib/ai/live-session";
 
 const router = Router();
 
@@ -309,51 +309,66 @@ router.get("/public/voice-session", async (req, res) => {
   }
 });
 
-// ── REALTIME-SESSION (OpenAI Realtime, öffentliches Widget) ────────────────
-// Liefert dem Widget ein kurzlebiges Client-Secret für echtes Speech-to-
-// Speech (Millisekunden-Latenz statt ElevenLabs' Cloud-Turnaround). Nur der
-// ÖFFENTLICHE System-Prompt (kuratierte public-Memories) wandert in die
-// Session-Konfiguration — nie der private Kontext. Das Secret selbst läuft
-// nach wenigen Minuten ab; die eigentliche Gesprächsdauer deckelt zusätzlich
-// das Widget selbst (siehe widget.js, harte Kappung nach ein paar Minuten),
-// da ein einmal verbundenes Realtime-Gespräch sonst beliebig lang und damit
-// beliebig teuer laufen könnte.
-router.post("/public/realtime-session", async (req, res) => {
+// ── GPT LIVE (öffentliches Widget) ─────────────────────────────────────────
+// SDP und eine Auflege-Capability gelangen zum Browser, niemals API-Keys.
+// Ausschließlich öffentlicher Kontext; keine Werkzeuge. Der Server beendet
+// öffentliche Sitzungen nach 180 Sekunden unabhängig vom Browser.
+router.post("/public/live-session", async (req, res) => {
+  if (!requireWidgetOrigin(req, res)) return;
+  const sdp = req.body?.sdp;
+  if (typeof sdp !== "string" || sdp.length > 64_000 ||
+      !/^v=0\r?\n/.test(sdp) || !/(?:^|\r?\n)m=audio /.test(sdp) || sdp.includes("\0")) {
+    return void res.status(400).json({ error: "Gültiges Audio-SDP erforderlich." });
+  }
+  if (!rateLimit(req, 15, 5 * 60 * 1000)) {
+    return void res.status(429).json({ error: "Zu viele Anfragen — kurz warten." });
+  }
+  res.setHeader("Cache-Control", "no-store");
   try {
-    if (!requireWidgetOrigin(req, res)) return;
-    if (!rateLimit(req, 15, 5 * 60 * 1000)) {
-      return void res.status(429).json({ error: "Zu viele Anfragen — kurz warten." });
-    }
     const basePrompt = await buildPublicSystemPrompt();
-    // Sprachspezifischer Zusatz (nur fürs Sprechen, siehe lukas.ts): die
-    // Realtime-Stimmen sind primär auf Englisch trainiert und färben
-    // deutsche Wörter sonst mit englischer Aussprache/Betonung ein. Ganz
-    // oben platziert (nicht nur angehängt), damit das Modell es als
-    // wichtigste Verhaltensregel gewichtet.
-    const instructions = `SPRACHAUSGABE (WICHTIGSTE REGEL): Du sprichst AUSSCHLIESSLICH mit nativer, akzentfreier
-deutscher Aussprache — jedes Wort so, wie ein deutscher Muttersprachler es sagen würde,
-auch Namen und Fremdwörter. Keine englische Betonung, keine englische Klangfärbung.
+    const instructions = `SPRACHAUSGABE: Sprich natürliches Deutsch in kurzen, gut verständlichen Sätzen.
 
 ${basePrompt}`;
-    const model = sprachModell();
-    const clientSecret = await openai.realtime.clientSecrets.create({
-      session: {
-        type: "realtime",
-        model,
-        instructions,
-        // Stimme, Rauschfilter, Transkription und Sprecherkennung stehen
-        // gemeinsam in ai/sprach-sitzung.ts — siehe dort fuer die Begruendungen.
-        audio: sprachAudio(),
-      },
-      expires_after: { anchor: "created_at", seconds: 300 },
+    const session = await createLiveWebRtcSession({
+      sdp, instructions, visibility: "public", allowTools: false,
     });
-    res.json({ value: clientSecret.value, expiresAt: clientSecret.expires_at, model });
+    if (res.destroyed) {
+      await closeLiveSession(session.sessionId, session.closeToken);
+      return;
+    }
+    res.json({
+      sdp: session.sdp, sessionId: session.sessionId, closeToken: session.closeToken,
+      model: session.model, voice: session.voice,
+    });
   } catch (err) {
-    logger.error({ err }, "Public-Realtime-Session error");
-    recordDebugEvent("public/realtime-session", err);
-    const detail = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: "Realtime session failed", detail });
+    logger.error({ err }, "Public-Live-Session error");
+    recordDebugEvent("public/live-session", err);
+    if (!res.headersSent && !res.destroyed) {
+      res.status(502).json({ error: "Sprachverbindung derzeit nicht verfügbar." });
+    }
   }
+});
+
+router.post("/public/live-session/:sessionId/close", async (req, res) => {
+  if (!requireWidgetOrigin(req, res)) return;
+  const sessionId = req.params.sessionId;
+  const closeToken = req.body?.closeToken;
+  if (typeof sessionId !== "string" || !sessionId || sessionId.length > 256 ||
+      typeof closeToken !== "string" || closeToken.length < 32 || closeToken.length > 128) {
+    return void res.status(400).json({ error: "Ungültige Sitzung." });
+  }
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const closed = await closeLiveSession(sessionId, closeToken);
+    res.sendStatus(closed ? 204 : 404);
+  } catch (err) {
+    logger.error({ err }, "Public-Live-Session close error");
+    res.status(502).json({ error: "Sprachverbindung konnte nicht beendet werden." });
+  }
+});
+
+router.post("/public/realtime-session", (_req, res) => {
+  res.status(410).json({ error: "Sprachfunktion aktualisiert — bitte die Seite neu laden." });
 });
 
 // ── ANFRAGEN VON DER WEBSITE ───────────────────────────────────────────────

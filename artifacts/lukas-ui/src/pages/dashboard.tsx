@@ -215,12 +215,12 @@ export default function Dashboard() {
                 <button
                   type="button"
                   className={"home-speak " + (sprache.aktiv ? "is-active" : "")}
-                  onClick={sprache.aktiv ? sprache.beenden : sprache.starten}
-                  disabled={sprache.status === "verbindet"}
-                  aria-label={sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
+                  onClick={sprache.aktiv || sprache.status === "verbindet" ? sprache.beenden : sprache.starten}
+                  
+                  aria-label={sprache.status === "verbindet" ? "Verbindungsaufbau abbrechen" : sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
                 >
                   {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
-                  <span>{sprache.aktiv ? "Beenden" : "Sprechen"}</span>
+                  <span>{sprache.status === "verbindet" ? "Abbrechen" : sprache.aktiv ? "Beenden" : "Sprechen"}</span>
                 </button>
               )}
             </div>

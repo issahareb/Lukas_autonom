@@ -47,6 +47,8 @@ export async function runLukasTurn(opts: {
   history: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   userText: string;
   conversationId?: number;
+  /** Stop future model/tool work when the caller leaves or the task expires. */
+  signal?: AbortSignal;
   /*
    * Fertiger System-Prompt statt Issas privatem. Wird fuer Gespraeche mit
    * Fremden benutzt (WhatsApp von einer unbekannten Nummer): dann darf NICHTS
@@ -73,6 +75,7 @@ export async function runLukasTurn(opts: {
    */
   ohneZieleUndTagebuch?: boolean;
 }): Promise<string> {
+  opts.signal?.throwIfAborted();
   /*
    * Dashboard-Chats haben eine dauerhafte positive Konversations-ID. Autonome
    * Laeufe und Mitarbeiter dagegen haben absichtlich keinen Datenbank-Chat —
@@ -92,7 +95,9 @@ export async function runLukasTurn(opts: {
     (await buildSystemPrompt(opts.userText.slice(0, 1000), {
       ohneZieleUndTagebuch: opts.ohneZieleUndTagebuch,
     }));
+  opts.signal?.throwIfAborted();
   const tools = opts.tools ?? (await allLukasTools());
+  opts.signal?.throwIfAborted();
   const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
     ...opts.history,
@@ -109,6 +114,7 @@ export async function runLukasTurn(opts: {
    */
   const schleife = new Arbeitsschleife();
   while (schleife.darfWeiter()) {
+    opts.signal?.throwIfAborted();
     const i = schleife.naechsteRunde();
     const route = opts.profil
       ? { ...directRoute(opts.profil), profile: opts.profil }
@@ -145,7 +151,9 @@ export async function runLukasTurn(opts: {
       route,
       tools,
       messages: fuerModell,
+      signal: opts.signal,
     });
+    opts.signal?.throwIfAborted();
 
     schleife.verbucht(result.usage);
     if (result.content) textPieces.push(result.content);
@@ -172,6 +180,7 @@ export async function runLukasTurn(opts: {
     const hinweise = schleife.hinweise(result.toolCalls);
 
     for (const tc of result.toolCalls) {
+      opts.signal?.throwIfAborted();
       usedTools.push(tc.name);
       let input: Record<string, unknown> = {};
       try {
@@ -180,10 +189,15 @@ export async function runLukasTurn(opts: {
         // Kaputtes JSON vom Modell — das Tool meldet fehlende Felder selbst.
       }
       try {
+        opts.signal?.throwIfAborted();
         const toolResult = await executeLukasTool(tc.name, input, {
           rawUserMessage: opts.userText,
           conversationId,
+          signal: opts.signal,
         });
+        // An in-flight external effect cannot be undone, but it must not lead
+        // to another tool or model call after the session has ended.
+        opts.signal?.throwIfAborted();
         convo.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
         /*
          * Und der Ausgang wird gemerkt. Das ist die ganze Lernschleife: was er
@@ -203,6 +217,8 @@ export async function runLukasTurn(opts: {
           autonom: opts.ohneZieleUndTagebuch === true,
         });
       } catch (err) {
+        opts.signal?.throwIfAborted();
+        if (err instanceof Error && err.name === "AbortError") throw err;
         logger.warn({ err, tool: tc.name }, "Lukas tool failed (brain)");
         /*
          * Auch ins Fehlerprotokoll, nicht nur ins Log.
@@ -285,6 +301,7 @@ export async function runLukasTurn(opts: {
     convo.push(...hinweise);
   }
 
+  opts.signal?.throwIfAborted();
   const abbruch = schleife.abbruchGrund();
   if (abbruch) {
     logger.warn(
@@ -313,7 +330,8 @@ export async function runLukasTurn(opts: {
     logger.info({ usedTools }, "Durchlauf ohne Text — Abschlussrunde ohne Werkzeuge");
     try {
       const letzte = await callLukasModel({
-      cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
+        signal: opts.signal,
+        cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
         route: opts.profil ? directRoute(opts.profil) : routeLukasModel({
           userText: opts.userText,
           previousUserText,
@@ -336,6 +354,8 @@ export async function runLukasTurn(opts: {
       schleife.verbucht(letzte.usage);
       draft = (letzte.content || "").trim();
     } catch (err) {
+      opts.signal?.throwIfAborted();
+      if (err instanceof Error && err.name === "AbortError") throw err;
       logger.warn({ err }, "Abschlussrunde fehlgeschlagen");
       /*
        * Und ins Fehlerprotokoll, nicht nur ins Log.
@@ -408,5 +428,6 @@ export async function runLukasTurn(opts: {
     return notfall;
   }
 
-  return renderLukasVoice({ systemPrompt, conversation: convo, draft });
+  opts.signal?.throwIfAborted();
+  return renderLukasVoice({ systemPrompt, conversation: convo, draft, signal: opts.signal });
 }

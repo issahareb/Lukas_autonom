@@ -7,11 +7,8 @@
  *   Ausgehend  Lukas -> ausgewaehlter Anbieter waehlt -> verbindet zu OpenAI
  *              -> OpenAI -> derselbe Webhook hier
  *
- * Das ist der Grund, warum "Lukas ruft an" ueberhaupt geht: OpenAI selbst kann
- * keine Anrufe starten (die Realtime-API nimmt nur an). Twilio kann waehlen.
- * Also waehlt Twilio und uebergibt das abgenommene Gespraech an dieselbe
- * SIP-Adresse, an der auch eingehende Anrufe landen — danach ist es fuer uns
- * derselbe Fall.
+ * Der Telefonanbieter waehlt die Nummer und verbindet das Gespraech per SIP.
+ * Wir nehmen es ueber GPT Live an; die Provider-Zuordnung bleibt erhalten.
  *
  * Die Nummer des Anrufers entscheidet, WELCHEN Lukas jemand bekommt. Ein
  * Telefonanschluss ist offen; ohne diese Pruefung bekaeme jeder Fehlanrufer
@@ -22,7 +19,8 @@ import { telefonNummern, telefonAnrufe } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { buildSystemPrompt } from "./system-prompt";
 import { buildPublicSystemPrompt } from "./public-prompt";
-import { SPRACH_REGEL, sprachAudio, sprachModell } from "./ai/sprach-sitzung";
+import { SPRACH_REGEL } from "./ai/sprach-sitzung";
+import { acceptLiveSipSession, rejectLiveSipSession } from "./ai/live-session";
 import { logger } from "./logger";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 
@@ -68,8 +66,13 @@ function holeAnlass(nummer: string): string | null {
   const key = normalisiere(nummer);
   const eintrag = offeneAusgehende.get(key);
   if (!eintrag) return null;
-  offeneAusgehende.delete(key);
-  return Date.now() - eintrag.seit > AUSGEHEND_GUELTIG_MS ? null : eintrag.anlass;
+  if (Date.now() - eintrag.seit > AUSGEHEND_GUELTIG_MS) {
+    offeneAusgehende.delete(key);
+    return null;
+  }
+  // Provider-Wiederholungen müssen denselben Anlass behalten, bis die
+  // Annahme erfolgreich ist. Ein Netzwerkfehler darf ihn nicht verbrauchen.
+  return eintrag.anlass;
 }
 
 /** Welchen Lukas bekommt diese Nummer? Unbekannt = oeffentlich. */
@@ -157,14 +160,12 @@ async function anweisungen(stufe: Stufe, name: string, anlass: string | null): P
  * ansagen lassen, was Lukas ueber Issa weiss.
  *
  * Was das NICHT ist: ein Weg, etwas auszuloesen. Die Sprachsitzung bekommt
- * ausschliesslich instructions und Audio, keine Werkzeuge. Es geht um
- * Preisgabe, nicht um Handlungen.
+ * keine Werkzeuge. Auch der Live-Backend-Durchlauf bekommt explizit tools: [].
+ * Es geht um Preisgabe, nicht um Handlungen.
  *
- * Warum das nicht einfach hier zugenagelt wird: eine Bestaetigung IM Gespraech
- * (eine gesprochene Geheimzahl) braeuchte ein Werkzeug in der Sprachsitzung,
- * das es nicht gibt — und ein Modell, das selbst entscheidet, ob die Zahl
- * stimmte, waere keine Pruefung, sondern eine Bitte. Die Anweisungen stehen
- * fest, sobald der Anruf angenommen ist.
+ * Eine zusaetzliche Authentifizierung ist technisch moeglich. Die bestehende
+ * Caller-ID-Abwaegung bleibt eine bewusste Owner-Entscheidung; die Migration
+ * auf Live erweitert sie nicht um Werkzeugrechte.
  *
  * Bleiben drei Moeglichkeiten, und die Wahl gehoert Issa:
  *
@@ -227,6 +228,7 @@ export function tatsaechlicheStufe(
 export async function nimmAn(callId: string, vonNummer: string, kontext?: TelefonKontext): Promise<Stufe> {
   vonNummer = kontext?.nummer ?? vonNummer;
   const { stufe: eingetragen, name } = await stufeFuer(vonNummer);
+  const offenerAnlass = !kontext ? offeneAusgehende.get(normalisiere(vonNummer)) : undefined;
   const anlass = kontext ? (kontext.richtung === "ausgehend" ? kontext.anlass : null) : holeAnlass(vonNummer);
   const ausgehend = kontext ? kontext.richtung === "ausgehend" : anlass !== null;
   const stufe = tatsaechlicheStufe(eingetragen, ausgehend, vonNummer);
@@ -237,24 +239,18 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     return stufe;
   }
 
-  const res = await fetch(`https://api.openai.com/v1/realtime/calls/${callId}/accept`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      type: "realtime",
-      model: process.env.LUKAS_TELEFON_MODELL ?? sprachModell(),
-      instructions: await anweisungen(stufe, name, anlass),
-      audio: sprachAudio(true),
-    }),
-    signal: AbortSignal.timeout(15000),
+  await acceptLiveSipSession({
+    sessionId: callId,
+    instructions: await anweisungen(stufe, name, anlass),
+    visibility: stufe === "privat" ? "private" : "public",
+    initialCommentary: ausgehend
+      ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 500)}`
+      : `Ein Anrufer hat dich erreicht. Begrüße ${name || "den Gesprächspartner"} kurz.`,
+    // Rufnummernanzeige berechtigt wie bisher nicht zu Werkzeugaktionen.
+    allowTools: false,
   });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Anruf annehmen fehlgeschlagen (${res.status}): ${text.slice(0, 300)}`);
+  if (offenerAnlass && offeneAusgehende.get(normalisiere(vonNummer)) === offenerAnlass) {
+    offeneAusgehende.delete(normalisiere(vonNummer));
   }
 
   await protokolliere({
@@ -267,16 +263,13 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
   return stufe;
 }
 
-export async function weiseAb(callId: string, grund: string): Promise<void> {
-  await fetch(`https://api.openai.com/v1/realtime/calls/${callId}/reject`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ status_code: 603 }),
-    signal: AbortSignal.timeout(10000),
-  }).catch((err) => logger.warn({ err, grund }, "Abweisen fehlgeschlagen"));
+export async function weiseAb(sessionId: string, grund: string): Promise<void> {
+  try {
+    await rejectLiveSipSession(sessionId);
+  } catch (err) {
+    logger.warn({ err, grund }, "Live-Anruf konnte nicht abgewiesen werden");
+    throw err;
+  }
 }
 
 /**

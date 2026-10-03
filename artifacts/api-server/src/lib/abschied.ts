@@ -49,7 +49,7 @@ export function istImAbschied(): boolean {
 
 export function richteAbschiedEin(
   server: Server,
-  taktgeberStoppen: () => void,
+  taktgeberStoppen: () => void | Promise<void>,
 ): void {
   const frist = Number(process.env.LUKAS_SHUTDOWN_MS ?? 20_000);
 
@@ -62,7 +62,15 @@ export function richteAbschiedEin(
     wirGehen = true;
     logger.info({ signal, fristMs: frist }, "Herunterfahren eingeleitet");
 
-    taktgeberStoppen();
+    let gestoppt: Promise<void>;
+    try {
+      gestoppt = Promise.resolve(taktgeberStoppen()).catch((err) => {
+        logger.warn({ err }, "Hintergrundverbindungen konnten nicht sauber beendet werden");
+      });
+    } catch (err) {
+      logger.warn({ err }, "Taktgeber konnten nicht sauber beendet werden");
+      gestoppt = Promise.resolve();
+    }
 
     /*
      * Die Notbremse zuerst scharf machen, nicht zuletzt. Bleibt eine
@@ -79,12 +87,11 @@ export function richteAbschiedEin(
     notaus.unref();
 
     server.close(() => {
-      clearTimeout(notaus);
-      logger.info("Alle Anfragen beendet — Datenbankverbindungen werden geschlossen");
-      pool
-        .end()
+      logger.info("Alle Anfragen beendet — Sprachverbindungen werden geschlossen");
+      gestoppt
+        .then(() => pool.end())
         .catch((err) => logger.warn({ err }, "Pool liess sich nicht sauber schliessen"))
-        .finally(() => process.exit(0));
+        .finally(() => { clearTimeout(notaus); process.exit(0); });
     });
 
     /*

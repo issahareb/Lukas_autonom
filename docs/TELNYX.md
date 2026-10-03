@@ -2,14 +2,24 @@
 
 `LUKAS_TELEFON_ANBIETER=telnyx` aktiviert Telnyx. Ohne diesen Schalter bleibt Twilio aktiv.
 
-Servervariablen: `TELNYX_API_KEY`, `TELNYX_NUMMER` (E.164), `TELNYX_APP_ID`, `TELNYX_PUBLIC_KEY`, vorhandener OpenAI-Key, `OPENAI_PROJECT_ID`, `OPENAI_WEBHOOK_SECRET`. `LUKAS_TELEFON_MODELL=gpt-realtime` verwendet ein zum bestehenden Realtime-SIP-Endpunkt passendes Modell; die separate Browser-Stimme bleibt unverändert.
+Servervariablen: `TELNYX_API_KEY`, `TELNYX_NUMMER` (E.164), `TELNYX_APP_ID`, `TELNYX_PUBLIC_KEY`, vorhandener OpenAI-Key, `OPENAI_PROJECT_ID`, `OPENAI_WEBHOOK_SECRET`. `LUKAS_LIVE_MODEL=gpt-live-1` und `LUKAS_LIVE_VOICE=cedar` gelten gemeinsam für Telefon, Dashboard und Sprachwidget. Frühere `LUKAS_TELEFON_MODELL`-/`LUKAS_REALTIME_*`-Werte werden im Live-Pfad nicht verwendet.
 
-Die TeXML-Anwendung benötigt ein aktives Outbound Voice Profile und eine zugeordnete Voice-Rufnummer. Ihre Voice URL ist `https://<LUKAS-DOMAIN>/api/telefon/telnyx/texml`, Methode POST. Das OpenAI-Projekt muss `realtime.call.incoming` an `https://<LUKAS-DOMAIN>/api/telefon/eingehend` zustellen. Keine Aufzeichnung wird aktiviert.
+Die TeXML-Anwendung benötigt ein aktives Outbound Voice Profile und eine zugeordnete Voice-Rufnummer. Ihre Voice URL ist `https://<LUKAS-DOMAIN>/api/telefon/telnyx/texml`, Methode POST. Das OpenAI-Projekt muss `live.transport.incoming` an `https://<LUKAS-DOMAIN>/api/telefon/eingehend` zustellen. Keine Aufzeichnung wird aktiviert.
 
 Eingehende TeXML-Anfragen werden über Ed25519 und den Zeitstempel geprüft. Der exakte form-encoded Body bleibt dafür erhalten. Nur die konfigurierte Connection und Rufnummer werden akzeptiert. Die Antwort verbindet zum OpenAI-SIP-Ziel über TLS. Der signierte `X-Lukas-Context` korreliert Richtung, Teilnehmer und Anlass; OpenAI muss diesen SIP-Header im signierten Incoming-Webhook zustellen. Ein fehlender oder manipulierter Kontext wird im Telnyx-Modus abgewiesen. SIP-Caller-ID allein beweist weiterhin keine Identität: `LUKAS_TELEFON_STRENG` behält seine bestehende Wirkung.
 
-Ausgehend prüft LUKAS zuerst die Kontaktfreigabe einschließlich Sperrstatus und dann den tatsächlichen Aktivierungsstatus der Telnyx-Nummer. `POST /v2/texml/calls/{connection_id}` erhält `From`, `To` und inline `Texml`. Der Teilnehmerkontext ist HMAC-signiert und drei Minuten gültig; er überlebt einen Serverneustart. OpenAI-Webhook-Duplikate derselben call_id werden im Prozess für zehn Minuten ignoriert. Die Deduplizierung ist pro Prozess; bei mehreren Replikas muss sie in einen gemeinsam genutzten Speicher umziehen.
+Ausgehend prüft LUKAS zuerst die Kontaktfreigabe einschließlich Sperrstatus und dann den tatsächlichen Aktivierungsstatus der Telnyx-Nummer. `POST /v2/texml/calls/{connection_id}` erhält `From`, `To` und inline `Texml`. Der Teilnehmerkontext ist HMAC-signiert und drei Minuten gültig; er überlebt einen Serverneustart. OpenAI-Webhook-Duplikate derselben `live_…`-Session-ID teilen sich während der Annahme dieselbe Arbeit und werden nach Erfolg im Prozess für zehn Minuten ignoriert. Die Webhook-Antwort bestätigt erst nach erfolgreicher Verarbeitung. Realtime-Ereignisse werden ignoriert, damit nicht versehentlich das falsche Protokoll gewählt wird. Die Deduplizierung ist pro Prozess; bei mehreren Replikas muss sie in einen gemeinsam genutzten Speicher umziehen.
 
 Das geschützte `GET /api/lukas/telefon/telnyx` und die Telefonseite unterscheiden technische Einrichtung und Rufnummerfreigabe. Ein Startup-Check protokolliert den Providerstatus ohne Schlüssel oder signierte TeXML-Inhalte. `requirement-info-pending` ist keine aktive Rufnummer; Unterlagen müssen bei Telnyx eingereicht und bestätigt werden.
 
 Prüfung: `node scripts/check-telnyx.mjs` im API-Server testet Signaturen über Formdaten, abgelaufene/manipulierte Daten, falsche Connections, signierte Anrufzuordnung, Webhook-Duplikate, blockierte Rufnummern und den echten API-Vertrag mit gemocktem Provider. Ein abschließender Live-Gesprächstest für beide Richtungen ist erst nach Rufnummerfreigabe möglich.
+
+## GPT Live anschließen
+
+Im OpenAI-Projekt muss der bestehende Webhook unter derselben URL das Ereignis `live.transport.incoming` abonnieren. `realtime.call.incoming` allein genügt nicht. Der Signaturschlüssel bleibt `OPENAI_WEBHOOK_SECRET`. Es wird keine Aufzeichnung aktiviert.
+
+Der Server nimmt mit `POST /v1/live/sessions/{session_id}/accept` an und verbindet einen authentifizierten Sideband-WebSocket. Schlüssel und private Backend-Anweisungen bleiben serverseitig. `cedar` ist die Standardstimme, `marin` kann über `LUKAS_LIVE_VOICE` ausgewählt werden.
+
+GPT Live übernimmt den Gesprächsfluss. Wissensfragen werden serverseitig über Lukas' bestehenden Modellrouter beantwortet. Telefonate erhalten ausdrücklich keine Werkzeuge; die bisherige Caller-ID-Abwaegung berechtigt weiterhin nicht zu Aktionen. Der authentifizierte Dashboard-Sprachkanal kann dagegen Lukas-Werkzeuge über dessen bestehende Freigabeprüfung nutzen.
+
+Vor dem ersten produktiven Gespräch sind die Freischaltung von GPT Live im OpenAI-Projekt, der Live-Webhook und eine aktive Telnyx-Nummer zu prüfen. Automatisierte Tests verwenden lokale Provider-Attrappen und lösen keine echten Anrufe aus.
