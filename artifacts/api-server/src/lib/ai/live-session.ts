@@ -18,11 +18,8 @@ export type LiveSessionOptions = {
 export type LiveWebRtcSession = {
   sdp: string; sessionId: string; closeToken: string; model: string; voice: string;
 };
-export class LiveSessionError extends Error {
-  constructor(message: string, readonly accepted = false) {
-    super(message); this.name = "LiveSessionError";
-  }
-}
+import { LiveSessionError } from "./live-error";
+export { LiveSessionError } from "./live-error";
 type Transcript = { role: "user" | "assistant"; text: string; endMs: number };
 type Work = { id: string; messages: Message[]; userText: string };
 type ManagedSession = {

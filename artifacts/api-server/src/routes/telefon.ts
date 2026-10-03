@@ -19,7 +19,7 @@ import {
   twilioStand, twilioEinrichten, starteAnruf,
 } from "../lib/telefon";
 import { logger } from "../lib/logger";
-import { LiveSessionError } from "../lib/ai/live-session";
+import { LiveSessionError } from "../lib/ai/live-error";
 import { sendeSms, letzteSms, zugangVorhanden, nimmSmsEntgegen } from "../lib/sms";
 import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
