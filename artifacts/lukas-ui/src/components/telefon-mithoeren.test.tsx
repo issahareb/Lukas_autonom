@@ -40,20 +40,25 @@ it("unlocks iPhone audio on tap, uses bearer auth, receives audio and stops with
   const audioSession = { get type() { return sessionType; }, set type(value) { sessionType = value; order.push(value); } };
   Object.defineProperty(navigator, "audioSession", { configurable: true, value: audioSession });
   localStorage.setItem("lukas_token", "test-owner");
-  let stream: ReadableStreamDefaultController<Uint8Array>;
+  let socket: { onmessage?: (event: { data: string }) => void; onclose?: () => void; close: ReturnType<typeof vi.fn> };
+  vi.stubGlobal("WebSocket", class {
+    onmessage?: (event: { data: string }) => void; onclose?: () => void;
+    close = vi.fn(() => this.onclose?.());
+    constructor(public url: URL) { socket = this; }
+  });
   const requests: Array<{ url: string; init: RequestInit }> = [];
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     order.push("fetch"); requests.push({ url, init });
-    return new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; init.signal?.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError"))); } }), { headers: { "content-type": "text/event-stream" } });
+    return Response.json({ ticket: "one-use-ticket" });
   });
   render(<LiveMithoeren id={9} aktiv zustimmung />);
   expect(requests).toHaveLength(0);
   await userEvent.click(screen.getByRole("button", { name: "Live mithören" }));
   await waitFor(() => expect(requests).toHaveLength(1));
   expect(order).toEqual(["playback", "resume", "fetch"]);
-  expect(requests[0].url).toBe("/api/lukas/telefon/anrufe/9/live");
+  expect(requests[0].url).toBe("/api/lukas/telefon/anrufe/9/live-ticket");
   expect(requests[0].init.headers).toEqual({ Authorization: "Bearer test-owner" });
-  const emit = (data: unknown) => stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
+  const emit = (data: unknown) => socket.onmessage?.({ data: JSON.stringify(data) });
   await act(async () => {
     emit({ type: "format", codec: "PCMU", streamId: "stream" });
     emit({ type: "audio", streamId: "stream", track: "inbound", chunk: 1, timestamp: 0, payload: btoa("\xaa".repeat(160)) });
@@ -83,9 +88,9 @@ it("keeps media playback active until the last listener stops and preserves micr
 });
 it("hides playback for missing prior consent and finished calls", () => {
   const { rerender } = render(<LiveMithoeren id={1} aktiv zustimmung={false} />);
-  expect(screen.queryByRole("button")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Live mithören" })).toBeNull();
   rerender(<LiveMithoeren id={1} aktiv={false} zustimmung />);
-  expect(screen.queryByRole("button")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Live mithören" })).toBeNull();
 });
 it("shows provider refusal without pretending that audio is playing", async () => {
   audioFixture();

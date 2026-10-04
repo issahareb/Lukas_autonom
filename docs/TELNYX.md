@@ -82,3 +82,33 @@ der Name des Auftraggebers und interne Preisobergrenzen bleiben im Gespräch pri
 Der Chat gibt Gesprächsziel, Angebot und Namensschutz als Anlass weiter. Eine
 Preisabsage beendet nicht automatisch jede Verhandlung; ein ausdrücklicher Wunsch
 nach keinen weiteren Verhandlungen oder Kontakten wird respektiert.
+
+## Mithören und Hinweise während des Gesprächs
+
+Das Dashboard holt mit Bearer-Authentifizierung ein einmaliges 30-Sekunden-Ticket
+und empfängt beide G.711-Tonspuren über `/api/telefon/live-player` als WebSocket.
+Der bisherige SSE-Endpunkt bleibt kompatibel. Die Zustimmung wird weiterhin beim
+Verbinden und jede Sekunde geprüft. Stoppen beendet nur das Mithören.
+
+Beim laufenden Anruf stehen Text-Hinweise und „Hinweis einsprechen“ zur Verfügung.
+Die Mikrofonaufnahme (höchstens 20 Sekunden/4 MiB) wird transkribiert, anschließend
+als vertraulicher Auftraggeberhinweis über die serverseitige Live-Steuerverbindung
+übermittelt. Keine direkte Mikrofonübertragung zum Gesprächspartner. Das Mithören
+wird während der Aufnahme stummgeschaltet; bei einer iOS-Audiounterbrechung muss
+es erneut gestartet werden. Hinweise während des Klingelns werden in dieser
+Serverinstanz höchstens zwei Minuten bis zum Verbindungsaufbau vorgemerkt.
+Ein Neustart verwirft noch nicht übermittelte Hinweise.
+
+`telefon_hinweis` ergänzt im privaten Chat einen zuvor gestarteten Anruf;
+`telefon_status` liefert dafür die numerische `anruf_id`. Text-Chats bleiben an
+ihren jeweiligen Anruf gebunden. Die private Dashboard-Sprachsitzung kann einen
+konkret ausgewählten laufenden Anruf ebenfalls adressieren.
+
+Bei einer erkannten Verabschiedung wartet die SIP-Steuerung fünf Sekunden nach
+dem letzten Sprachtranskript. Weitere Sprache des Gesprächspartners oder ein
+Auftraggeberhinweis bricht den Timer ab. GPT Live liefert keine autoritativen
+Turn-Ende-Ereignisse: Transkriptverzögerungen beeinflussen den Zeitpunkt.
+Eindeutige Mailboxansagen werden anhand mehrteiliger Phrasen in den ersten
+60 Sekunden erkannt und das Gespräch beendet; bloße Erwähnungen einer Mailbox
+reichen nicht. Ungewöhnliche Ansagen können unerkannt bleiben. Das Ergebnis
+erscheint beim Anruf. Beendigung nutzt die bestehende SIP-Schließung mit Retry.

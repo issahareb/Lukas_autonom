@@ -68,7 +68,7 @@ export async function telefonStatus(): Promise<string> {
   const rows = await db.select().from(telefonAnrufe).orderBy(desc(telefonAnrufe.createdAt)).limit(10);
   return JSON.stringify({ anbieter: process.env.LUKAS_TELEFON_ANBIETER ?? "twilio",
     hinweis: "Anrufstart, Zielannahme und SIP-Verbindung sind getrennte Bestätigungen. Annahme beweist keinen menschlichen Gesprächspartner. Fehlende Meldungen bedeuten unbekannt; ein beendeter Anruf beweist keine Auftragserledigung. Alte Einträge ohne kontextId haben keine vollständige Statusverfolgung.",
-    anrufe: rows.map(r => ({ id: r.kontextId ?? r.id, nummer: "+" + r.nummer, anlass: r.anlass,
+    anrufe: rows.map(r => ({ id: r.kontextId ?? r.id, anruf_id: r.id, nummer: "+" + r.nummer, anlass: r.anlass,
       status: ANRUF_LABEL[r.ergebnis] ?? r.ergebnis, zielStatus: r.zielStatus, sipStatus: r.sipStatus,
       liveBereit: r.liveBereit, dauer: r.dauer, detail: r.detail, aufnahmeStatus: r.aufnahmeStatus, zuletzt: r.updatedAt })) });
 }

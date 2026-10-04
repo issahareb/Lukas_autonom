@@ -180,6 +180,93 @@ paths:
           description: Sitzung nicht vorhanden oder Berechtigung unpassend.
         "502":
           description: Beenden fehlgeschlagen.
+  /lukas/telefon/anrufe/{id}/live-ticket:
+    post:
+      operationId: createTelefonLiveTicket
+      tags: [lukas]
+      security:
+        - LukasBearer: []
+      summary: Einmalzugang zum Live-Audio-WebSocket
+      description: Gültig für 30 Sekunden und genau eine Verbindung zu /api/telefon/live-player?ticket=…; Format und Audio als JSON-Ereignisse, nur Empfang. Zustimmung wird beim Ausstellen, beim Verbinden und fortlaufend geprüft.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Kurzlebiges Einmalticket; niemals den Dashboard-Token in die WebSocket-URL setzen.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket]
+                properties:
+                  ticket: { type: string }
+        '409':
+          description: Anruf oder Zustimmung nicht verfügbar
+        '401':
+          description: Anmeldung erforderlich
+  /lukas/telefon/anrufe/{id}/hinweis:
+    post:
+      operationId: sendTelefonHinweis
+      tags: [lukas]
+      security:
+        - LukasBearer: []
+      summary: Vertraulichen Hinweis an Lukas im laufenden Telefonat senden
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: An die Steuerverbindung übermittelt, keine Zusage der Umsetzung
+        '409':
+          description: Hinweis ungültig oder Anruf nicht verbunden
+        '401':
+          description: Anmeldung erforderlich
+  /lukas/telefon/anrufe/{id}/einfluestern:
+    post:
+      operationId: sendTelefonSprachhinweis
+      tags: [lukas]
+      security:
+        - LukasBearer: []
+      summary: Kurzen Sprachhinweis transkribieren und ausschließlich an Lukas übermitteln
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [audio]
+              properties:
+                audio: { type: string, format: binary, description: Audioaufnahme bis 4 MiB }
+      responses:
+        '200':
+          description: Enthält erkannten Text und Übermittlungsstatus; keine direkte Mikrofonübertragung ins Telefonat
+        '400':
+          description: Ungültige Audiodatei
+        '409':
+          description: Übermittlung oder Transkription nicht möglich
+        '429':
+          description: Sprachhinweis wird bereits verarbeitet
+        '401':
+          description: Anmeldung erforderlich
   /lukas/telefon/anrufe/{id}/live:
     get:
       operationId: getTelefonLiveAudio

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { Server } from "node:http";
 import type { Request, Response } from "express";
 import { WebSocketServer, WebSocket } from "ws";
@@ -16,6 +17,21 @@ type Kanal = { id: number; context: string; provider?: WebSocket; format?: Forma
 const kanaele = new Map<string, Kanal>();
 const MAX_KANAELE = 32;
 let stopping = false;
+
+const browserTickets = new Map<string, { id: number; expires: number }>();
+/** One-use capability issued only behind owner bearer authentication. */
+export async function mithoerenTicketAntwort(req: Request, res: Response): Promise<void> {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) { res.status(400).json({ error: "Ungültige Anruf-ID." }); return; }
+  try {
+    if (stopping || !await erlaubterMithoerAnruf(id)) { res.status(409).json({ error: "Kein laufender Anruf mit gültiger Zustimmung zum Mithören." }); return; }
+    for (const [key, value] of browserTickets) if (value.expires < Date.now()) browserTickets.delete(key);
+    if (browserTickets.size >= 128) { res.status(429).json({ error: "Bitte kurz warten." }); return; }
+    const ticket = randomBytes(32).toString("hex");
+    browserTickets.set(ticket, { id, expires: Date.now() + 30000 });
+    res.set("Cache-Control", "no-store").json({ ticket });
+  } catch { res.status(503).json({ error: "Mithören ist gerade nicht verfügbar." }); }
+}
 
 export async function erlaubterMithoerAnruf(id: number | string): Promise<TelefonAnruf | null> {
   const [call] = await db.select().from(telefonAnrufe).where(typeof id === "number"
@@ -106,11 +122,44 @@ export function streamAudio(message: Record<string, any>, format: Format): Audio
 export function starteTelefonMithoeren(server: Server): () => void {
   stopping = false;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16384, perMessageDeflate: false });
+  const browsers = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
   let pending = 0, checking = false;
   const upgrade: Parameters<Server["on"]>[1] = async (req: any, socket: any, head: any) => {
     let context: string | null = null;
     try {
       const url = new URL(req.url, "https://localhost");
+      if (url.pathname === "/api/telefon/live-player") {
+        const ticket = url.searchParams.get("ticket") ?? "";
+        const grant = browserTickets.get(ticket); browserTickets.delete(ticket);
+        if (!grant || grant.expires < Date.now() || stopping || browsers.clients.size >= 24 || pending >= 8) { socket.destroy(); return; }
+        pending++;
+        try {
+          const call = await erlaubterMithoerAnruf(grant.id);
+          if (!call || socket.destroyed || stopping) { socket.destroy(); return; }
+          const k = kanal(call);
+          if (k.listeners.size >= 3) { socket.destroy(); return; }
+          browsers.handleUpgrade(req, socket, head, ws => {
+            let frames = 0;
+            const listener = (event: Event) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              if (ws.bufferedAmount > 65536) { ws.close(1008, "slow listener"); return; }
+              ws.send(JSON.stringify(event));
+              if (event.type === "audio") frames++;
+              if (event.type === "end") ws.close(1000);
+            };
+            k.listeners.add(listener);
+            ws.on("error", () => ws.terminate());
+            ws.on("message", () => ws.close(1008, "receive only"));
+            ws.on("close", () => {
+              k.listeners.delete(listener);
+              if (!k.provider && !k.listeners.size) kanaele.delete(k.context);
+              logger.info({ callId: k.id, phase: "browser_closed", framesForwarded: frames }, "Telefon-Live-Audioweg");
+            });
+            listener(k.format ?? warten(k));
+          });
+        } finally { pending--; }
+        return;
+      }
       if (url.pathname !== "/api/telefon/telnyx/live") { socket.destroy(); return; }
       context = pruefeMithoerTicket(url.searchParams.get("ticket") ?? "");
     } catch { /* Fail closed; never log the URL/capability. */ }
@@ -201,9 +250,11 @@ export function starteTelefonMithoeren(server: Server): () => void {
   }, 1000);
   timer.unref();
   return () => {
-    stopping = true; clearInterval(timer); server.off("upgrade", upgrade);
+    stopping = true; browserTickets.clear(); clearInterval(timer); server.off("upgrade", upgrade);
     for (const k of kanaele.values()) beenden(k, "Server wird neu gestartet. Bitte erneut verbinden.");
     for (const ws of wss.clients) ws.terminate();
     wss.close();
+    for (const ws of browsers.clients) ws.terminate();
+    browsers.close();
   };
 }

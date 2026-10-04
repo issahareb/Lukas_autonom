@@ -102,6 +102,9 @@ export const starteAnruf = werkzeug("starteAnruf");
 export const telefonStatus = werkzeug("telefonStatus");
 export const telnyxAufnahmeEingang = async () => {};
 export class TelefonAufnahmeFehler extends Error {}
+export const hinweisAnruf = async () => ({});
+export const telefonHinweis = async () => "Hinweis übermittelt";
+export const mithoerenTicketAntwort = async (_req, res) => res.status(409).json({ error: "not running" });
 export const mithoerenAntwort = async (_req, res) => res.status(409).json({ error: "not running" });
 export const ladeTelefonAufnahme = async () => null;
 export const telnyxStatusEingang = async () => true, aktualisiereAnruf = async () => {};
@@ -133,7 +136,7 @@ await build({
   format: "esm",
   platform: "node",
   outfile: out,
-  external: ["express", "zod"],
+  external: ["express", "zod", "multer", "openai"],
   alias: {
     "@workspace/db": attrappe,
     "drizzle-orm": attrappe,
@@ -144,7 +147,7 @@ await build({
       name: "attrappen",
       setup(b) {
         // src/lib/sms.ts bleibt bewusst ECHT.
-        b.onResolve({ filter: /(^|\/)(logger|telefon|telefon-status|telefon-aufnahme|telefon-mithoeren|melden|debug-log)$/ }, () => ({ path: attrappe }));
+        b.onResolve({ filter: /(^|\/)(logger|telefon|telefon-status|telefon-aufnahme|telefon-mithoeren|telefon-hinweis|melden|debug-log)$/ }, () => ({ path: attrappe }));
       },
     },
   ],

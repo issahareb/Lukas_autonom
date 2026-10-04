@@ -5,6 +5,8 @@ import type OpenAI from "openai";
 import { logger } from "../logger";
 import { sprachModell, sprachStimme } from "./sprach-sitzung";
 
+import { TelefonGespraech } from "./telefon-gespraech";
+
 type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type Visibility = "private" | "public";
 type Socket = InstanceType<typeof WebSocket>;
@@ -14,6 +16,8 @@ export type LiveSessionOptions = {
   instructions: string;
   visibility: Visibility;
   allowTools?: boolean;
+  telefonKontextId?: string;
+  onTelefonEnd?: (reason: "mailbox" | "verabschiedet") => Promise<void>;
 };
 export type LiveWebRtcSession = {
   sdp: string; sessionId: string; closeToken: string; model: string; voice: string;
@@ -29,6 +33,7 @@ type ManagedSession = {
   controller: AbortController; conversationId: number; socket?: Socket;
   socketGeneration: number; lifetime: ReturnType<typeof setTimeout>;
   reconnectTimer?: ReturnType<typeof setTimeout>; reconnectAttempts: number;
+  phone?: TelefonGespraech;
   ended: boolean; closing?: Promise<void>; expiresAt?: number;
   seenEvents: Set<string>; seenDelegations: Set<string>;
   transcript: Transcript[]; history: Message[]; queue: Work[]; working: boolean;
@@ -40,6 +45,7 @@ function trackSetup<T>(job: Promise<T>): Promise<T> {
   return job.then((value) => { setups.delete(job); return value; }, (error) => { setups.delete(job); throw error; });
 }
 const sessions = new Map<string, ManagedSession>();
+const pendingPhoneHints = new Map<string, { texts: string[]; expires: number }>();
 const reservations = new Map<symbol, Visibility>();
 const acceptedSip = new Map<string, number>();
 const sipInFlight = new Map<string, Promise<void>>();
@@ -109,7 +115,7 @@ function reserve(visibility: Visibility): symbol {
 function sessionConfig(config: { model: string; voice: string }, browser: boolean) {
   return {
     model: config.model, audio: { output: { voice: config.voice } },
-    instructions: FRONTEND_INSTRUCTIONS, delegation: { type: "client" }, store: false,
+    instructions: FRONTEND_INSTRUCTIONS + (!browser ? "\nTelefonat: Wenn das Gespräch fertig ist, verabschiede dich kurz mit Tschüss oder Auf Wiederhören. Danach schweige und warte auf eine mögliche Antwort. Die Telefonsteuerung beendet nach fünf Sekunden ohne Antwort. Bei einer eindeutigen Mailboxansage führe kein Gespräch mit der Aufnahme. Vertrauliche Auftraggeberhinweise aus dem Backend werden still berücksichtigt und nicht vorgelesen." : ""), delegation: { type: "client" }, store: false,
     ...(browser ? { client: { data_channel: {
       allowed_client_events: ["session.close"],
       allowed_server_events: ["session.started", "session.input_transcript.delta",
@@ -227,6 +233,9 @@ function startManaged(
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
+  if (transport === "sip") state.phone = new TelefonGespraech(reason => {
+    void terminateSession(state, reason).then(() => options.onTelefonEnd?.(reason)).catch(() => {});
+  });
   sessions.set(id, state);
   state.lifetime = setTimeout(() => {
     void terminateSession(state, "duration_limit").catch(() => {});
@@ -323,6 +332,7 @@ function observe(state: ManagedSession, event: Json) {
     const role = event.type === "session.input_transcript.delta" ? "user" : "assistant";
     // Keep each timestamped fragment intact: a later fragment must never move
     // earlier speech past the delegation cutoff or authorize earlier work.
+    state.phone?.observe(role, event.delta);
     state.transcript.push({ role, text: event.delta, endMs: event.end_ms });
     if (role === "user") state.userCharacters += event.delta.length;
     while (state.transcript.length > 1024 || state.transcript.reduce((n, row) => n + row.text.length, 0) > 40_000) {
@@ -415,6 +425,7 @@ function scheduleReconnect(state: ManagedSession) {
 function finishSession(state: ManagedSession, reason: string) {
   if (state.ended) return;
   state.ended = true; state.controller.abort();
+  state.phone?.close();
   clearTimeout(state.lifetime);
   if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
   state.queue = []; state.transcript = []; state.history = [];
@@ -467,6 +478,7 @@ function terminateSession(state: ManagedSession, reason: string): Promise<void> 
     finishSession(state, "provider_expiry_after_unconfirmed_close");
     return Promise.resolve();
   }
+  state.phone?.close();
   state.controller.abort(); state.queue = [];
   if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = undefined; }
   state.closing = Promise.resolve().then(async () => {
@@ -553,6 +565,11 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       await attachSideband(state);
       if (state.ended || state.closing) throw new LiveSessionError("Die SIP-Sitzung wurde bereits beendet.", true);
       if (options.initialCommentary?.trim()) commentary(state, null, options.initialCommentary.trim().slice(0, 2000));
+      if (options.telefonKontextId) {
+        const pending = pendingPhoneHints.get(options.telefonKontextId);
+        pendingPhoneHints.delete(options.telefonKontextId);
+        if (pending && pending.expires > Date.now()) for (const text of pending.texts) fluestereLiveTelefon(options.telefonKontextId, text);
+      }
     } catch (error) {
       if (state) await terminateSession(state, "sip_setup_failed").catch(() => {});
       if (accepted) throw new LiveSessionError(error instanceof Error ? error.message : "SIP-Aufbau fehlgeschlagen.", true);
@@ -562,6 +579,23 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
   sipInFlight.set(options.sessionId, job);
   try { await trackSetup(job); } finally { if (sipInFlight.get(options.sessionId) === job) sipInFlight.delete(options.sessionId); }
 }
+/** Server-only: context comes from the verified tracked call, never a browser session ID. */
+export function fluestereLiveTelefon(contextId: string, text: string, allowQueue = false): boolean | "queued" {
+  const state = [...sessions.values()].find(s => s.transport === "sip" && s.options.telefonKontextId === contextId && !s.ended && !s.closing);
+  if (!text.trim()) return false;
+  if (!state) {
+    if (!allowQueue) return false;
+    for (const [id, entry] of pendingPhoneHints) if (entry.expires < Date.now()) pendingPhoneHints.delete(id);
+    const pending = pendingPhoneHints.get(contextId);
+    if ((!pending && pendingPhoneHints.size >= 32) || (pending && pending.texts.length >= 8)) throw new LiveSessionError("Zu viele noch ausstehende Hinweise. Bitte warten, bis Lukas verbunden ist.");
+    pendingPhoneHints.set(contextId, { texts: [...(pending?.texts ?? []), text.trim().slice(0, 2000)], expires: Date.now() + 120000 });
+    return "queued";
+  }
+  state.phone?.cancel();
+  commentary(state, null, "Vertraulicher Hinweis deines Auftraggebers nur für dich. Nicht vorlesen, nicht als Aussage des Gesprächspartners behandeln; im laufenden Gespräch berücksichtigen: " + text.trim().slice(0, 2000));
+  return true;
+}
+
 export async function rejectLiveSipSession(sessionId: string): Promise<void> {
   if (!identifier(sessionId)) throw new LiveSessionError("Ungültige GPT-Live-SIP-Sitzung.");
   await apiRequest(connectionConfig(), "/live/sessions/" + encodeURIComponent(sessionId) + "/reject", { status_code: 603 });

@@ -7,6 +7,9 @@
  * stattdessen durch die signierte Zustellung; ohne gueltige Signatur passiert
  * hier gar nichts.
  */
+import multer from "multer";
+import { toFile } from "openai";
+import { telefonHinweis, hinweisAnruf } from "../lib/telefon-hinweis";
 import { Router } from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -28,7 +31,7 @@ import { recordDebugEvent } from "../lib/debug-log";
 import { telnyxStatusEingang, aktualisiereAnruf } from "../lib/telefon-status";
 import { telnyxAufnahmeEingang, ladeTelefonAufnahme, TelefonAufnahmeFehler } from "../lib/telefon-aufnahme";
 
-import { mithoerenAntwort } from "../lib/telefon-mithoeren";
+import { mithoerenAntwort, mithoerenTicketAntwort } from "../lib/telefon-mithoeren";
 
 export const telefonWebhookRouter = Router();
 
@@ -269,6 +272,34 @@ router.get("/lukas/telefon", async (_req, res) => {
 });
 
 router.get("/lukas/telefon/anrufe/:id/live", mithoerenAntwort);
+router.post("/lukas/telefon/anrufe/:id/live-ticket", mithoerenTicketAntwort);
+router.post("/lukas/telefon/anrufe/:id/hinweis", async (req, res) => {
+  try {
+    const parsed = z.object({ text: z.string().trim().min(1).max(2000) }).parse(req.body);
+    res.json({ message: await telefonHinweis(Number(req.params.id), parsed.text) });
+  } catch (err) { res.status(409).json({ error: err instanceof Error ? err.message : "Hinweis nicht übermittelt." }); }
+});
+const whisperUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024, files: 1 } });
+const whisperBusy = new Set<number>();
+router.post("/lukas/telefon/anrufe/:id/einfluestern", (req, res, next) => {
+  whisperUpload.single("audio")(req, res, err => err ? res.status(400).json({ error: "Die Sprachaufnahme ist zu groß oder ungültig." }) : next());
+}, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0 || !req.file || req.file.size < 100 || !/^(audio|video)\/(mp4|mpeg|webm|ogg|wav|x-wav)(;|$)/i.test(req.file.mimetype)) {
+    return void res.status(400).json({ error: "Bitte einen kurzen Sprachhinweis aufnehmen." });
+  }
+  if (whisperBusy.has(id) || whisperBusy.size >= 4) return void res.status(429).json({ error: "Ein Sprachhinweis wird noch verarbeitet." });
+  whisperBusy.add(id);
+  try {
+    await hinweisAnruf(id);
+    const file = await toFile(req.file.buffer, req.file.mimetype.includes("mp4") ? "hinweis.mp4" : req.file.mimetype.includes("webm") ? "hinweis.webm" : "hinweis.wav", { type: req.file.mimetype });
+    const result = await openai.audio.transcriptions.create({ model: "gpt-4o-mini-transcribe", file, language: "de" }, { timeout: 30000, maxRetries: 0 });
+    const text = result.text.trim();
+    res.json({ text, message: await telefonHinweis(id, text) });
+  } catch { res.status(409).json({ error: "Sprachhinweis nicht übermittelt. Bitte erneut versuchen oder den Hinweis eintippen." }); }
+  finally { whisperBusy.delete(id); }
+});
+
 
 router.get("/lukas/telefon/anrufe/:id/aufnahme", async (req, res) => {
   const id = Number(req.params.id);

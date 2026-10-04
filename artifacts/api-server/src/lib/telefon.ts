@@ -247,6 +247,10 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
 
   await acceptLiveSipSession({
     sessionId: callId,
+    telefonKontextId: kontext?.id,
+    onTelefonEnd: kontext?.id ? async reason => {
+      await aktualisiereAnruf(kontext.id, { detail: reason === "mailbox" ? "Mailbox erkannt; Anruf beendet." : "Nach Verabschiedung ohne weitere Antwort beendet.", sipStatus: "completed" });
+    } : undefined,
     instructions: await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true),
     visibility: stufe === "privat" ? "private" : "public",
     initialCommentary: ausgehend

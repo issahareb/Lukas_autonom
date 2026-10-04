@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { aktiviereTelefonWiedergabe, TelefonAudio } from "@/lib/telefon-audio";
+import { TelefonHinweis } from "./telefon-hinweis";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function LiveMithoeren({ id, aktiv, zustimmung }: { id: number; aktiv: boolean; zustimmung: boolean }) {
@@ -50,34 +51,37 @@ export function LiveMithoeren({ id, aktiv, zustimmung }: { id: number; aktiv: bo
         }
       };
       const token = localStorage.getItem("lukas_token");
-      const response = await fetch(`${BASE}/api/lukas/telefon/anrufe/${id}/live`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal,
+      const response = await fetch(`${BASE}/api/lukas/telefon/anrufe/${id}/live-ticket`, {
+        method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal,
       });
-      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Live-Mithören konnte nicht verbunden werden.");
-      if (!response.body) throw new Error("Kein Audiostream verfügbar.");
-      const reader = response.body.getReader(), decoder = new TextDecoder();
-      let pending = "", ended = false;
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Live-Mithören konnte nicht verbunden werden.");
+      if (controller.signal.aborted) return;
+      const url = new URL(`${BASE}/api/telefon/live-player`, window.location.href);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.searchParams.set("ticket", result.ticket);
+      await new Promise<void>((resolve, reject) => {
+        const socket = new WebSocket(url);
+        let ended = false;
+        const timeout = window.setTimeout(() => { socket.close(); reject(new Error("Audiostream antwortet nicht. Bitte erneut starten.")); }, 10000);
+        const cleanup = () => { window.clearTimeout(timeout); controller.signal.removeEventListener("abort", abort); };
+        const abort = () => { cleanup(); socket.close(); resolve(); };
+        controller.signal.addEventListener("abort", abort, { once: true });
+        socket.onmessage = event => {
           if (controller.signal.aborted) return;
-          if (done) break;
-          pending += decoder.decode(value, { stream: true });
-          if (pending.length > 131072) throw new Error("Audiostream unterbrochen. Bitte erneut verbinden.");
-          const events = pending.split("\n\n"); pending = events.pop()!;
-          for (const event of events) {
-            if (!event.startsWith("data: ")) continue;
-            const data = JSON.parse(event.slice(6));
-            if (data.type === "format") player.format(data.codec, data.streamId);
+          window.clearTimeout(timeout);
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "format") { player.format(data.codec, data.streamId); setStatus("Audiostream verbunden …"); }
             else if (data.type === "audio") {
-              if (player.play(data)) setStatus("Gesprächsaudio empfangen · Mikrofon aus");
+              if (player.play(data)) setStatus("Gesprächsaudio empfangen");
             } else if (data.type === "waiting") setStatus(data.message || "Warte auf Gesprächsaudio …");
-            else if (data.type === "end") { setStatus(data.message); ended = true; break; }
-          }
-          if (ended) break;
-        }
-        if (!ended) throw new Error("Live-Verbindung unterbrochen. Bitte erneut starten.");
-      } finally { await reader.cancel().catch(() => {}); }
+            else if (data.type === "end") { ended = true; setStatus(data.message); socket.close(); }
+          } catch { cleanup(); socket.close(); reject(new Error("Ungültiger Audiostream.")); }
+        };
+        socket.onerror = () => { cleanup(); socket.close(); reject(new Error("Live-Verbindung fehlgeschlagen. Bitte erneut starten.")); };
+        socket.onclose = () => { cleanup(); ended || controller.signal.aborted ? resolve() : reject(new Error("Live-Verbindung unterbrochen. Bitte erneut starten.")); };
+      });
     } catch (err) {
       if (!current?.controller.signal.aborted) setStatus(err instanceof Error ? err.message : "Mithören ist gerade nicht verfügbar.");
     } finally {
@@ -85,12 +89,13 @@ export function LiveMithoeren({ id, aktiv, zustimmung }: { id: number; aktiv: bo
       if (!current) freigeben();
     }
   };
-  if (!zustimmung) return aktiv ? <p className="w-full text-xs text-muted-foreground">Für Live-Mithören die schriftliche Zustimmung beim Kontakt vor dem nächsten Anruf hinterlegen.</p> : null;
+  if (!zustimmung) return aktiv ? <div className="w-full space-y-2"><p className="text-xs text-muted-foreground">Für Live-Mithören die schriftliche Zustimmung beim Kontakt vor dem nächsten Anruf hinterlegen.</p><TelefonHinweis id={id} onRecording={() => {}} /></div> : null;
   if (!aktiv && !status) return null;
   return <div className="w-full space-y-2">
     {aktiv && <Button variant={laeuft ? "outline" : "secondary"} size="sm" onClick={laeuft
       ? () => { stop(); setLaeuft(false); setStatus("Mithören gestoppt. Das Telefonat läuft weiter."); }
       : starten}>{laeuft ? "Mithören stoppen" : "Live mithören"}</Button>}
+    {aktiv && <TelefonHinweis id={id} onRecording={active => session.current?.player.mute(active)} />}
     {status && <p role="status" className="text-xs text-muted-foreground">{status}</p>}
     {laeuft && <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span>Audiopegel</span><progress aria-label="Audiopegel" max={1} value={pegel} className="h-2 w-28 accent-primary" />

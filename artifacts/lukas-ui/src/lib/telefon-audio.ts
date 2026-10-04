@@ -95,6 +95,7 @@ export class TelefonAudio {
     source.start(Math.max(now, at));
     return true;
   }
+  mute(active: boolean) { this.gain.gain.value = active ? 0 : 0.7; }
   pegel() { return this.context.currentTime - this.lastFrame < 0.5 ? this.peak : 0; }
   private clear() {
     for (const s of this.sources) { s.onended = null; try { s.stop(); } catch {} s.disconnect(); }

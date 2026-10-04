@@ -221,6 +221,32 @@ try {
   assert.ok(fixture.logs.at(-1).data.message.length <= 500);
   fixture.apiError = null;
 
+  const endings = [];
+  const phone = async (id) => {
+    await api.acceptLiveSipSession({ sessionId: id, telefonKontextId: "context_" + id, instructions: "phone", visibility: "private", onTelefonEnd: async reason => endings.push(reason) });
+    return socketFor(id);
+  };
+  const say = (s, delta) => s.emit({ type: "session.output_transcript.delta", event_id: "event_" + ++serial, delta, start_ms: serial * 10, end_ms: serial * 10 + 10 });
+  assert.equal(api.fluestereLiveTelefon("context_goodbye", "Vorgemerkt vor Annahme.", true), "queued");
+  const farewell = await phone("goodbye");
+  assert.ok(farewell.sent.some(e => e.content?.includes("Vorgemerkt vor Annahme.")));
+
+  say(farewell, "Vielen Dank. Tsch"); say(farewell, "üss!");
+  input(farewell, "Warte, eine Frage noch.");
+  assert.ok(![...timers.values()].some(t => t.milliseconds === 5000), "new caller speech cancels farewell");
+  assert.equal(api.fluestereLiveTelefon("wrong_context", "private"), false);
+  assert.equal(api.fluestereLiveTelefon("context_goodbye", "Frag nach Lieferung."), true);
+  assert.ok(farewell.sent.some(e => e.content?.includes("Frag nach Lieferung.")));
+  say(farewell, "Auf Wiederhören."); fire(5000); await settle();
+  assert.ok(fixture.requests.some(r => r.url.endsWith("/goodbye/hangup")) || farewell.sent.some(e => e.type === "session.close"));
+  assert.ok(endings.includes("verabschiedet"));
+  assert.equal(api.fluestereLiveTelefon("context_goodbye", "late"), false);
+  const mailbox = await phone("mailbox");
+  input(mailbox, "Ich habe meine Mailbox noch nicht abgehört.");
+  assert.equal(mailbox.readyState, 1);
+  input(mailbox, "Bitte hinterlassen Sie nach dem Signal"); input(mailbox, "ton eine Nachricht."); await settle();
+  assert.ok(endings.includes("mailbox")); assert.equal(mailbox.readyState, 3);
+
   const sipOptions = { sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
     initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };
   const beforeSip = fixture.calls.length;

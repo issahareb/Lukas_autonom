@@ -355,6 +355,14 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "telefon_hinweis",
+      description: "Gib Lukas während eines bereits laufenden Telefonats einen neuen vertraulichen Hinweis aus diesem Dashboard-Chat. Nutze bei Ergänzungen nach einem Anrufstart zuerst telefon_status, um die richtige numerische anruf_id zu finden, dann dieses Werkzeug. Bei mehreren passenden Anrufen Ziel klären. Startet keinen weiteren Anruf. Die Übermittlung ist bestätigt, nicht die Umsetzung durch den Gesprächspartner.",
+      parameters: { type: "object", properties: { anruf_id: { type: "integer" }, text: { type: "string", maxLength: 2000 } }, required: ["anruf_id", "text"], additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "telefon_status",
       description: "Prüfe die tatsächlichen letzten Anrufstatus: Start, Klingeln, Zielannahme, Verbindung zu LUKAS, Ende, Besetzt, keine Antwort oder Fehler. Nutze dies bei jeder Nachfrage, ob ein Anruf durchgestellt wurde oder geklappt hat, statt zu raten oder pauschal zu sagen, du wüsstest es nicht. Eine Annahme kann auch eine Mailbox sein; ein Gesprächsende beweist keine Auftragserledigung. Ältere Einträge können unvollständig sein.",
       parameters: { type: "object", properties: {} },
@@ -1327,6 +1335,11 @@ export async function executeLukasTool(
       return await githubListRepos();
     case "ruf_an":
       return await starteAnruf(String(input.nummer), String(input.anlass ?? ""), ctx.ownerCallGrant, ctx.conversationId);
+    case "telefon_hinweis": {
+      if (!ctx.conversationId) return "Nutze für Hinweise das Feld beim laufenden Anruf im Telefonbereich.";
+      const { telefonHinweis } = await import("./telefon-hinweis");
+      return await telefonHinweis(Number(input.anruf_id), String(input.text ?? ""), ctx.conversationId > 0 ? ctx.conversationId : undefined);
+    }
     case "telefon_status":
       return await telefonStatus();
     case "telefon_kontakte":

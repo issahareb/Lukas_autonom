@@ -753,6 +753,7 @@ export default function Telefon() {
                     </span>
                     {daten.anbieter === "telnyx" && <LiveMithoeren id={a.id} zustimmung={a.mithoerenZustimmung === true}
                       aktiv={a.richtung === "ausgehend" && ["gewaehlt", "klingelt", "angenommen", "verbunden"].includes(a.ergebnis)} />}
+                    {a.detail && /^(Mailbox erkannt|Nach Verabschiedung)/.test(a.detail) && <p className="w-full text-xs text-muted-foreground">{a.detail}</p>}
                     <Aufnahme anruf={a} />
                   </div>
                 ))}

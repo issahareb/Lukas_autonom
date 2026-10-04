@@ -105,6 +105,7 @@ export const TOOL_RISK: Record<string, RiskTier> = {
    * waere sinnlos. Wer das anders will, stellt hier auf R2.
    */
   ruf_an: "R1",
+  telefon_hinweis: "R1",
   mcp_find_tool: "R0",
   read_diagnostics: "R0",
   read_usage: "R0",
