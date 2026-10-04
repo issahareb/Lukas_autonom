@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -66,6 +66,15 @@ export const telefonAnrufe = pgTable("lukas_telefon_anrufe", {
   /** Warum Lukas angerufen hat — nur bei ausgehenden Anrufen. */
   anlass: text("anlass").notNull().default(""),
   detail: text("detail").notNull().default(""),
+  kontextId: text("kontext_id").unique(),
+  providerSid: text("provider_sid").unique(),
+  sipSid: text("sip_sid"),
+  zielStatus: text("ziel_status").notNull().default(""),
+  sipStatus: text("sip_status").notNull().default(""),
+  liveBereit: boolean("live_bereit").notNull().default(false),
+  conversationId: integer("conversation_id"),
+  dauer: integer("dauer"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

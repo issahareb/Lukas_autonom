@@ -24,6 +24,8 @@ type Anruf = {
   ergebnis: string;
   stufe: string;
   anlass: string;
+  detail?: string;
+  dauer?: number | null;
   createdAt: string;
 };
 
@@ -217,6 +219,8 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
 
   useEffect(() => {
     void laden();
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void laden(); }, 4000);
+    return () => clearInterval(timer);
   }, [laden]);
 
   const einrichten = async (nummer: string) => {
@@ -652,7 +656,7 @@ export default function Telefon() {
                       <PhoneOutgoing className="size-4 shrink-0 text-muted-foreground" />
                     )}
                     <span className="font-mono">{zeigeNummer(a.nummer)}</span>
-                    <span className="text-muted-foreground">{a.ergebnis}</span>
+                    <span className="text-muted-foreground" title={a.detail}>{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit LUKAS verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</span>
                     {a.anlass && <span className="truncate text-muted-foreground">— {a.anlass}</span>}
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                       {new Date(a.createdAt).toLocaleString("de-DE")}

@@ -19,6 +19,7 @@ export BENCH_DATABASE_URL="$URL"
 # hat sich die unvollstaendige Migrationskette versteckt.
 echo "→ Schema einspielen (Deploy-Pfad)"
 DATABASE_URL="$URL" npm run db:deploy --prefix "$API/../.." >/dev/null
+node scripts/check-telefon-status.mjs
 
 echo "→ Bündel bauen"
 npx esbuild src/lib/netzschutz.ts --bundle --format=esm --platform=node --external:undici --outfile=dist/netzschutz-bench.mjs --log-level=error

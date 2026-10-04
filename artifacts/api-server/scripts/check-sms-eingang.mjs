@@ -99,6 +99,8 @@ const werkzeug = (name) => (...args) => {
 export const nimmAn = werkzeug("nimmAn");
 export const weiseAb = werkzeug("weiseAb");
 export const starteAnruf = werkzeug("starteAnruf");
+export const telefonStatus = werkzeug("telefonStatus");
+export const telnyxStatusEingang = async () => true, aktualisiereAnruf = async () => {};
 export const protokolliere = werkzeug("protokolliere");
 export const letzteAnrufe = async () => [];
 export const twilioZugang = () => false;
@@ -138,7 +140,7 @@ await build({
       name: "attrappen",
       setup(b) {
         // src/lib/sms.ts bleibt bewusst ECHT.
-        b.onResolve({ filter: /(^|\/)(logger|telefon|melden|debug-log)$/ }, () => ({ path: attrappe }));
+        b.onResolve({ filter: /(^|\/)(logger|telefon|telefon-status|melden|debug-log)$/ }, () => ({ path: attrappe }));
       },
     },
   ],

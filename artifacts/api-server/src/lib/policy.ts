@@ -31,6 +31,7 @@ export type RiskTier = "R0" | "R1" | "R2" | "R3";
 export const TOOL_RISK: Record<string, RiskTier> = {
   // R0 — lesend
   query_memory: "R0",
+  telefon_status: "R0",
   fetch_url: "R0",
   // Eine Seite anzuschauen bleibt lesend, auch wenn ein Browser dazwischen
   // steht. Er laeuft in einem eigenen Container ohne Zugriff auf den Host.

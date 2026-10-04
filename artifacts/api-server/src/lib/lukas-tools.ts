@@ -15,6 +15,7 @@ import { MCP_TOOL_PREFIX, activeServers, callMcpTool } from "./mcp";
 import { runSubagent, subagentUebersicht, createSubagent, fixError } from "./subagents";
 import { meldeDichBeiIssa } from "./melden";
 import { starteAnruf } from "./telefon";
+import { telefonStatus } from "./telefon-status";
 import type { OwnerCallGrant } from "./owner-call-grant";
 import { fehlerGruppen } from "./debug-log";
 import { verbrauchsUebersicht } from "./ai/model-client";
@@ -348,6 +349,14 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "telefon_status",
+      description: "Prüfe die tatsächlichen letzten Anrufstatus: Start, Klingeln, Zielannahme, Verbindung zu LUKAS, Ende, Besetzt, keine Antwort oder Fehler. Nutze dies bei jeder Nachfrage, ob ein Anruf durchgestellt wurde oder geklappt hat, statt zu raten oder pauschal zu sagen, du wüsstest es nicht. Eine Annahme kann auch eine Mailbox sein; ein Gesprächsende beweist keine Auftragserledigung. Ältere Einträge können unvollständig sein.",
+      parameters: { type: "object", properties: {} },
     },
   },
   {
@@ -1308,7 +1317,9 @@ export async function executeLukasTool(
     case "github_list_repos":
       return await githubListRepos();
     case "ruf_an":
-      return await starteAnruf(String(input.nummer), String(input.anlass ?? ""), ctx.ownerCallGrant);
+      return await starteAnruf(String(input.nummer), String(input.anlass ?? ""), ctx.ownerCallGrant, ctx.conversationId);
+    case "telefon_status":
+      return await telefonStatus();
     case "github_read_path":
       return await githubReadPath(
         String(input.repo),
