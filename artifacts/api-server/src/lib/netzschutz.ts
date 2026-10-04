@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import net from "node:net";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 
 /*
  * Wohin Lukas ins Netz greifen darf — und wohin nicht.
@@ -215,7 +215,9 @@ export async function sicherFetch(
       }) as any;
     }
 
-    const antwort = await fetch(url.toString(), optionen as RequestInit);
+    // Agent and fetch must come from the same undici version. Node's bundled
+    // fetch uses an older dispatcher protocol and fails with undici 8 Agents.
+    const antwort = await undiciFetch(url.toString(), optionen as Parameters<typeof undiciFetch>[1]) as unknown as Response;
     if (rest.redirect === "manual" || antwort.status < 300 || antwort.status >= 400) return antwort;
 
     const weiter = antwort.headers.get("location");

@@ -23,10 +23,15 @@
 import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 const dir = mkdtempSync(join(process.cwd(), ".netz-check-"));
 const out = join(dir, "netzschutz.mjs");
 const dnsAttrappe = join(dir, "dns.mjs");
+const undiciPfad = createRequire(import.meta.url).resolve("undici");
+const fetchAttrappe = join(dir, "fetch.mjs");
+writeFileSync(fetchAttrappe, `export { Agent } from ${JSON.stringify(undiciPfad)};
+export const fetch = (...args) => globalThis.fetch(...args);`);
 
 /*
  * Eine DNS-Attrappe. Gegen echtes DNS zu testen waere langsam, vom Netz
@@ -60,15 +65,20 @@ export default { lookup };
 `,
 );
 
+const echtOut = join(dir, "netzschutz-echt.mjs");
+await build({ entryPoints: ["src/lib/netzschutz.ts"], bundle: true, format: "esm", platform: "node",
+  outfile: echtOut, alias: { "node:dns/promises": dnsAttrappe }, external: ["undici"], logLevel: "silent" });
+const { sicherFetch: echteSicherFetch } = await import(`file://${echtOut}`);
+
 await build({
   entryPoints: ["src/lib/netzschutz.ts"],
   bundle: true,
   format: "esm",
   platform: "node",
   outfile: out,
-  alias: { "node:dns/promises": dnsAttrappe },
+  alias: { "node:dns/promises": dnsAttrappe, undici: fetchAttrappe },
   // Wie im Produktivbau: undici bleibt extern (dynamische requires).
-  external: ["undici"],
+  external: [undiciPfad],
   logLevel: "silent",
 });
 
@@ -224,12 +234,23 @@ globalThis.fetch = async (url) => {
   const port = server.address().port;
 
   globalThis.fetch = echterFetch;
+  // A real successful request catches incompatible fetch/Agent versions.
+  // Mocked fetch alone previously hid UND_ERR_INVALID_ARG in production.
+  process.env.LUKAS_FETCH_ALLOWLIST = "127.0.0.1";
+  try {
+    const response = await echteSicherFetch(`http://127.0.0.1:${port}/`);
+    pruefe("echter HTTP-Abruf mit angehefteter Adresse funktioniert", (await response.text()).startsWith("INTERN"));
+  } catch (err) {
+    pruefe(`echter HTTP-Abruf funktioniert: ${err.cause?.code ?? err.message}`, false);
+  } finally { delete process.env.LUKAS_FETCH_ALLOWLIST; }
+  pruefe("erlaubter Testserver wurde genau einmal erreicht", getroffen === 1);
+  getroffen = 0;
   // Was die PRÜFUNG sieht: harmlos und öffentlich.
   globalThis.__dns["localhost"] = ["93.184.216.34"];
 
   let ausgang = "kein Versuch";
   try {
-    const antwort = await sicherFetch(`http://localhost:${port}/`, {
+    const antwort = await echteSicherFetch(`http://localhost:${port}/`, {
       signal: AbortSignal.timeout(2500),
     });
     ausgang = `verbunden (${antwort.status})`;
