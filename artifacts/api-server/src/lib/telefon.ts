@@ -24,6 +24,7 @@ import { acceptLiveSipSession, rejectLiveSipSession } from "./ai/live-session";
 import { logger } from "./logger";
 import type { OwnerCallGrant } from "./owner-call-grant";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
+import { neuerVerfolgterAnruf, aktualisiereAnruf } from "./telefon-status";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
 
@@ -254,6 +255,14 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     offeneAusgehende.delete(normalisiere(vonNummer));
   }
 
+  if (kontext?.richtung === "ausgehend") {
+    // Outbound TeXML is executed only after the destination answers. The
+    // successful Live SIP accept and attached sideband confirm the LUKAS leg.
+    await aktualisiereAnruf(kontext.id, { liveBereit: true, zielStatus: "in-progress", sipStatus: "in-progress", stufe })
+      .catch(err => logger.warn({ err }, "Live-Anrufstatus konnte nicht gespeichert werden"));
+    return stufe;
+  }
+
   await protokolliere({
     richtung: ausgehend ? "ausgehend" : "eingehend",
     nummer: vonNummer,
@@ -308,7 +317,7 @@ export function twilioZugang(): { sid: string; nutzer: string; geheim: string } 
   return null;
 }
 
-export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant): Promise<string> {
+export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant, conversationId?: number): Promise<string> {
   const zugang = twilioZugang();
   const von = process.env.TWILIO_NUMMER?.trim();
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
@@ -340,13 +349,17 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
   }
 
   if (istTelnyx()) {
+    const id = await neuerVerfolgterAnruf(ziel, anlass, conversationId);
     try {
-      await telnyxWaehle(`+${ziel}`, anlass);
-      await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "gewaehlt", anlass });
-      return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an.`;
+      const sid = await telnyxWaehle(`+${ziel}`, anlass, id);
+      await aktualisiereAnruf(id, { providerSid: sid }).catch(err => logger.error({ err }, "Anruf gestartet, Anbieter-ID noch nicht gespeichert"));
+      return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an. Anruf-ID: ${id}. Status: gestartet; Annahme noch nicht bestätigt. Statusänderungen werden im ursprünglichen Chat gemeldet. Nutze telefon_status, um den aktuellen Stand zu prüfen.${sid ? "" : " Der Anbieter hat keine Anruf-ID geliefert; Statusverfolgung ist noch nicht bestätigt."}`;
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Telnyx-Anruf fehlgeschlagen";
-      await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "fehlgeschlagen", anlass, detail });
+      const unsicher = err instanceof Error && ["TimeoutError", "AbortError", "TypeError"].includes(err.name);
+      await aktualisiereAnruf(id, { ...(unsicher ? {} : { zielStatus: "failed" }),
+        detail: unsicher ? "Anbieterantwort fehlt; ob der Anruf gestartet wurde, ist noch unbestätigt. Nicht automatisch erneut wählen." : detail }).catch(() => {});
+      if (unsicher) return `Die Anbieterantwort fehlt. Ob der Anruf an +${ziel} gestartet wurde, ist noch unbestätigt. Nicht erneut wählen. Anruf-ID: ${id}; prüfe telefon_status.`;
       throw new Error(detail);
     }
   }

@@ -21,6 +21,14 @@ const attrappe = join(dir, "attrappe.mjs");
 writeFileSync(
   attrappe,
   `
+import { randomUUID } from "node:crypto";
+const tracked = new Map();
+export const neuerVerfolgterAnruf = async (nummer, anlass) => {
+  const id = randomUUID(); tracked.set(id, { nummer, anlass }); return id;
+};
+export const aktualisiereAnruf = async (id, patch) => {
+  if (patch.liveBereit) globalThis.telefonProtokoll.push({ ...tracked.get(id), richtung: "ausgehend", ergebnis: "angenommen", stufe: globalThis.telefonEintrag?.stufe ?? "oeffentlich" });
+};
 export const db = {
   select: () => ({ from: () => ({ where: () => ({ limit: async () => globalThis.telefonEintrag ? [globalThis.telefonEintrag] : [] }) }) }),
   update: (table) => ({ set: (row) => {
@@ -269,6 +277,7 @@ const oneOffEnvKeys = [
   "TWILIO_AUTH_TOKEN", "TWILIO_API_KEY", "TWILIO_API_SECRET", "TWILIO_NUMMER",
   "OPENAI_PROJECT_ID", "OPENAI_WEBHOOK_SECRET", "TELNYX_API_KEY",
   "TELNYX_PUBLIC_KEY", "TELNYX_NUMMER", "TELNYX_APP_ID",
+  "LUKAS_PUBLIC_URL",
 ];
 const oneOffPreviousEnv = new Map(oneOffEnvKeys.map(key => [key, process.env[key]]));
 const oneOffPreviousFetch = globalThis.fetch;
@@ -281,6 +290,7 @@ try {
     OPENAI_PROJECT_ID: "proj_test_only", OPENAI_WEBHOOK_SECRET: "test-only",
     TELNYX_API_KEY: "test-only", TELNYX_PUBLIC_KEY: "test-only",
     TELNYX_NUMMER: "+49201123456", TELNYX_APP_ID: "test-app",
+    LUKAS_PUBLIC_URL: "https://lukas.example.test",
   });
   delete process.env.TWILIO_API_KEY; delete process.env.TWILIO_API_SECRET;
   globalThis.telefonEintrag = undefined;
@@ -292,6 +302,10 @@ try {
       assert.equal(options.method, "GET");
       assert.equal(url.searchParams.get("filter[phone_number]"), process.env.TELNYX_NUMMER);
       return new Response(JSON.stringify({ data: [{ phone_number: process.env.TELNYX_NUMMER, status: "active", connection_id: "test-app" }] }), { status: 200 });
+    }
+    if (url.pathname === "/v2/texml_applications/test-app") {
+      assert.equal(options.method, "GET");
+      return new Response(JSON.stringify({ data: { status_callback: "https://lukas.example.test/api/telefon/telnyx/status", status_callback_method: "post" } }));
     }
     assert.equal(options.method, "POST");
     if (url.origin === "https://api.telnyx.com" && url.pathname === "/v2/texml/calls/test-app") {

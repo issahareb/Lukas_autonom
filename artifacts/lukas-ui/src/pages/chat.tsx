@@ -177,6 +177,7 @@ export default function Chat() {
     query: {
       queryKey: getGetAnthropicConversationQueryKey(activeId!),
       enabled: activeId !== null,
+      refetchInterval: streaming ? false : 4000,
     },
   });
   const createConvo = useCreateAnthropicConversation();

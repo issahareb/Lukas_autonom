@@ -23,8 +23,26 @@ import { LiveSessionError } from "../lib/ai/live-error";
 import { sendeSms, letzteSms, zugangVorhanden, nimmSmsEntgegen } from "../lib/sms";
 import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
+import { telnyxStatusEingang, aktualisiereAnruf } from "../lib/telefon-status";
 
 export const telefonWebhookRouter = Router();
+
+telefonWebhookRouter.post("/telefon/telnyx/status", async (req, res) => {
+  const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
+  if (!istTelnyx() || !telnyxSignatur(raw, req.get("telnyx-timestamp") ?? "", req.get("telnyx-signature-ed25519") ?? "")) {
+    return void res.status(401).send("ungültige Signatur");
+  }
+  const id = typeof req.query.anruf === "string" ? req.query.anruf : undefined;
+  if (id && !/^[a-f0-9-]{36}$/.test(id)) return void res.status(400).send("ungültige Anruf-ID");
+  try {
+    const tracked = await telnyxStatusEingang(req.body ?? {}, id);
+    logger.info({ route: "telnyx/status", tracked }, "Telnyx-Anrufstatus verarbeitet");
+    res.status(200).send("ok");
+  } catch (err) {
+    logger.warn({ err, route: "telnyx/status" }, "Telnyx-Anrufstatus noch nicht verarbeitet");
+    res.status(503).send("Statuszustellung wiederholen");
+  }
+});
 
 telefonWebhookRouter.post("/telefon/telnyx/texml", async (req, res) => {
   const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
@@ -158,7 +176,10 @@ telefonWebhookRouter.post("/telefon/eingehend", async (req, res) => {
         });
         // Nach erfolgreichem Accept beendet der Manager bei Anschlussfehlern.
         // Dieser bereits angenommene Anruf darf nicht erneut gestartet werden.
-        if (err instanceof LiveSessionError && err.accepted) return;
+        if (err instanceof LiveSessionError && err.accepted) {
+          if (kontext?.richtung === "ausgehend") await aktualisiereAnruf(kontext.id, { sipStatus: "failed" });
+          return;
+        }
         // Ein Timeout beweist nicht, dass OpenAI nicht angenommen hat.
         // Deshalb keinen möglicherweise bereits laufenden Anruf abweisen.
         throw err;

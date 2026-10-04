@@ -48,6 +48,21 @@ try {
   const context = t.pruefeTelefonKontext(payload.Texml.match(/X-Lukas-Context=([^<]+)/)[1]);
   assert.equal(context.nummer, payload.To); assert.equal(context.richtung, 'ausgehend');
   assert.match((await t.telnyxStand()).hinweis, /noch nicht geprüft/);
+  process.env.LUKAS_PUBLIC_URL = 'https://lukas.example.test';
+  const setupCalls = [];
+  globalThis.fetch = async (url, options) => {
+    setupCalls.push({ url, ...options });
+    if (url.includes('/phone_numbers')) return new Response(JSON.stringify({ data: [{ phone_number: process.env.TELNYX_NUMMER, connection_id: 'test-app', status: 'active' }] }));
+    if (options.method === 'GET') return new Response(JSON.stringify({ data: { status_callback: null } }));
+    if (options.method === 'PATCH') return new Response(JSON.stringify({ data: {} }));
+    return new Response(JSON.stringify({ call_sid: 'v3:root-call', status: 'queued' }));
+  };
+  assert.equal(await t.telnyxWaehle('+4915112345678', 'Status-Test', '00000000-0000-4000-8000-000000000000'), 'v3:root-call');
+  assert.deepEqual(JSON.parse(setupCalls.find(c => c.method === 'PATCH').body), { status_callback: 'https://lukas.example.test/api/telefon/telnyx/status', status_callback_method: 'post' });
+  const tracked = JSON.parse(setupCalls.find(c => c.method === 'POST').body);
+  assert.match(tracked.Texml, /statusCallbackEvent="initiated ringing answered completed"/);
+  assert.match(tracked.Texml, /statusCallback="https:\/\/lukas.example.test\/api\/telefon\/telnyx\/status\?anruf=00000000-0000-4000-8000-000000000000"/);
+  assert.equal(t.pruefeTelefonKontext(tracked.Texml.match(/X-Lukas-Context=([^<]+)/)[1]).id, '00000000-0000-4000-8000-000000000000');
   let providerErrorCode = '10010';
   globalThis.fetch = async () => new Response(JSON.stringify({
     errors: [{ code: providerErrorCode, detail: 'secret-provider-detail', title: 'secret-provider-title' }],
@@ -90,6 +105,7 @@ export const nimmAn = async (...args) => {
 export const weiseAb = async () => { globalThis.rejectedCalls++; };
 export const nummerAusSip = () => 'untrusted', normalisiere = s => s.replace(/[^0-9]/g, '');
 export const letzteAnrufe = async () => [], protokolliere = async () => {};
+export const telnyxStatusEingang = async (...args) => { globalThis.statusCalls.push(args); return true; }, aktualisiereAnruf = async () => {};
 export const twilioZugang = () => null, twilioStand = async () => ({}), twilioEinrichten = async () => [], starteAnruf = async () => '';
 export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorhanden = () => false, nimmSmsEntgegen = async () => ({}), meldeDichBeiIssa = async () => {}, recordDebugEvent = () => {};
 `);
@@ -105,6 +121,12 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   app.use(express.json({ verify: capture })); app.use(express.urlencoded({ extended: false, verify: capture })); app.use('/api', telefonWebhookRouter);
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  globalThis.statusCalls = [];
+  const statusBody = Buffer.from('CallSid=root&CallStatus=completed&CallDuration=42');
+  const statusRequest = (signature) => oldFetch(base + '/telefon/telnyx/status?anruf=00000000-0000-4000-8000-000000000000', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': signature }, body: statusBody });
+  assert.equal((await statusRequest('')).status, 401); assert.equal(globalThis.statusCalls.length, 0);
+  assert.equal((await statusRequest(signed(statusBody))).status, 200);
+  assert.deepEqual(globalThis.statusCalls[0], [{ CallSid: 'root', CallStatus: 'completed', CallDuration: '42' }, '00000000-0000-4000-8000-000000000000']);
   const request = (bytes, signature = signed(bytes)) => oldFetch(base + '/telefon/telnyx/texml', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': signature }, body: bytes });
   assert.equal((await request(body, '')).status, 401);
   assert.equal(globalThis.telefonLogs.at(-1)[0].reason, 'invalid_signature');
