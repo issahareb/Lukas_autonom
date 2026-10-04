@@ -102,6 +102,7 @@ export const starteAnruf = werkzeug("starteAnruf");
 export const telefonStatus = werkzeug("telefonStatus");
 export const telnyxAufnahmeEingang = async () => {};
 export class TelefonAufnahmeFehler extends Error {}
+export const mithoerenAntwort = async (_req, res) => res.status(409).json({ error: "not running" });
 export const ladeTelefonAufnahme = async () => null;
 export const telnyxStatusEingang = async () => true, aktualisiereAnruf = async () => {};
 export const protokolliere = werkzeug("protokolliere");
@@ -143,7 +144,7 @@ await build({
       name: "attrappen",
       setup(b) {
         // src/lib/sms.ts bleibt bewusst ECHT.
-        b.onResolve({ filter: /(^|\/)(logger|telefon|telefon-status|telefon-aufnahme|melden|debug-log)$/ }, () => ({ path: attrappe }));
+        b.onResolve({ filter: /(^|\/)(logger|telefon|telefon-status|telefon-aufnahme|telefon-mithoeren|melden|debug-log)$/ }, () => ({ path: attrappe }));
       },
     },
   ],

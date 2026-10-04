@@ -74,8 +74,8 @@ try {
       else if (path === "/api/lukas/dashboard") body = dashboard;
       else if (path === "/api/lukas/telefon" && method === "POST") { neuerKontakt = route.request().postDataJSON(); body = { id: 2, ...neuerKontakt }; }
       else if (path === "/api/lukas/telefon") body = { anbieter: "telnyx", bereit: { webhook: true, anrufen: true },
-        nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now }],
-        anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }] };
+        nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now, mithoerenZustimmung: true, mithoerenQuelle: "email", mithoerenBestaetigtAm: now }],
+        anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }, { id: 2, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "verbunden", mithoerenZustimmung: true, createdAt: now }] };
       else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, konfiguriert: true, freigeschaltet: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
       else if (path === "/api/lukas/sms") body = { bereit: false, sms: [] };
       else if (path === "/api/lukas/wartet") body = { freigaben: [], meldungen: [], gesamt: { freigaben: 0, meldungen: 0 } };
@@ -126,6 +126,8 @@ try {
     await page.getByLabel("Kontaktname", { exact: true }).fill("Maria Muster");
     await page.getByLabel("Lukas darf diesen Kontakt anrufen", { exact: true }).check();
     await page.getByLabel("Zustimmung zur Gesprächsaufzeichnung", { exact: false }).first().selectOption("email");
+    await page.getByLabel("Schriftliche Zustimmung zum Live-Mithören", { exact: false }).first().selectOption("homepage");
+    await page.getByRole("button", { name: "Live mithören", exact: true }).waitFor();
     await noOverflow(page, "Telefon " + name);
     if (name === "desktop" || name === "mobil") {
       await page.getByRole("heading", { name: "Kontakt hinzufügen" }).scrollIntoViewIfNeeded();
@@ -137,6 +139,8 @@ try {
     assert.equal(neuerKontakt.aufnahmeZustimmung, true);
     assert.equal(neuerKontakt.aufnahmeQuelle, "email");
     assert.equal(neuerKontakt.darfAngerufenWerden, true);
+    assert.equal(neuerKontakt.mithoerenZustimmung, true);
+    assert.equal(neuerKontakt.mithoerenQuelle, "homepage");
     console.log("OK — " + name + " (" + width + " px): layout, search, keyboard selection, draft handoff, suggestion.");
     await context.close();
   }

@@ -125,7 +125,7 @@ export async function protokolliere(eintrag: {
 }
 
 /** Die Anweisungen fuer genau diesen Anrufer. */
-async function anweisungen(stufe: Stufe, name: string, anlass: string | null, aufnahme = false): Promise<string> {
+async function anweisungen(stufe: Stufe, name: string, anlass: string | null, aufnahme = false, mithoeren = false): Promise<string> {
   const basis =
     stufe === "privat" ? await buildSystemPrompt() : await buildPublicSystemPrompt("telefon");
 
@@ -148,7 +148,7 @@ async function anweisungen(stufe: Stufe, name: string, anlass: string | null, au
   const aufnahmeHinweis = aufnahme
     ? "\nDie Zustimmung zur Gesprächsaufzeichnung liegt bereits vor. Keine erneute Einwilligungsfrage oder Aufnahmeansage; beginne direkt mit dem Gespräch. Auf ausdrückliche Nachfrage wahrheitsgemäß antworten, dass dieses Gespräch aufgezeichnet wird."
     : "";
-  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}${aufnahmeHinweis}\n\n${basis}`;
+  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}${aufnahmeHinweis}${mithoeren ? "\nDie vorherige schriftliche Zustimmung zum Live-Mithören durch Issa ist hinterlegt. Keine erneute Zustimmungsfrage oder Ansage; auf Nachfrage wahrheitsgemäß antworten." : ""}\n\n${basis}`;
 }
 
 /*
@@ -247,10 +247,10 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
 
   await acceptLiveSipSession({
     sessionId: callId,
-    instructions: await anweisungen(stufe, name, anlass, kontext?.aufnahme === true),
+    instructions: await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true),
     visibility: stufe === "privat" ? "private" : "public",
     initialCommentary: ausgehend
-      ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 500)}`
+      ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 1000)}`
       : `Ein Anrufer hat dich erreicht. Begrüße ${name || "den Gesprächspartner"} kurz.`,
     // Rufnummernanzeige berechtigt wie bisher nicht zu Werkzeugaktionen.
     allowTools: false,
@@ -364,11 +364,14 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
 
   if (istTelnyx()) {
     const aufnahme = eintrag?.aufnahmeZustimmung === true;
+    const mithoeren = eintrag?.mithoerenZustimmung === true;
     const id = await neuerVerfolgterAnruf(ziel, anlass, conversationId, aufnahme ? {
       aufnahmeZustimmung: true, aufnahmeQuelle: eintrag.aufnahmeQuelle, aufnahmeBestaetigtAm: eintrag.aufnahmeBestaetigtAm,
+    } : undefined, mithoeren ? {
+      mithoerenZustimmung: true, mithoerenQuelle: eintrag.mithoerenQuelle, mithoerenBestaetigtAm: eintrag.mithoerenBestaetigtAm,
     } : undefined);
     try {
-      const sid = await telnyxWaehle(`+${ziel}`, anlass, id, aufnahme);
+      const sid = await telnyxWaehle(`+${ziel}`, anlass, id, aufnahme, mithoeren);
       await aktualisiereAnruf(id, { providerSid: sid }).catch(err => logger.error({ err }, "Anruf gestartet, Anbieter-ID noch nicht gespeichert"));
       return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an. Anruf-ID: ${id}. Status: gestartet; Annahme noch nicht bestätigt. Statusänderungen werden im ursprünglichen Chat gemeldet. Nutze telefon_status, um den aktuellen Stand zu prüfen.${sid ? "" : " Der Anbieter hat keine Anruf-ID geliefert; Statusverfolgung ist noch nicht bestätigt."}`;
     } catch (err) {

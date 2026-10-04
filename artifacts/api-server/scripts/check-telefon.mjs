@@ -428,6 +428,16 @@ try {
   globalThis.telefonEintrag.aufnahmeZustimmung = false;
   await starteAnruf("Max Muster", "Ohne Aufnahme");
   assert.equal(providerCalls.at(-1).context.aufnahme, false, "Consent removal applies to the next call");
+  globalThis.telefonEintrag.mithoerenZustimmung = true;
+  globalThis.telefonEintrag.mithoerenQuelle = "email";
+  globalThis.telefonEintrag.mithoerenBestaetigtAm = new Date();
+  const vorstellung = "Stelle dich als Matthias ohne KI-Bezeichnung in der Begrüßung vor. Verhandle locker und witzig.";
+  await starteAnruf("Max Muster", vorstellung);
+  assert.equal(providerCalls.at(-1).context.mithoeren, true);
+  assert.equal(providerCalls.at(-1).context.aufnahme, false);
+  await nimmAn("live_listen_alias", "+" + ERWARTET, providerCalls.at(-1).context);
+  assert.ok(globalThis.telefonAnnahmen.at(-1).initialCommentary.includes(vorstellung));
+  assert.match(globalThis.telefonAnnahmen.at(-1).instructions, /schriftliche Zustimmung zum Live-Mithören/);
   globalThis.telefonEintrag.darfAngerufenWerden = false;
   const beforeBlocked = providerCalls.length;
   await starteAnruf("Max Muster", "Gesperrt");

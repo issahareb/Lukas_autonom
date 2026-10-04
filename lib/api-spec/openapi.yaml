@@ -180,6 +180,38 @@ paths:
           description: Sitzung nicht vorhanden oder Berechtigung unpassend.
         "502":
           description: Beenden fehlgeschlagen.
+  /lukas/telefon/anrufe/{id}/live:
+    get:
+      operationId: getTelefonLiveAudio
+      tags: [lukas]
+      security:
+        - LukasBearer: []
+      summary: Beide Seiten eines laufenden Telefonats live hören
+      description: Empfangsmodus als SSE. Benötigt vor dem Anruf gespeicherte und weiterhin gültige schriftliche Zustimmung zum Mithören. Keine Mikrofonübertragung, kein Audioarchiv. Für den Betrieb mit einer API-Instanz.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Format-, Audio-, Warte- und Ende-Ereignisse; Audio ist G.711 mit 8 kHz als Base64.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Ungültige Anruf-ID
+        '401':
+          description: Anmeldung fehlt oder ist ungültig
+        '409':
+          description: Anruf beendet oder vorherige schriftliche Zustimmung fehlt
+        '429':
+          description: Zu viele mithörende Geräte
+        '503':
+          description: Mithören vorübergehend nicht verfügbar
   /lukas/telefon/anrufe/{id}/aufnahme:
     get:
       operationId: getTelefonAufnahme

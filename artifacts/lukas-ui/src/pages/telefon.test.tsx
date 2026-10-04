@@ -23,10 +23,12 @@ describe("Telefonkontakte", () => {
     await userEvent.type(screen.getByLabelText("Kontaktname"), "Max Muster");
     expect(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/)).toHaveValue("");
     await userEvent.selectOptions(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/), "email");
+    expect(screen.getByLabelText(/Schriftliche Zustimmung zum Live-Mithören/)).toHaveValue("");
+    await userEvent.selectOptions(screen.getByLabelText(/Schriftliche Zustimmung zum Live-Mithören/), "homepage");
     await userEvent.click(screen.getByRole("button", { name: "Hinzufügen" }));
     await waitFor(() => expect(calls.some(c => c.init?.method === "POST")).toBe(true));
     const saved = JSON.parse(String(calls.find(c => c.init?.method === "POST")?.init?.body));
-    expect(saved).toMatchObject({ name: "Max Muster", aufnahmeZustimmung: true, aufnahmeQuelle: "email", darfAngerufenWerden: false });
+    expect(saved).toMatchObject({ name: "Max Muster", aufnahmeZustimmung: true, aufnahmeQuelle: "email", darfAngerufenWerden: false, mithoerenZustimmung: true, mithoerenQuelle: "homepage" });
     expect(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/)).toHaveValue("");
   });
   it("kann die Zustimmung eines bestehenden Kontakts zurücknehmen", async () => {
