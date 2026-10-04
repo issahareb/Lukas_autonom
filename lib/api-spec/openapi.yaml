@@ -180,6 +180,39 @@ paths:
           description: Sitzung nicht vorhanden oder Berechtigung unpassend.
         "502":
           description: Beenden fehlgeschlagen.
+  /lukas/telefon/anrufe/{id}/aufnahme:
+    get:
+      operationId: getTelefonAufnahme
+      tags: [lukas]
+      security:
+        - LukasBearer: []
+      summary: Eine bestätigte Gesprächsaufzeichnung abrufen
+      description: Benötigt den privaten Dashboard-Bearer-Token. Erneuert den Telnyx-Medienlink und liefert die Audiodaten ohne öffentliche Anbieter-URL. Nur für Anrufe mit zuvor hinterlegter Aufnahmezustimmung.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Audio der Aufnahme; private, no-store
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Anmeldung fehlt oder ist ungültig
+        '404':
+          description: Keine fertige Aufnahme verfügbar
+        '502':
+          description: Aufnahme beim Anbieter derzeit nicht abrufbar
   /lukas/telefon/telnyx:
     get:
       operationId: getTelnyxStatus

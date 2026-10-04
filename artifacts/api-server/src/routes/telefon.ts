@@ -8,6 +8,8 @@
  * hier gar nichts.
  */
 import { Router } from "express";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { istTelnyx, telnyxBereit, telnyxSignatur, telnyxXml, telnyxStand, pruefeTelefonKontext } from "../lib/telnyx";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -24,8 +26,25 @@ import { sendeSms, letzteSms, zugangVorhanden, nimmSmsEntgegen } from "../lib/sm
 import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
 import { telnyxStatusEingang, aktualisiereAnruf } from "../lib/telefon-status";
+import { telnyxAufnahmeEingang, ladeTelefonAufnahme } from "../lib/telefon-aufnahme";
 
 export const telefonWebhookRouter = Router();
+
+telefonWebhookRouter.post("/telefon/telnyx/aufnahme", async (req, res) => {
+  const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
+  if (!istTelnyx() || !telnyxSignatur(raw, req.get("telnyx-timestamp") ?? "", req.get("telnyx-signature-ed25519") ?? "")) {
+    return void res.status(401).send("ungültige Signatur");
+  }
+  const id = typeof req.query.anruf === "string" ? req.query.anruf : "";
+  if (!/^[a-f0-9-]{36}$/.test(id)) return void res.status(400).send("ungültige Anruf-ID");
+  try {
+    await telnyxAufnahmeEingang(req.body ?? {}, id);
+    res.status(200).send("ok");
+  } catch {
+    logger.warn({ route: "telnyx/aufnahme" }, "Aufnahmezustellung noch nicht verarbeitet");
+    res.status(503).send("Zustellung wiederholen");
+  }
+});
 
 telefonWebhookRouter.post("/telefon/telnyx/status", async (req, res) => {
   const raw = (req as typeof req & { rawBody?: Buffer }).rawBody;
@@ -214,6 +233,9 @@ const serialize = (r: typeof telefonNummern.$inferSelect) => ({
   name: r.name,
   stufe: r.stufe,
   darfAngerufenWerden: r.darfAngerufenWerden,
+  aufnahmeZustimmung: r.aufnahmeZustimmung,
+  aufnahmeQuelle: r.aufnahmeQuelle,
+  aufnahmeBestaetigtAm: r.aufnahmeBestaetigtAm?.toISOString() ?? null,
   notiz: r.notiz,
   zuletztGesehen: r.zuletztGesehen?.toISOString() ?? null,
   createdAt: r.createdAt.toISOString(),
@@ -238,6 +260,24 @@ router.get("/lukas/telefon", async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "Telefonnummern laden fehlgeschlagen");
     res.status(500).json({ error: "Failed to load phone numbers" });
+  }
+});
+
+router.get("/lukas/telefon/anrufe/:id/aufnahme", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return void res.status(400).json({ error: "Ungültige Anruf-ID" });
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const media = await ladeTelefonAufnahme(id);
+    if (!media) return void res.status(404).json({ error: "Noch keine Aufnahme verfügbar." });
+    const type = media.headers.get("content-type")?.split(";")[0];
+    res.setHeader("Content-Type", type?.startsWith("audio/") ? type : "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `inline; filename="anruf-${id}.${type?.includes("wav") ? "wav" : "mp3"}"`);
+    await pipeline(Readable.fromWeb(media.body! as import("node:stream/web").ReadableStream), res);
+  } catch {
+    if (!res.headersSent) res.status(502).json({ error: "Aufnahme konnte nicht geladen werden. Bitte erneut versuchen." });
+    else res.destroy();
   }
 });
 
@@ -332,8 +372,17 @@ const NummerBody = z.object({
   name: z.string().max(80).optional(),
   stufe: z.enum(["privat", "oeffentlich", "gesperrt"]).optional(),
   darfAngerufenWerden: z.boolean().optional(),
+  aufnahmeZustimmung: z.boolean().optional(),
+  aufnahmeQuelle: z.enum(["", "email", "homepage", "bestaetigt"]).optional(),
   notiz: z.string().max(300).optional(),
 });
+
+function aufnahmeWerte(data: z.infer<typeof NummerBody> | Partial<z.infer<typeof NummerBody>>) {
+  if (data.aufnahmeZustimmung === undefined) return {};
+  return { aufnahmeZustimmung: data.aufnahmeZustimmung,
+    aufnahmeQuelle: data.aufnahmeZustimmung ? data.aufnahmeQuelle || "bestaetigt" : "",
+    aufnahmeBestaetigtAm: data.aufnahmeZustimmung ? new Date() : null };
+}
 
 router.post("/lukas/telefon", async (req, res) => {
   const parsed = NummerBody.safeParse(req.body ?? {});
@@ -362,6 +411,7 @@ router.post("/lukas/telefon", async (req, res) => {
         name: parsed.data.name ?? "",
         stufe: parsed.data.stufe ?? "oeffentlich",
         darfAngerufenWerden: parsed.data.darfAngerufenWerden ?? false,
+        ...aufnahmeWerte(parsed.data),
         notiz: parsed.data.notiz ?? "",
       })
       .returning();
@@ -379,8 +429,17 @@ router.patch("/lukas/telefon/:id", async (req, res) => {
     return void res.status(400).json({ error: "Ungültige Eingabe" });
   }
   try {
-    const werte: Record<string, unknown> = { ...parsed.data };
-    if (typeof parsed.data.nummer === "string") werte.nummer = normalisiere(parsed.data.nummer);
+    const { aufnahmeQuelle: _quelle, ...rest } = parsed.data;
+    const werte: Record<string, unknown> = { ...rest, ...aufnahmeWerte(parsed.data) };
+    if (typeof parsed.data.nummer === "string") {
+      const nummer = normalisiere(parsed.data.nummer);
+      if (!/^[1-9]\d{5,14}$/.test(nummer)) return void res.status(400).json({ error: "Nummer mit Ländervorwahl nötig." });
+      const [bisher] = await db.select().from(telefonNummern).where(eq(telefonNummern.id, id)).limit(1);
+      const [doppelt] = await db.select().from(telefonNummern).where(eq(telefonNummern.nummer, nummer)).limit(1);
+      if (doppelt && doppelt.id !== id) return void res.status(409).json({ error: "Diese Nummer steht schon in der Liste." });
+      werte.nummer = nummer;
+      if (nummer !== bisher?.nummer && parsed.data.aufnahmeZustimmung === undefined) Object.assign(werte, aufnahmeWerte({ aufnahmeZustimmung: false }));
+    }
     const [row] = await db
       .update(telefonNummern)
       .set(werte)

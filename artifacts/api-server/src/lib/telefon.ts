@@ -25,6 +25,7 @@ import { logger } from "./logger";
 import type { OwnerCallGrant } from "./owner-call-grant";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 import { neuerVerfolgterAnruf, aktualisiereAnruf } from "./telefon-status";
+import { findeTelefonKontakte, telefonKontakte } from "./telefon-kontakte";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
 
@@ -124,7 +125,7 @@ export async function protokolliere(eintrag: {
 }
 
 /** Die Anweisungen fuer genau diesen Anrufer. */
-async function anweisungen(stufe: Stufe, name: string, anlass: string | null): Promise<string> {
+async function anweisungen(stufe: Stufe, name: string, anlass: string | null, aufnahme = false): Promise<string> {
   const basis =
     stufe === "privat" ? await buildSystemPrompt() : await buildPublicSystemPrompt("telefon");
 
@@ -144,7 +145,10 @@ async function anweisungen(stufe: Stufe, name: string, anlass: string | null): P
     ? `\n\nDU HAST ANGERUFEN. Der Anlass: ${anlass}\nKomm nach der Begrüßung direkt darauf zu sprechen.`
     : "";
 
-  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}\n\n${basis}`;
+  const aufnahmeHinweis = aufnahme
+    ? "\nDie Zustimmung zur Gesprächsaufzeichnung liegt bereits vor. Keine erneute Einwilligungsfrage oder Aufnahmeansage; beginne direkt mit dem Gespräch. Auf ausdrückliche Nachfrage wahrheitsgemäß antworten, dass dieses Gespräch aufgezeichnet wird."
+    : "";
+  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}${aufnahmeHinweis}\n\n${basis}`;
 }
 
 /*
@@ -243,7 +247,7 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
 
   await acceptLiveSipSession({
     sessionId: callId,
-    instructions: await anweisungen(stufe, name, anlass),
+    instructions: await anweisungen(stufe, name, anlass, kontext?.aufnahme === true),
     visibility: stufe === "privat" ? "private" : "public",
     initialCommentary: ausgehend
       ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 500)}`
@@ -318,6 +322,15 @@ export function twilioZugang(): { sid: string; nutzer: string; geheim: string } 
 }
 
 export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant, conversationId?: number): Promise<string> {
+  if (!nummer.trim()) return "Kontaktname oder Telefonnummer fehlt. Kein Anruf gestartet.";
+  // A name must resolve uniquely before any dialing or one-use grant is consumed.
+  if (!/^[+\d\s()./-]+$/.test(nummer.trim())) {
+    const kontakte = await findeTelefonKontakte(nummer);
+    if (kontakte.length !== 1) return kontakte.length
+      ? `Mehrere Kontakte passen. Frage Issa, welchen er meint. Kein Anruf gestartet. ${await telefonKontakte(nummer)}`
+      : "Kein passender Kontakt gefunden. Frage nach dem gespeicherten Namen oder der Telefonnummer. Kein Anruf gestartet.";
+    nummer = "+" + kontakte[0].nummer;
+  }
   const zugang = twilioZugang();
   const von = process.env.TWILIO_NUMMER?.trim();
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
@@ -331,6 +344,7 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
   }
 
   const ziel = normalisiere(nummer);
+  if (!/^[1-9]\d{5,14}$/.test(ziel)) return "Eine gültige Telefonnummer mit Ländervorwahl oder ein eindeutiger Kontaktname ist nötig.";
   const [eintrag] = await db
     .select()
     .from(telefonNummern)
@@ -349,9 +363,12 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
   }
 
   if (istTelnyx()) {
-    const id = await neuerVerfolgterAnruf(ziel, anlass, conversationId);
+    const aufnahme = eintrag?.aufnahmeZustimmung === true;
+    const id = await neuerVerfolgterAnruf(ziel, anlass, conversationId, aufnahme ? {
+      aufnahmeZustimmung: true, aufnahmeQuelle: eintrag.aufnahmeQuelle, aufnahmeBestaetigtAm: eintrag.aufnahmeBestaetigtAm,
+    } : undefined);
     try {
-      const sid = await telnyxWaehle(`+${ziel}`, anlass, id);
+      const sid = await telnyxWaehle(`+${ziel}`, anlass, id, aufnahme);
       await aktualisiereAnruf(id, { providerSid: sid }).catch(err => logger.error({ err }, "Anruf gestartet, Anbieter-ID noch nicht gespeichert"));
       return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an. Anruf-ID: ${id}. Status: gestartet; Annahme noch nicht bestätigt. Statusänderungen werden im ursprünglichen Chat gemeldet. Nutze telefon_status, um den aktuellen Stand zu prüfen.${sid ? "" : " Der Anbieter hat keine Anruf-ID geliefert; Statusverfolgung ist noch nicht bestätigt."}`;
     } catch (err) {

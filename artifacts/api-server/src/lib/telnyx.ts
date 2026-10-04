@@ -53,14 +53,14 @@ export function telnyxSignatur(body: Buffer | undefined, timestamp: string, sign
   } catch { return false; }
 }
 
-export type TelefonKontext = { nummer: string; richtung: "eingehend" | "ausgehend"; anlass: string; exp: number; id: string };
+export type TelefonKontext = { nummer: string; richtung: "eingehend" | "ausgehend"; anlass: string; exp: number; id: string; aufnahme?: boolean };
 
 /** Signed call context survives a restart and does not trust a SIP caller ID. */
-export function telefonKontext(nummer: string, richtung: TelefonKontext["richtung"], anlass = "", id: string = randomUUID()): string {
+export function telefonKontext(nummer: string, richtung: TelefonKontext["richtung"], anlass = "", id: string = randomUUID(), aufnahme = false): string {
   const key = process.env.TELNYX_API_KEY;
   if (!key) throw new Error("TELNYX_API_KEY fehlt.");
   if (nummer && !E164.test(nummer)) throw new Error("Ungültige Telefonnummer.");
-  const data = Buffer.from(JSON.stringify({ nummer, richtung, anlass: anlass.slice(0, 1000), exp: Date.now() + 180000, id })).toString("base64url");
+  const data = Buffer.from(JSON.stringify({ nummer, richtung, anlass: anlass.slice(0, 1000), exp: Date.now() + 180000, id, aufnahme })).toString("base64url");
   return `${data}.${createHmac("sha256", key).update(data).digest("base64url")}`;
 }
 
@@ -77,7 +77,7 @@ export function pruefeTelefonKontext(token: string): TelefonKontext | null {
     if (!Number.isFinite(value.exp) || value.exp < Date.now() || value.exp > Date.now() + 180000 ||
       !["eingehend", "ausgehend"].includes(value.richtung) || typeof value.nummer !== "string" ||
       (value.nummer !== "" && !E164.test(value.nummer)) || typeof value.anlass !== "string" ||
-      typeof value.id !== "string") return null;
+      typeof value.id !== "string" || (value.aufnahme !== undefined && typeof value.aufnahme !== "boolean")) return null;
     return value;
   } catch { return null; }
 }
@@ -92,16 +92,18 @@ export function telnyxStatusUrl(): string {
   return new URL("/api/telefon/telnyx/status", url).href;
 }
 
-export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], anlass = "", id?: string): string {
+export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], anlass = "", id?: string, aufnahme = false): string {
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
   if (!projekt || !/^proj_[A-Za-z0-9_-]+$/.test(projekt)) throw new Error("OPENAI_PROJECT_ID fehlt oder ist ungültig.");
   const host = process.env.OPENAI_SIP_HOST ?? "sip.api.openai.com";
   if (!/^[a-zA-Z0-9.-]+$/.test(host)) throw new Error("Ungültiger SIP-Host.");
-  const token = telefonKontext(nummer, richtung, anlass, id);
+  const token = telefonKontext(nummer, richtung, anlass, id, aufnahme);
   const callback = id ? ` statusCallback="${xml(telnyxStatusUrl() + "?anruf=" + encodeURIComponent(id))}" statusCallbackMethod="POST" statusCallbackEvent="initiated ringing answered completed"` : "";
+  if (aufnahme && (!id || richtung !== "ausgehend")) throw new Error("Aufzeichnung braucht einen zugeordneten ausgehenden Anruf.");
+  const recording = aufnahme ? ` record="record-from-answer-dual" recordingChannels="dual" recordingStatusCallback="${xml(new URL("/api/telefon/telnyx/aufnahme", telnyxStatusUrl()).href + "?anruf=" + encodeURIComponent(id!))}" recordingStatusCallbackMethod="POST" recordingStatusCallbackEvent="in-progress completed absent" sendRecordingUrl="false"` : ' record="do-not-record"';
   // TLS schützt die SIP-Signalisierung; GPT Live verlangt zusätzlich SRTP für Audio.
   const target = `sip:${projekt}@${host};transport=tls;secure=srtp?X-Lukas-Context=${encodeURIComponent(token)}`;
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial answerOnBridge="true" timeout="30"><Sip${callback}>${xml(target)}</Sip></Dial></Response>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><Response><Dial answerOnBridge="true" timeout="30"${recording}><Sip${callback}>${xml(target)}</Sip></Dial></Response>`;
 }
 
 export type TelnyxStand = {
@@ -127,7 +129,7 @@ export async function telnyxStand(): Promise<TelnyxStand> {
   };
 }
 
-export async function telnyxWaehle(nummer: string, anlass: string, id?: string): Promise<string | null> {
+export async function telnyxWaehle(nummer: string, anlass: string, id?: string, aufnahme = false): Promise<string | null> {
   if (!E164.test(nummer)) throw new Error("Ungültige Zielrufnummer.");
   const stand = await telnyxStand();
   if (!stand.bereit) throw new Error(stand.hinweis);
@@ -142,7 +144,7 @@ export async function telnyxWaehle(nummer: string, anlass: string, id?: string):
     }
   }
   const result = await telnyxAnfrage<{ call_sid?: string; sid?: string }>(`/texml/calls/${encodeURIComponent(process.env.TELNYX_APP_ID!)}`, {
-    From: stand.nummer, To: nummer, Texml: telnyxXml(nummer, "ausgehend", anlass, id),
+    From: stand.nummer, To: nummer, Texml: telnyxXml(nummer, "ausgehend", anlass, id, aufnahme),
   });
   return result.call_sid ?? result.sid ?? null;
 }

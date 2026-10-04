@@ -23,6 +23,8 @@ writeFileSync(
   `
 import { randomUUID } from "node:crypto";
 const tracked = new Map();
+export const findeTelefonKontakte = async () => globalThis.telefonSuchtreffer ?? [];
+export const telefonKontakte = async () => JSON.stringify(globalThis.telefonSuchtreffer ?? []);
 export const neuerVerfolgterAnruf = async (nummer, anlass) => {
   const id = randomUUID(); tracked.set(id, { nummer, anlass }); return id;
 };
@@ -410,6 +412,28 @@ try {
     assert.equal(accepted.allowTools, false);
   }
   console.log("OK — Parallel Telnyx dials: one DID, separate signed contexts, non-blocking start and reversed answer order.");
+  const contactStart = providerCalls.length;
+  globalThis.telefonSuchtreffer = [];
+  assert.match(await starteAnruf("Unbekannt", "Test"), /Kein passender Kontakt/);
+  globalThis.telefonSuchtreffer = [{ name: "Max", nummer: ERWARTET }, { name: "Max", nummer: "493012345678" }];
+  assert.match(await starteAnruf("Max", "Test"), /Mehrere Kontakte/);
+  assert.equal(providerCalls.length, contactStart, "Missing/ambiguous names do not dial");
+  globalThis.telefonEintrag = { id: 4, nummer: ERWARTET, name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: new Date() };
+  globalThis.telefonSuchtreffer = [globalThis.telefonEintrag];
+  await starteAnruf("Max Muster", "Termin");
+  assert.equal(providerCalls.at(-1).to, "+" + ERWARTET);
+  assert.equal(providerCalls.at(-1).context.aufnahme, true);
+  await nimmAn("live_recording", "+" + ERWARTET, providerCalls.at(-1).context);
+  assert.match(globalThis.telefonAnnahmen.at(-1).instructions, /Keine erneute Einwilligungsfrage oder Aufnahmeansage/);
+  globalThis.telefonEintrag.aufnahmeZustimmung = false;
+  await starteAnruf("Max Muster", "Ohne Aufnahme");
+  assert.equal(providerCalls.at(-1).context.aufnahme, false, "Consent removal applies to the next call");
+  globalThis.telefonEintrag.darfAngerufenWerden = false;
+  const beforeBlocked = providerCalls.length;
+  await starteAnruf("Max Muster", "Gesperrt");
+  assert.equal(providerCalls.length, beforeBlocked, "A resolved name does not bypass call permission");
+  delete globalThis.telefonSuchtreffer;
+  console.log("OK — Namen eindeutig auflösen; Aufnahme nur mit gespeicherter Zustimmung, ohne erneute Ansage.");
 } finally {
   globalThis.fetch = oneOffPreviousFetch;
   for (const [key, value] of oneOffPreviousEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }

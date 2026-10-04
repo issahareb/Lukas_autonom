@@ -13,6 +13,9 @@ type Nummer = {
   name: string;
   stufe: Stufe;
   darfAngerufenWerden: boolean;
+  aufnahmeZustimmung: boolean;
+  aufnahmeQuelle: string;
+  aufnahmeBestaetigtAm: string | null;
   notiz: string;
   zuletztGesehen: string | null;
 };
@@ -26,6 +29,8 @@ type Anruf = {
   anlass: string;
   detail?: string;
   dauer?: number | null;
+  aufnahmeStatus?: string;
+  aufnahmeDauer?: number | null;
   createdAt: string;
 };
 
@@ -83,6 +88,53 @@ async function api(path: string, init?: RequestInit) {
 function zeigeNummer(ziffern: string): string {
   if (ziffern.length < 7) return "+" + ziffern;
   return `+${ziffern.slice(0, 2)} ${ziffern.slice(2, 5)} ${ziffern.slice(5)}`;
+}
+
+function AufnahmeZustimmung({ value, disabled, onChange }: { value: string; disabled?: boolean; onChange: (value: string) => void }) {
+  return <label className="mt-3 flex flex-col gap-1 text-sm">
+    <span>Zustimmung zur Gesprächsaufzeichnung</span>
+    <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)}
+      className="h-10 w-full min-w-0 rounded-xl bg-secondary px-3 text-sm">
+      <option value="">Keine Zustimmung hinterlegt</option>
+      <option value="email">Ja, per E-Mail</option>
+      <option value="homepage">Ja, über die Homepage</option>
+      <option value="bestaetigt">Ja, anderweitig bestätigt</option>
+    </select>
+    <span className="text-xs text-muted-foreground">Bei vorliegender Zustimmung werden ausgehende Telnyx-Gespräche ohne erneute Ansage aufgezeichnet.</span>
+  </label>;
+}
+
+function Aufnahme({ anruf }: { anruf: Anruf }) {
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [fehler, setFehler] = useState("");
+  useEffect(() => {
+    if (!blob) return;
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+  const laden = async () => {
+    setBusy(true); setFehler("");
+    try {
+      const res = await fetch(`${BASE}/api/lukas/telefon/anrufe/${anruf.id}/aufnahme`, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Aufnahme konnte nicht geladen werden.");
+      setBlob(await res.blob());
+    } catch (err) { setFehler(err instanceof Error ? err.message : "Fehler"); }
+    finally { setBusy(false); }
+  };
+  if (!anruf.aufnahmeStatus || anruf.aufnahmeStatus === "aus") return null;
+  if (anruf.aufnahmeStatus !== "completed") return <p className="text-xs text-muted-foreground">
+    {{ angefordert: "Aufnahme angefordert – noch nicht bestätigt", "in-progress": "Aufzeichnung läuft", absent: "Keine Aufnahme verfügbar" }[anruf.aufnahmeStatus] ?? "Aufnahmestatus unbekannt"}
+  </p>;
+  return <div className="w-full space-y-2">
+    {url ? <>
+      <audio controls src={url} className="h-10 w-full" aria-label="Gesprächsaufzeichnung" />
+      <a href={url} download={`anruf-${anruf.id}.${blob?.type.includes("wav") ? "wav" : "mp3"}`} className="text-xs text-primary underline">Aufnahme herunterladen</a>
+    </> : <Button variant="secondary" size="sm" disabled={busy} onClick={laden}>{busy ? "Aufnahme lädt …" : "Aufnahme anhören"}{anruf.aufnahmeDauer != null ? ` · ${anruf.aufnahmeDauer}s` : ""}</Button>}
+    {fehler && <p role="alert" className="text-xs text-red-400">{fehler}</p>}
+  </div>;
 }
 
 function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => void }) {
@@ -182,6 +234,11 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">{STUFE[eintrag.stufe].hilfe}</p>
+      <AufnahmeZustimmung value={eintrag.aufnahmeZustimmung ? eintrag.aufnahmeQuelle || "bestaetigt" : ""} disabled={busy}
+        onChange={quelle => patch({ aufnahmeZustimmung: Boolean(quelle), aufnahmeQuelle: quelle })} />
+      {eintrag.aufnahmeZustimmung && eintrag.aufnahmeBestaetigtAm && <p className="mt-1 text-xs text-muted-foreground">
+        Hinterlegt am {new Date(eintrag.aufnahmeBestaetigtAm).toLocaleDateString("de-DE")}
+      </p>}
 
       {eintrag.darfAngerufenWerden && (
         <Button size="sm" variant="ghost" className="mt-3 px-0" disabled={busy} onClick={testanruf}>
@@ -517,7 +574,8 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
 export default function Telefon() {
   const [daten, setDaten] = useState<Antwort | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
-  const [neu, setNeu] = useState({ nummer: "", name: "", stufe: "privat" as Stufe });
+  const leererKontakt = { nummer: "", name: "", stufe: "oeffentlich" as Stufe, darfAngerufenWerden: false, aufnahmeZustimmung: false, aufnahmeQuelle: "" };
+  const [neu, setNeu] = useState(leererKontakt);
   const [busy, setBusy] = useState(false);
 
   const laden = useCallback(async () => {
@@ -542,6 +600,8 @@ export default function Telefon() {
 
   useEffect(() => {
     void laden();
+    const timer = window.setInterval(() => { if (!document.hidden) void laden(); }, 4000);
+    return () => window.clearInterval(timer);
   }, [laden]);
 
   const hinzufuegen = async () => {
@@ -550,7 +610,7 @@ export default function Telefon() {
     setFehler(null);
     try {
       await api("", { method: "POST", body: JSON.stringify(neu) });
-      setNeu({ nummer: "", name: "", stufe: "privat" });
+      setNeu(leererKontakt);
       await laden();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Fehler");
@@ -594,16 +654,18 @@ export default function Telefon() {
 
           <div className="card-soft rounded-3xl p-5">
             <h2 className="mb-3 flex items-center gap-2 font-medium">
-              <Plus className="size-4" /> Nummer hinzufügen
+              <Plus className="size-4" /> Kontakt hinzufügen
             </h2>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
+                aria-label="Telefonnummer"
                 value={neu.nummer}
                 onChange={(e) => setNeu({ ...neu, nummer: e.target.value })}
                 placeholder="+49 151 12345678"
-                className="h-10 flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+                className="h-10 min-w-0 w-full rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08] sm:w-auto sm:flex-1"
               />
               <input
+                aria-label="Kontaktname"
                 value={neu.name}
                 onChange={(e) => setNeu({ ...neu, name: e.target.value })}
                 placeholder="Name"
@@ -618,13 +680,19 @@ export default function Telefon() {
                 <option value="oeffentlich">Öffentlich</option>
                 <option value="gesperrt">Gesperrt</option>
               </select>
-              <Button onClick={hinzufuegen} disabled={busy || !neu.nummer.trim()}>
-                Hinzufügen
-              </Button>
             </div>
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={neu.darfAngerufenWerden} disabled={busy}
+                onChange={e => setNeu({ ...neu, darfAngerufenWerden: e.target.checked })} />
+              Lukas darf diesen Kontakt anrufen
+            </label>
+            <AufnahmeZustimmung value={neu.aufnahmeQuelle} disabled={busy}
+              onChange={quelle => setNeu({ ...neu, aufnahmeZustimmung: Boolean(quelle), aufnahmeQuelle: quelle })} />
+            <Button className="mt-4" onClick={hinzufuegen} disabled={busy || !neu.nummer.trim()}>
+              Hinzufügen
+            </Button>
             <p className="mt-2 text-xs text-muted-foreground">
-              Nicht eingetragene Nummern bekommen automatisch den öffentlichen Lukas — den von der
-              Webseite, ohne alles Private.
+              Du kannst anschließend im Chat sagen: „Rufe {neu.name.trim() || "Kontaktname"} an.“
             </p>
           </div>
 
@@ -649,18 +717,19 @@ export default function Telefon() {
               <h2 className="mb-3 font-medium">Letzte Anrufe</h2>
               <div className="space-y-1">
                 {daten.anrufe.map((a) => (
-                  <div key={a.id} className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-secondary/40">
+                  <div key={a.id} className="flex flex-wrap items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-secondary/40">
                     {a.richtung === "eingehend" ? (
                       <PhoneIncoming className="size-4 shrink-0 text-muted-foreground" />
                     ) : (
                       <PhoneOutgoing className="size-4 shrink-0 text-muted-foreground" />
                     )}
-                    <span className="font-mono">{zeigeNummer(a.nummer)}</span>
+                    <span>{daten.nummern.find(n => n.nummer === a.nummer)?.name || zeigeNummer(a.nummer)}</span>
                     <span className="text-muted-foreground" title={a.detail}>{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit LUKAS verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</span>
                     {a.anlass && <span className="truncate text-muted-foreground">— {a.anlass}</span>}
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                       {new Date(a.createdAt).toLocaleString("de-DE")}
                     </span>
+                    <Aufnahme anruf={a} />
                   </div>
                 ))}
               </div>

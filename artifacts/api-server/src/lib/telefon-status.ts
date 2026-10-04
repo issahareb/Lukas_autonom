@@ -30,10 +30,12 @@ export const ANRUF_LABEL: Record<string, string> = {
   abgebrochen: "Anruf abgebrochen", verbindungsfehler: "Verbindung zu LUKAS fehlgeschlagen",
 };
 
-export async function neuerVerfolgterAnruf(nummer: string, anlass: string, conversationId?: number): Promise<string> {
+export async function neuerVerfolgterAnruf(nummer: string, anlass: string, conversationId?: number,
+  aufnahme?: Pick<TelefonAnruf, "aufnahmeZustimmung" | "aufnahmeQuelle" | "aufnahmeBestaetigtAm">): Promise<string> {
   const kontextId = randomUUID();
   await db.insert(telefonAnrufe).values({ kontextId, nummer, anlass, richtung: "ausgehend",
-    ergebnis: "gewaehlt", zielStatus: "queued", conversationId: conversationId && conversationId > 0 ? conversationId : null });
+    ergebnis: "gewaehlt", zielStatus: "queued", conversationId: conversationId && conversationId > 0 ? conversationId : null,
+    ...aufnahme, aufnahmeStatus: aufnahme?.aufnahmeZustimmung ? "angefordert" : "aus" });
   return kontextId;
 }
 
@@ -67,7 +69,7 @@ export async function telefonStatus(): Promise<string> {
     hinweis: "Anrufstart, Zielannahme und SIP-Verbindung sind getrennte Bestätigungen. Annahme beweist keinen menschlichen Gesprächspartner. Fehlende Meldungen bedeuten unbekannt; ein beendeter Anruf beweist keine Auftragserledigung. Alte Einträge ohne kontextId haben keine vollständige Statusverfolgung.",
     anrufe: rows.map(r => ({ id: r.kontextId ?? r.id, nummer: "+" + r.nummer, anlass: r.anlass,
       status: ANRUF_LABEL[r.ergebnis] ?? r.ergebnis, zielStatus: r.zielStatus, sipStatus: r.sipStatus,
-      liveBereit: r.liveBereit, dauer: r.dauer, detail: r.detail, zuletzt: r.updatedAt })) });
+      liveBereit: r.liveBereit, dauer: r.dauer, detail: r.detail, aufnahmeStatus: r.aufnahmeStatus, zuletzt: r.updatedAt })) });
 }
 
 /** Only called after verifying the Telnyx signature on the exact body bytes. */

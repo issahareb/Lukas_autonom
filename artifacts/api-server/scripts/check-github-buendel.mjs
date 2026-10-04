@@ -72,6 +72,7 @@ export const createSubagent = async () => ""; export const fixError = async () =
 export const meldeDichBeiIssa = async () => "";
 export const starteAnruf = async (...args) => { globalThis.__phoneArgs = args; return "mock call"; };
 export const telefonStatus = async () => "mock phone status";
+export const telefonKontakte = async () => "mock contacts";
 export const fehlerGruppen = async () => [];
 export const verbrauchsUebersicht = () => [];
 `,

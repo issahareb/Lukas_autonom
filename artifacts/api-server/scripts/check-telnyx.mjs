@@ -63,6 +63,12 @@ try {
   assert.match(tracked.Texml, /statusCallbackEvent="initiated ringing answered completed"/);
   assert.match(tracked.Texml, /statusCallback="https:\/\/lukas.example.test\/api\/telefon\/telnyx\/status\?anruf=00000000-0000-4000-8000-000000000000"/);
   assert.equal(t.pruefeTelefonKontext(tracked.Texml.match(/X-Lukas-Context=([^<]+)/)[1]).id, '00000000-0000-4000-8000-000000000000');
+  assert.match(tracked.Texml, /record="do-not-record"/);
+  const recordingXml = t.telnyxXml('+4915112345678', 'ausgehend', 'Test', '00000000-0000-4000-8000-000000000000', true);
+  assert.match(recordingXml, /record="record-from-answer-dual"/);
+  assert.match(recordingXml, /recordingStatusCallback="https:\/\/lukas.example.test\/api\/telefon\/telnyx\/aufnahme\?anruf=/);
+  assert.doesNotMatch(recordingXml, /<Say|<Play|<Record/);
+  assert.throws(() => t.telnyxXml('+4915112345678', 'eingehend', '', undefined, true));
   let providerErrorCode = '10010';
   globalThis.fetch = async () => new Response(JSON.stringify({
     errors: [{ code: providerErrorCode, detail: 'secret-provider-detail', title: 'secret-provider-title' }],
@@ -106,6 +112,8 @@ export const weiseAb = async () => { globalThis.rejectedCalls++; };
 export const nummerAusSip = () => 'untrusted', normalisiere = s => s.replace(/[^0-9]/g, '');
 export const letzteAnrufe = async () => [], protokolliere = async () => {};
 export const telnyxStatusEingang = async (...args) => { globalThis.statusCalls.push(args); return true; }, aktualisiereAnruf = async () => {};
+export const telnyxAufnahmeEingang = async (...args) => { globalThis.recordingCalls.push(args); };
+export const ladeTelefonAufnahme = async () => { globalThis.mediaAccess++; return new Response('test-audio', { headers: { 'content-type': 'audio/mpeg' } }); };
 export const twilioZugang = () => null, twilioStand = async () => ({}), twilioEinrichten = async () => [], starteAnruf = async () => '';
 export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorhanden = () => false, nimmSmsEntgegen = async () => ({}), meldeDichBeiIssa = async () => {}, recordDebugEvent = () => {};
 `);
@@ -115,13 +123,35 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   } }] });
   const require = createRequire(import.meta.url);
   symlinkSync(require.resolve('express/package.json').replace(/\/express\/package.json$/, ''), join(dir, 'node_modules'));
-  const { telefonWebhookRouter } = await import(routes);
+  const { telefonWebhookRouter, default: telefonRouter } = await import(routes);
+  const authOut = join(dir, 'auth.mjs');
+  await build({ entryPoints: ['src/middlewares/auth.ts'], outfile: authOut, bundle: true, platform: 'node', format: 'esm',
+    plugins: [{ name: 'logger', setup(b) { b.onResolve({ filter: /\/logger$/ }, () => ({ path: stub })); } }] });
+  const { lukasAuth } = await import(authOut);
+  process.env.LUKAS_API_TOKEN = 'local-recording-test';
   globalThis.acceptedCalls = []; globalThis.rejectedCalls = 0; globalThis.telefonLogs = [];
   const app = express(), capture = (req, _res, bytes) => { req.rawBody = bytes; };
   app.use(express.json({ verify: capture })); app.use(express.urlencoded({ extended: false, verify: capture })); app.use('/api', telefonWebhookRouter);
+  app.use('/api', lukasAuth, telefonRouter);
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  globalThis.mediaAccess = 0;
+  assert.equal((await oldFetch(base + '/lukas/telefon/anrufe/42/aufnahme')).status, 401);
+  assert.equal(globalThis.mediaAccess, 0, 'Unauthenticated clients cannot retrieve recordings');
+  const mediaResponse = await oldFetch(base + '/lukas/telefon/anrufe/42/aufnahme', { headers: { Authorization: 'Bearer local-recording-test' } });
+  assert.equal(mediaResponse.status, 200);
+  assert.equal(mediaResponse.headers.get('cache-control'), 'private, no-store');
+  assert.equal(mediaResponse.headers.get('content-type'), 'audio/mpeg');
+  assert.equal(await mediaResponse.text(), 'test-audio');
+  assert.equal(globalThis.mediaAccess, 1);
   globalThis.statusCalls = [];
+  globalThis.recordingCalls = [];
+  const recordingBody = Buffer.from('CallSid=root&RecordingStatus=completed');
+  const recordingRequest = signature => oldFetch(base + '/telefon/telnyx/aufnahme?anruf=00000000-0000-4000-8000-000000000000', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': signature }, body: recordingBody });
+  assert.equal((await recordingRequest('')).status, 401);
+  assert.equal(globalThis.recordingCalls.length, 0);
+  assert.equal((await recordingRequest(signed(recordingBody))).status, 200);
+  assert.equal(globalThis.recordingCalls.length, 1);
   const statusBody = Buffer.from('CallSid=root&CallStatus=completed&CallDuration=42');
   const statusRequest = (signature) => oldFetch(base + '/telefon/telnyx/status?anruf=00000000-0000-4000-8000-000000000000', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'telnyx-timestamp': timestamp, 'telnyx-signature-ed25519': signature }, body: statusBody });
   assert.equal((await statusRequest('')).status, 401); assert.equal(globalThis.statusCalls.length, 0);
