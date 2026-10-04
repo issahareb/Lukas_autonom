@@ -1,3 +1,32 @@
+type BrowserAudioSession = { type: string };
+let wiedergaben = 0;
+let wiederherstellen: (() => void) | undefined;
+
+/** iOS otherwise treats Web Audio as ambient sound and the silent switch mutes it.
+ * Acquire before creating/resuming the context, in the original tap handler.
+ * Multiple calls share the browser's one audio session; do not reset it early. */
+export function aktiviereTelefonWiedergabe(): () => void {
+  if (wiedergaben++ === 0) {
+    try {
+      const session = (navigator as Navigator & { audioSession?: BrowserAudioSession }).audioSession;
+      if (session && session.type !== "play-and-record") {
+        const vorher = session.type;
+        session.type = "playback";
+        wiederherstellen = () => { if (session.type === "playback") session.type = vorher; };
+      }
+    } catch { /* Other browsers still use their normal AudioContext output. */ }
+  }
+  let freigegeben = false;
+  return () => {
+    if (freigegeben) return;
+    freigegeben = true;
+    if (--wiedergaben === 0) {
+      try { wiederherstellen?.(); } catch { /* The browser may have ended its session. */ }
+      wiederherstellen = undefined;
+    }
+  };
+}
+
 /** G.711 from Telnyx, decoded locally; no microphone or recording API involved. */
 export function decodeTelefonAudio(payload: string, codec: "PCMU" | "PCMA"): Float32Array<ArrayBuffer> {
   const bytes = atob(payload), samples = new Float32Array(bytes.length);
@@ -27,6 +56,8 @@ export class TelefonAudio {
   private codec: "PCMU" | "PCMA" = "PCMU";
   private streamId = "";
   private base: number | null = null;
+  private peak = 0;
+  private lastFrame = -Infinity;
   private gain: GainNode;
   constructor(private context: AudioContext) {
     this.gain = context.createGain();
@@ -46,6 +77,8 @@ export class TelefonAudio {
     const samples = decodeTelefonAudio(frame.payload, this.codec);
     if (!samples.length) return false;
     const now = this.context.currentTime;
+    this.peak = samples.reduce((peak, sample) => Math.max(peak, Math.abs(sample)), 0);
+    this.lastFrame = now;
     if (this.base === null) this.base = now + 0.18 - frame.timestamp / 1000;
     let at = this.base + frame.timestamp / 1000;
     // Bound latency after a paused tab, reconnect, timestamp reset or network backlog.
@@ -62,6 +95,7 @@ export class TelefonAudio {
     source.start(Math.max(now, at));
     return true;
   }
+  pegel() { return this.context.currentTime - this.lastFrame < 0.5 ? this.peak : 0; }
   private clear() {
     for (const s of this.sources) { s.onended = null; try { s.stop(); } catch {} s.disconnect(); }
     this.sources.clear();

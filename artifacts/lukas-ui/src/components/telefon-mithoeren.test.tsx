@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { LiveMithoeren } from "./telefon-mithoeren";
-import { decodeTelefonAudio, TelefonAudio } from "@/lib/telefon-audio";
+import { aktiviereTelefonWiedergabe, decodeTelefonAudio, TelefonAudio } from "@/lib/telefon-audio";
 
 function audioFixture() {
   const order: string[] = [], sources: Array<{ start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
@@ -28,6 +28,7 @@ it("decodes known G.711 samples and mixes both tracks on the same timeline witho
   player.format("PCMU", "stream");
   const frame = { streamId: "stream", track: "inbound", chunk: 1, timestamp: 200, payload: btoa("\xff".repeat(160)) };
   player.play(frame); player.play({ ...frame, track: "outbound" }); player.play(frame);
+  expect(player.pegel()).toBe(0);
   expect(sources).toHaveLength(2);
   expect(sources[0].start.mock.calls[0][0]).toBeCloseTo(10.18);
   expect(sources[0].start.mock.calls).toEqual(sources[1].start.mock.calls);
@@ -35,6 +36,9 @@ it("decodes known G.711 samples and mixes both tracks on the same timeline witho
 });
 it("unlocks iPhone audio on tap, uses bearer auth, receives audio and stops without hanging up the call", async () => {
   const { order, sources } = audioFixture();
+  let sessionType = "auto";
+  const audioSession = { get type() { return sessionType; }, set type(value) { sessionType = value; order.push(value); } };
+  Object.defineProperty(navigator, "audioSession", { configurable: true, value: audioSession });
   localStorage.setItem("lukas_token", "test-owner");
   let stream: ReadableStreamDefaultController<Uint8Array>;
   const requests: Array<{ url: string; init: RequestInit }> = [];
@@ -46,20 +50,36 @@ it("unlocks iPhone audio on tap, uses bearer auth, receives audio and stops with
   expect(requests).toHaveLength(0);
   await userEvent.click(screen.getByRole("button", { name: "Live mithören" }));
   await waitFor(() => expect(requests).toHaveLength(1));
-  expect(order).toEqual(["resume", "fetch"]);
+  expect(order).toEqual(["playback", "resume", "fetch"]);
   expect(requests[0].url).toBe("/api/lukas/telefon/anrufe/9/live");
   expect(requests[0].init.headers).toEqual({ Authorization: "Bearer test-owner" });
   const emit = (data: unknown) => stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
   await act(async () => {
     emit({ type: "format", codec: "PCMU", streamId: "stream" });
-    emit({ type: "audio", streamId: "stream", track: "inbound", chunk: 1, timestamp: 0, payload: btoa("\xff".repeat(160)) });
+    emit({ type: "audio", streamId: "stream", track: "inbound", chunk: 1, timestamp: 0, payload: btoa("\xaa".repeat(160)) });
   });
-  expect(await screen.findByText(/Du hörst live mit/)).toBeVisible();
+  expect(await screen.findByText(/Gesprächsaudio empfangen/)).toBeVisible();
+  await waitFor(() => expect(Number(screen.getByRole("progressbar", { name: "Audiopegel" }).getAttribute("value"))).toBeGreaterThan(0));
   expect(sources).toHaveLength(2); // unlock + decoded media
   await userEvent.click(screen.getByRole("button", { name: "Mithören stoppen" }));
   expect(requests[0].init.signal?.aborted).toBe(true);
   expect(requests).toHaveLength(1); // no hangup request
   expect(screen.getByText(/Telefonat läuft weiter/)).toBeVisible();
+  expect(sessionType).toBe("auto");
+  Reflect.deleteProperty(navigator, "audioSession");
+});
+it("keeps media playback active until the last listener stops and preserves microphone sessions", () => {
+  const audioSession = { type: "ambient" };
+  Object.defineProperty(navigator, "audioSession", { configurable: true, value: audioSession });
+  const first = aktiviereTelefonWiedergabe(), second = aktiviereTelefonWiedergabe();
+  expect(audioSession.type).toBe("playback"); first(); first();
+  expect(audioSession.type).toBe("playback"); second();
+  expect(audioSession.type).toBe("ambient");
+  audioSession.type = "play-and-record";
+  const recording = aktiviereTelefonWiedergabe();
+  expect(audioSession.type).toBe("play-and-record"); recording();
+  expect(audioSession.type).toBe("play-and-record");
+  Reflect.deleteProperty(navigator, "audioSession");
 });
 it("hides playback for missing prior consent and finished calls", () => {
   const { rerender } = render(<LiveMithoeren id={1} aktiv zustimmung={false} />);
@@ -73,5 +93,5 @@ it("shows provider refusal without pretending that audio is playing", async () =
   render(<LiveMithoeren id={1} aktiv zustimmung />);
   await userEvent.click(screen.getByRole("button", { name: "Live mithören" }));
   expect(await screen.findByText("Zustimmung fehlt.")).toBeVisible();
-  expect(screen.queryByText(/Du hörst live mit/)).toBeNull();
+  expect(screen.queryByText(/Gesprächsaudio empfangen/)).toBeNull();
 });

@@ -4,12 +4,13 @@ import { WebSocketServer, WebSocket } from "ws";
 import { db, telefonAnrufe, telefonNummern, type TelefonAnruf } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { pruefeMithoerTicket } from "./telnyx";
+import { logger } from "./logger";
 
 const beendet = new Set(["completed", "busy", "no-answer", "failed", "canceled"]);
 type Format = { type: "format"; codec: "PCMU" | "PCMA"; streamId: string };
 type Audio = { type: "audio"; streamId: string; track: "inbound" | "outbound"; timestamp: number; chunk: number; payload: string };
-type Event = Format | Audio | { type: "waiting" } | { type: "end"; message: string };
-type Kanal = { id: number; context: string; provider?: WebSocket; format?: Format; listeners: Set<(event: Event) => void>; lastAudio: number };
+type Event = Format | Audio | { type: "waiting"; message?: string } | { type: "end"; message: string };
+type Kanal = { id: number; context: string; provider?: WebSocket; format?: Format; listeners: Set<(event: Event) => void>; lastAudio: number; openedAt: number; frames: { inbound: number; outbound: number } };
 // The deployed API has one replica. Audio stays in memory, never in database or logs.
 // Horizontal scaling requires a transient broker/shared stream routing first.
 const kanaele = new Map<string, Kanal>();
@@ -31,12 +32,17 @@ function kanal(call: TelefonAnruf): Kanal {
   let k = kanaele.get(call.kontextId!);
   if (!k) {
     if (kanaele.size >= MAX_KANAELE) throw new Error("capacity");
-    k = { id: call.id, context: call.kontextId!, listeners: new Set(), lastAudio: 0 };
+    k = { id: call.id, context: call.kontextId!, listeners: new Set(), lastAudio: 0, openedAt: Date.now(), frames: { inbound: 0, outbound: 0 } };
     kanaele.set(k.context, k);
   }
   return k;
 }
 function senden(k: Kanal, event: Event) { for (const fn of [...k.listeners]) fn(event); }
+function warten(k: Kanal): Event {
+  return { type: "waiting", message: k.lastAudio ? "Gesprächsaudio unterbrochen. Warte auf neue Audiodaten …" :
+    Date.now() - k.openedAt > 10000 ? "Noch kein Gesprächsaudio vom Anbieter empfangen. Der Anruf läuft weiter." :
+    k.provider ? "Audiostream verbunden. Warte auf Gesprächsaudio …" : "Verbinde mit dem Audiostream …" };
+}
 function beenden(k: Kanal, message: string) {
   kanaele.delete(k.context);
   senden(k, { type: "end", message });
@@ -54,17 +60,23 @@ export async function mithoerenAntwort(req: Request, res: Response): Promise<voi
     if (res.destroyed) return;
     const k = kanal(call);
     if (k.listeners.size >= 3) { res.status(429).json({ error: "Für diesen Anruf hören bereits drei Geräte mit." }); return; }
+    let framesForwarded = 0;
+    logger.info({ callId: k.id, phase: "listener_connected", providerConnected: Boolean(k.provider), frames: { ...k.frames } }, "Telefon-Live-Audioweg");
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "private, no-store, no-transform", "X-Accel-Buffering": "no" });
     res.flushHeaders();
     const listener = (event: Event) => {
       if (res.destroyed) return;
       if (res.writableLength > 65536) { res.destroy(); return; }
       res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (event.type === "audio") framesForwarded++;
       if (event.type === "end") res.end();
     };
     k.listeners.add(listener);
-    res.on("close", () => { k.listeners.delete(listener); if (!k.provider && k.listeners.size === 0) kanaele.delete(k.context); });
-    listener(k.format ?? { type: "waiting" });
+    res.on("close", () => {
+      logger.info({ callId: k.id, phase: "listener_closed", framesForwarded }, "Telefon-Live-Audioweg");
+      k.listeners.delete(listener); if (!k.provider && k.listeners.size === 0) kanaele.delete(k.context);
+    });
+    listener(k.format ?? warten(k));
   } catch {
     if (!res.headersSent) res.status(503).json({ error: "Mithören ist gerade nicht verfügbar. Bitte erneut versuchen." });
     else res.end();
@@ -110,13 +122,15 @@ export function starteTelefonMithoeren(server: Server): () => void {
       if (!call || socket.destroyed || stopping) { socket.destroy(); return; }
       const k = kanal(call);
       wss.handleUpgrade(req, socket, head, ws => {
+        logger.info({ callId: k.id, phase: "provider_connected" }, "Telefon-Live-Audioweg");
         let format: Format | null = null, starting = false, windowStart = Date.now(), bytes = 0;
         const startDeadline = setTimeout(() => ws.close(1008, "start required"), 7000);
-        const finish = () => {
+        const finish = (code: number) => {
+          logger.info({ callId: k.id, phase: "provider_closed", code, formatAccepted: Boolean(format), frames: { ...k.frames } }, "Telefon-Live-Audioweg");
           clearTimeout(startDeadline);
           if (k.provider === ws) {
             k.provider = undefined; k.format = undefined;
-            senden(k, { type: "waiting" });
+            senden(k, warten(k));
           }
           if (!k.provider && k.listeners.size === 0 && kanaele.get(k.context) === k) {
             kanaele.delete(k.context);
@@ -136,7 +150,7 @@ export function starteTelefonMithoeren(server: Server): () => void {
           if (msg.event === "start" && !format && !starting) {
             starting = true;
             const candidate = streamFormat(msg);
-            if (!candidate) { beenden(k, "Das Audioformat dieses Anrufs wird nicht unterstützt."); ws.close(1003, "unsupported codec"); return; }
+            if (!candidate) { logger.warn({ callId: k.id, phase: "unsupported_format" }, "Telefon-Live-Audioweg"); beenden(k, "Das Audioformat dieses Anrufs wird nicht unterstützt."); ws.close(1003, "unsupported codec"); return; }
             const callSid = msg.start?.call_control_id ?? msg.start?.callSid;
             void (async () => {
               // The provider can answer before the dial response has reached our DB.
@@ -148,12 +162,14 @@ export function starteTelefonMithoeren(server: Server): () => void {
                   const previous = k.provider;
                   k.provider = ws; format = candidate; k.format = candidate;
                   previous?.close(1000, "stream replaced");
+                  logger.info({ callId: k.id, phase: "format_accepted", codec: candidate.codec }, "Telefon-Live-Audioweg");
                   senden(k, candidate);
                   return;
                 }
                 if (current.providerSid) break;
                 await new Promise(resolve => setTimeout(resolve, 500));
               }
+              logger.warn({ callId: k.id, phase: "call_mismatch" }, "Telefon-Live-Audioweg");
               ws.close(1008, "call mismatch");
             })().catch(() => ws.close(1011, "unavailable"));
             return;
@@ -162,7 +178,8 @@ export function starteTelefonMithoeren(server: Server): () => void {
           if (msg.event === "stop") { beenden(k, "Mithören beendet."); return; }
           if (msg.event === "media") {
             const frame = streamAudio(msg, format);
-            if (!frame) { ws.close(1008, "invalid media"); return; }
+            if (!frame) { logger.warn({ callId: k.id, phase: "invalid_media" }, "Telefon-Live-Audioweg"); ws.close(1008, "invalid media"); return; }
+            if (k.frames[frame.track]++ === 0) logger.info({ callId: k.id, phase: "first_audio", track: frame.track }, "Telefon-Live-Audioweg");
             k.lastAudio = Date.now(); senden(k, frame);
           }
         });
@@ -178,7 +195,7 @@ export function starteTelefonMithoeren(server: Server): () => void {
     void Promise.all([...kanaele.values()].map(async k => {
       try {
         if (!await erlaubterMithoerAnruf(k.id)) beenden(k, "Anruf beendet oder Zustimmung zum Mithören nicht mehr gültig.");
-        else if (Date.now() - k.lastAudio > 5000) senden(k, { type: "waiting" });
+        else if (Date.now() - k.lastAudio > 5000) senden(k, warten(k));
       } catch { beenden(k, "Verbindung zum Mithören unterbrochen. Bitte erneut verbinden."); }
     })).finally(() => { checking = false; });
   }, 1000);
