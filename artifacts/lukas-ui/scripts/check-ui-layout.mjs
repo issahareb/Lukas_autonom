@@ -64,6 +64,7 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => pageErrors.push(error.message));
+    let neuerKontakt;
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       const method = route.request().method();
@@ -71,6 +72,12 @@ try {
       if (path === "/api/lukas/status") body = status;
       else if (path === "/api/healthz") body = { status: "ok" };
       else if (path === "/api/lukas/dashboard") body = dashboard;
+      else if (path === "/api/lukas/telefon" && method === "POST") { neuerKontakt = route.request().postDataJSON(); body = { id: 2, ...neuerKontakt }; }
+      else if (path === "/api/lukas/telefon") body = { anbieter: "telnyx", bereit: { webhook: true, anrufen: true },
+        nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now }],
+        anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }] };
+      else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
+      else if (path === "/api/lukas/sms") body = { bereit: false, sms: [] };
       else if (path === "/api/lukas/wartet") body = { freigaben: [], meldungen: [], gesamt: { freigaben: 0, meldungen: 0 } };
       else if (path === "/api/anthropic/conversations" && method === "GET") body = conversations;
       else if (path === "/api/anthropic/conversations" && method === "POST") body = { id: 3, title: "Neues Gespräch", createdAt: now, updatedAt: now };
@@ -111,6 +118,23 @@ try {
     await page.getByRole("button", { name: "Was ist heute wichtig?", exact: false }).click();
     assert.equal(await page.getByRole("textbox", { name: "Nachricht an Lukas" }).inputValue(), "Was ist heute wichtig?");
     assert.equal(sent, 0, "A suggestion must only fill the draft");
+    await page.goto(origin + "/telefon");
+    await page.getByRole("heading", { name: "Kontakt hinzufügen" }).waitFor();
+    await page.getByLabel("Telefonnummer", { exact: true }).fill("+491522222222");
+    await page.getByLabel("Kontaktname", { exact: true }).fill("Maria Muster");
+    await page.getByLabel("Lukas darf diesen Kontakt anrufen", { exact: true }).check();
+    await page.getByLabel("Zustimmung zur Gesprächsaufzeichnung", { exact: false }).first().selectOption("email");
+    await noOverflow(page, "Telefon " + name);
+    if (name === "desktop" || name === "mobil") {
+      await page.getByRole("heading", { name: "Kontakt hinzufügen" }).scrollIntoViewIfNeeded();
+      await screenshot(page, "telefon-" + name);
+    }
+    await page.getByRole("button", { name: "Hinzufügen", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Kontaktname"]')?.value === "");
+    assert.equal(neuerKontakt.name, "Maria Muster");
+    assert.equal(neuerKontakt.aufnahmeZustimmung, true);
+    assert.equal(neuerKontakt.aufnahmeQuelle, "email");
+    assert.equal(neuerKontakt.darfAngerufenWerden, true);
     console.log("OK — " + name + " (" + width + " px): layout, search, keyboard selection, draft handoff, suggestion.");
     await context.close();
   }
