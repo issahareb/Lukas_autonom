@@ -182,7 +182,11 @@ export function sicherheitsKopfzeilen(req: Request, res: Response, next: NextFun
   if (modus !== "off" && !ohneCsp(req.path)) {
     res.setHeader(
       modus === "report" ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy",
-      CSP,
+      // Safari does not consistently match a WebSocket against connect-src self.
+      // Allow only this response's validated host, never a scheme-wide wildcard.
+      /^[a-z0-9.-]+(?::[0-9]{1,5})?$/i.test(req.headers.host ?? "")
+        ? CSP.replace("connect-src 'self'", `connect-src 'self' wss://${req.headers.host}${req.secure || String(req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim() === "https" ? "" : ` ws://${req.headers.host}`}`)
+        : CSP,
     );
   }
 

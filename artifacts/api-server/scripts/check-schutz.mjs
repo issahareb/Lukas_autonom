@@ -196,6 +196,7 @@ pruefe("und laesst den oeffentlichen Teil zu", regel?.origin === true);
 
   // Gegenrichtung: was das Dashboard wirklich braucht, muss durchkommen.
   pruefe("der Sprachkanal erreicht OpenAI direkt", /connect-src[^;]*api\.openai\.com/.test(csp));
+  pruefe("Mithören erhält eine explizite eigene WebSocket-Origin für Safari", csp.includes("wss://" + anfrage("/chat").headers.host));
   pruefe("und per WebSocket", /connect-src[^;]*wss:\/\/\*\.openai\.com/.test(csp));
   pruefe("fremde Bilder (Anhänge, Medien) werden angezeigt", /img-src[^;]*https:/.test(csp));
   pruefe("Laufzeit-Stile bleiben erlaubt", /style-src[^;]*'unsafe-inline'/.test(csp));
