@@ -42,10 +42,11 @@ try {
     await client.query('ALTER TABLE lukas_messages ADD FOREIGN KEY (conversation_id) REFERENCES lukas_conversations(id) ON DELETE CASCADE');
     await client.query(readFileSync("../../lib/db/migrations/0003_aspiring_tenebrous.sql", "utf8"));
     await client.query(readFileSync("../../lib/db/migrations/0004_fixed_havok.sql", "utf8"));
+    await client.query(readFileSync("../../lib/db/migrations/0005_glossy_alice.sql", "utf8"));
     const url = new URL(process.env.BENCH_DATABASE_URL); url.searchParams.set("options", `-c search_path=${schema}`);
     process.env.DATABASE_URL = url.href;
     const real = join(dir, "real.mjs");
-    await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/telefon-kontakte.ts"; export * from "./src/lib/telefon-aufnahme.ts"; export { pool } from "@workspace/db";', resolveDir: process.cwd(), loader: "ts" },
+    await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/telefon-kontakte.ts"; export * from "./src/lib/telefon-aufnahme.ts"; export { erlaubterMithoerAnruf } from "./src/lib/telefon-mithoeren.ts"; export { pool } from "@workspace/db";', resolveDir: process.cwd(), loader: "ts" },
       outfile: real, bundle: true, platform: "node", format: "esm", packages: "external", alias: { "@workspace/db": resolve("../../lib/db/src/index.ts") } });
     const t = await import(real); pool = t.pool;
     process.env.TELNYX_NUMMER = "+49201123456"; process.env.TELNYX_APP_ID = "test-app";
@@ -71,7 +72,7 @@ try {
     assert.equal((await client.query("SELECT ergebnis FROM lukas_telefon_anrufe WHERE kontext_id=$1", [ids[0]])).rows[0].ergebnis, "beendet");
     // New module/pool reads the persisted statuses, simulating a process restart.
     const restarted = join(dir, "restart.mjs");
-    await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export { pool } from "@workspace/db";', resolveDir: process.cwd(), loader: "ts" }, outfile: restarted, bundle: true, platform: "node", format: "esm", packages: "external", alias: { "@workspace/db": resolve("../../lib/db/src/index.ts") } });
+    await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export { erlaubterMithoerAnruf } from "./src/lib/telefon-mithoeren.ts"; export { pool } from "@workspace/db";', resolveDir: process.cwd(), loader: "ts" }, outfile: restarted, bundle: true, platform: "node", format: "esm", packages: "external", alias: { "@workspace/db": resolve("../../lib/db/src/index.ts") } });
     const restartedModule = await import(restarted); restartPool = restartedModule.pool;
     const report = JSON.parse(await restartedModule.telefonStatus());
     assert.equal(report.anrufe.find(r => r.id === ids[0]).status, "Anruf beendet");
@@ -105,6 +106,21 @@ try {
     assert.equal(await t.ladeTelefonAufnahme(999999), null);
     const restartedReport = JSON.parse(await restartedModule.telefonStatus());
     assert.equal(restartedReport.anrufe.find(r => r.id === recordingCall).aufnahmeStatus, "completed");
+    const liveDate = new Date("2026-10-04T10:00:00.123Z");
+    const liveNumber = "491566666666";
+    await client.query("INSERT INTO lukas_telefon_nummern(nummer,name,mithoeren_zustimmung,mithoeren_quelle,mithoeren_bestaetigt_am) VALUES ($1,'Live Test',true,'email',$2)", [liveNumber, liveDate]);
+    const liveId = await t.neuerVerfolgterAnruf(liveNumber, "Live-Test", undefined, undefined,
+      { mithoerenZustimmung: true, mithoerenQuelle: "email", mithoerenBestaetigtAm: liveDate });
+    const liveCall = await t.erlaubterMithoerAnruf(liveId);
+    assert.ok(liveCall, "Unique contact with matching written consent can be monitored");
+    assert.equal(liveCall.aufnahmeZustimmung, false, "Listening consent does not enable recording");
+    const { rows: [duplicateContact] } = await client.query("INSERT INTO lukas_telefon_nummern(nummer,name) VALUES ($1,'Duplicate Live Test') RETURNING id", [liveNumber]);
+    assert.equal(await t.erlaubterMithoerAnruf(liveId), null, "Duplicate phone numbers do not authorize monitoring");
+    await client.query("DELETE FROM lukas_telefon_nummern WHERE id=$1", [duplicateContact.id]);
+    assert.ok(await t.erlaubterMithoerAnruf(liveId), "Removing the duplicate restores the unique consent match");
+    await client.query("UPDATE lukas_telefon_nummern SET mithoeren_zustimmung=false WHERE nummer=$1", [liveNumber]);
+    assert.equal(await t.erlaubterMithoerAnruf(liveId), null);
+    assert.equal((await client.query("SELECT mithoeren_zustimmung FROM lukas_telefon_anrufe WHERE kontext_id=$1", [liveId])).rows[0].mithoeren_zustimmung, true, "Consent snapshot remains unchanged");
     const deletedChatCall = await t.neuerVerfolgterAnruf("493012345678", "Gelöschter Chat", chat.id);
     await client.query("DELETE FROM lukas_conversations WHERE id=$1", [chat.id]);
     await t.aktualisiereAnruf(deletedChatCall, { zielStatus: "failed" }); // Deleted chats don't abort callbacks.

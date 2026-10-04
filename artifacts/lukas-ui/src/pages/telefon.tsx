@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Phone, PhoneIncoming, PhoneOutgoing, Plus, Trash2, ShieldAlert, MessageSquare, Send } from "lucide-react";
+import { LiveMithoeren } from "@/components/telefon-mithoeren";
 import { Seite } from "@/components/seite";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -13,6 +14,9 @@ type Nummer = {
   name: string;
   stufe: Stufe;
   darfAngerufenWerden: boolean;
+  mithoerenZustimmung: boolean;
+  mithoerenQuelle: string;
+  mithoerenBestaetigtAm: string | null;
   aufnahmeZustimmung: boolean;
   aufnahmeQuelle: string;
   aufnahmeBestaetigtAm: string | null;
@@ -29,6 +33,7 @@ type Anruf = {
   anlass: string;
   detail?: string;
   dauer?: number | null;
+  mithoerenZustimmung?: boolean;
   aufnahmeStatus?: string;
   aufnahmeDauer?: number | null;
   createdAt: string;
@@ -101,6 +106,19 @@ function AufnahmeZustimmung({ value, disabled, onChange }: { value: string; disa
       <option value="bestaetigt">Ja, anderweitig bestätigt</option>
     </select>
     <span className="text-xs text-muted-foreground">Bei vorliegender Zustimmung werden ausgehende Telnyx-Gespräche ohne erneute Ansage aufgezeichnet.</span>
+  </label>;
+}
+
+function MithoerenZustimmung({ value, disabled, onChange }: { value: string; disabled?: boolean; onChange: (value: string) => void }) {
+  return <label className="mt-3 flex flex-col gap-1 text-sm">
+    <span>Schriftliche Zustimmung zum Live-Mithören</span>
+    <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className="h-10 w-full min-w-0 rounded-xl bg-secondary px-3 text-sm">
+      <option value="">Keine Zustimmung hinterlegt</option>
+      <option value="email">Ja, schriftlich per E-Mail</option>
+      <option value="homepage">Ja, schriftlich über die Homepage</option>
+      <option value="schriftlich">Ja, anderweitig schriftlich</option>
+    </select>
+    <span className="text-xs text-muted-foreground">Gilt für künftige ausgehende Telnyx-Anrufe. Beide Gesprächsseiten live hören, ohne Mikrofon. Unabhängig von der Aufzeichnung.</span>
   </label>;
 }
 
@@ -234,6 +252,8 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">{STUFE[eintrag.stufe].hilfe}</p>
+      <MithoerenZustimmung value={eintrag.mithoerenZustimmung ? eintrag.mithoerenQuelle || "schriftlich" : ""} disabled={busy}
+        onChange={quelle => patch({ mithoerenZustimmung: Boolean(quelle), mithoerenQuelle: quelle })} />
       <AufnahmeZustimmung value={eintrag.aufnahmeZustimmung ? eintrag.aufnahmeQuelle || "bestaetigt" : ""} disabled={busy}
         onChange={quelle => patch({ aufnahmeZustimmung: Boolean(quelle), aufnahmeQuelle: quelle })} />
       {eintrag.aufnahmeZustimmung && eintrag.aufnahmeBestaetigtAm && <p className="mt-1 text-xs text-muted-foreground">
@@ -574,7 +594,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
 export default function Telefon() {
   const [daten, setDaten] = useState<Antwort | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
-  const leererKontakt = { nummer: "", name: "", stufe: "oeffentlich" as Stufe, darfAngerufenWerden: false, aufnahmeZustimmung: false, aufnahmeQuelle: "" };
+  const leererKontakt = { nummer: "", name: "", stufe: "oeffentlich" as Stufe, darfAngerufenWerden: false, aufnahmeZustimmung: false, aufnahmeQuelle: "", mithoerenZustimmung: false, mithoerenQuelle: "" };
   const [neu, setNeu] = useState(leererKontakt);
   const [busy, setBusy] = useState(false);
 
@@ -686,6 +706,8 @@ export default function Telefon() {
                 onChange={e => setNeu({ ...neu, darfAngerufenWerden: e.target.checked })} />
               Lukas darf diesen Kontakt anrufen
             </label>
+            <MithoerenZustimmung value={neu.mithoerenQuelle} disabled={busy}
+              onChange={quelle => setNeu({ ...neu, mithoerenZustimmung: Boolean(quelle), mithoerenQuelle: quelle })} />
             <AufnahmeZustimmung value={neu.aufnahmeQuelle} disabled={busy}
               onChange={quelle => setNeu({ ...neu, aufnahmeZustimmung: Boolean(quelle), aufnahmeQuelle: quelle })} />
             <Button className="mt-4" onClick={hinzufuegen} disabled={busy || !neu.nummer.trim()}>
@@ -729,6 +751,8 @@ export default function Telefon() {
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                       {new Date(a.createdAt).toLocaleString("de-DE")}
                     </span>
+                    {daten.anbieter === "telnyx" && <LiveMithoeren id={a.id} zustimmung={a.mithoerenZustimmung === true}
+                      aktiv={a.richtung === "ausgehend" && ["gewaehlt", "klingelt", "angenommen", "verbunden"].includes(a.ergebnis)} />}
                     <Aufnahme anruf={a} />
                   </div>
                 ))}

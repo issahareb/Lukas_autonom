@@ -31,11 +31,12 @@ export const ANRUF_LABEL: Record<string, string> = {
 };
 
 export async function neuerVerfolgterAnruf(nummer: string, anlass: string, conversationId?: number,
-  aufnahme?: Pick<TelefonAnruf, "aufnahmeZustimmung" | "aufnahmeQuelle" | "aufnahmeBestaetigtAm">): Promise<string> {
+  aufnahme?: Pick<TelefonAnruf, "aufnahmeZustimmung" | "aufnahmeQuelle" | "aufnahmeBestaetigtAm">,
+  mithoeren?: Pick<TelefonAnruf, "mithoerenZustimmung" | "mithoerenQuelle" | "mithoerenBestaetigtAm">): Promise<string> {
   const kontextId = randomUUID();
   await db.insert(telefonAnrufe).values({ kontextId, nummer, anlass, richtung: "ausgehend",
     ergebnis: "gewaehlt", zielStatus: "queued", conversationId: conversationId && conversationId > 0 ? conversationId : null,
-    ...aufnahme, aufnahmeStatus: aufnahme?.aufnahmeZustimmung ? "angefordert" : "aus" });
+    ...aufnahme, ...mithoeren, aufnahmeStatus: aufnahme?.aufnahmeZustimmung ? "angefordert" : "aus" });
   return kontextId;
 }
 

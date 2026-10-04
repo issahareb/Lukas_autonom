@@ -87,8 +87,18 @@ export async function lauf() {
 
   // ── Netz: SSRF, Rebinding, Weiterleitungen ─────────────────────────────
   const netz = await ladeModul("src/lib/netzschutz.ts", {
-    attrappen: { dns: DNS_ATTRAPPE },
+    attrappen: {
+      dns: DNS_ATTRAPPE,
+      // Production imports fetch and Agent from the same undici package.
+      // Stub that fetch only for the redirect fixture; keep the real client
+      // for the local HTTP and DNS-rebinding checks below.
+      undici: `import { createRequire } from "node:module";
+const { Agent, fetch: echterFetch } = createRequire(import.meta.url)("undici");
+export { Agent };
+export const fetch = (...args) => (globalThis.__benchNetzFetch ?? echterFetch)(...args);`,
+    },
     alias: { "node:dns/promises": "dns" },
+    ersetze: [{ muster: "^undici$", durch: "undici" }],
   });
   const { pruefeZiel, sicherFetch, ZielAbgelehnt } = netz;
 
@@ -132,19 +142,21 @@ export async function lauf() {
   });
 
   // Weiterleitung nach innen
-  const echterFetch = globalThis.fetch;
-  globalThis.fetch = async (url) =>
-    String(url).includes("umleitung")
+  let metadatenAngefragt = false;
+  globalThis.__benchNetzFetch = async (url) => {
+    if (new URL(url).hostname === "169.254.169.254") metadatenAngefragt = true;
+    return String(url).includes("umleitung")
       ? new Response(null, { status: 302, headers: { location: "http://169.254.169.254/meta" } })
       : new Response("Inhalt", { status: 200 });
+  };
   let umleitungGeblockt = false;
-  let metadatenAngefragt = false;
   try {
     await sicherFetch("https://harmlos.example/umleitung");
   } catch (err) {
     umleitungGeblockt = err instanceof ZielAbgelehnt;
+  } finally {
+    delete globalThis.__benchNetzFetch;
   }
-  globalThis.fetch = echterFetch;
   pruefe("ssrf:weiterleitung", "302 auf eine interne Adresse", umleitungGeblockt && !metadatenAngefragt);
 
   // DNS-Rebinding: Prüfung sagt öffentlich, Verbindung geht nach innen.
@@ -157,6 +169,26 @@ export async function lauf() {
     });
     await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const port = server.address().port;
+    // A successful real request prevents a broken fetch/Agent combination
+    // from making the rebinding assertion pass merely by failing every call.
+    const vorherigeAllowlist = process.env.LUKAS_FETCH_ALLOWLIST;
+    process.env.LUKAS_FETCH_ALLOWLIST = "127.0.0.1";
+    let echterAbruf = false;
+    try {
+      const antwort = await sicherFetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+      echterAbruf = antwort.status === 200 && await antwort.text() === "intern" && getroffen === 1;
+    } catch {
+      /* Ein defekter HTTP-Client ist ein FAIL, kein erfolgreicher Schutz. */
+    } finally {
+      if (vorherigeAllowlist === undefined) delete process.env.LUKAS_FETCH_ALLOWLIST;
+      else process.env.LUKAS_FETCH_ALLOWLIST = vorherigeAllowlist;
+    }
+    faelle.push({
+      id: "ssrf:echter-http-client",
+      beschreibung: "fetch und Agent können tatsächlich HTTP abrufen",
+      ergebnis: echterAbruf ? PASS : FAIL,
+    });
+    getroffen = 0;
     globalThis.__dns["localhost"] = ["93.184.216.34"];
     try {
       await sicherFetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) });

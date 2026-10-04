@@ -28,6 +28,8 @@ import { recordDebugEvent } from "../lib/debug-log";
 import { telnyxStatusEingang, aktualisiereAnruf } from "../lib/telefon-status";
 import { telnyxAufnahmeEingang, ladeTelefonAufnahme, TelefonAufnahmeFehler } from "../lib/telefon-aufnahme";
 
+import { mithoerenAntwort } from "../lib/telefon-mithoeren";
+
 export const telefonWebhookRouter = Router();
 
 telefonWebhookRouter.post("/telefon/telnyx/aufnahme", async (req, res) => {
@@ -233,6 +235,9 @@ const serialize = (r: typeof telefonNummern.$inferSelect) => ({
   name: r.name,
   stufe: r.stufe,
   darfAngerufenWerden: r.darfAngerufenWerden,
+  mithoerenZustimmung: r.mithoerenZustimmung,
+  mithoerenQuelle: r.mithoerenQuelle,
+  mithoerenBestaetigtAm: r.mithoerenBestaetigtAm?.toISOString() ?? null,
   aufnahmeZustimmung: r.aufnahmeZustimmung,
   aufnahmeQuelle: r.aufnahmeQuelle,
   aufnahmeBestaetigtAm: r.aufnahmeBestaetigtAm?.toISOString() ?? null,
@@ -262,6 +267,8 @@ router.get("/lukas/telefon", async (_req, res) => {
     res.status(500).json({ error: "Failed to load phone numbers" });
   }
 });
+
+router.get("/lukas/telefon/anrufe/:id/live", mithoerenAntwort);
 
 router.get("/lukas/telefon/anrufe/:id/aufnahme", async (req, res) => {
   const id = Number(req.params.id);
@@ -374,10 +381,19 @@ const NummerBody = z.object({
   name: z.string().max(80).optional(),
   stufe: z.enum(["privat", "oeffentlich", "gesperrt"]).optional(),
   darfAngerufenWerden: z.boolean().optional(),
+  mithoerenZustimmung: z.boolean().optional(),
+  mithoerenQuelle: z.enum(["", "email", "homepage", "schriftlich"]).optional(),
   aufnahmeZustimmung: z.boolean().optional(),
   aufnahmeQuelle: z.enum(["", "email", "homepage", "bestaetigt"]).optional(),
   notiz: z.string().max(300).optional(),
 });
+
+function mithoerenWerte(data: Partial<z.infer<typeof NummerBody>>) {
+  if (data.mithoerenZustimmung === undefined) return {};
+  return { mithoerenZustimmung: data.mithoerenZustimmung,
+    mithoerenQuelle: data.mithoerenZustimmung ? data.mithoerenQuelle || "schriftlich" : "",
+    mithoerenBestaetigtAm: data.mithoerenZustimmung ? new Date() : null };
+}
 
 function aufnahmeWerte(data: z.infer<typeof NummerBody> | Partial<z.infer<typeof NummerBody>>) {
   if (data.aufnahmeZustimmung === undefined) return {};
@@ -413,7 +429,7 @@ router.post("/lukas/telefon", async (req, res) => {
         name: parsed.data.name ?? "",
         stufe: parsed.data.stufe ?? "oeffentlich",
         darfAngerufenWerden: parsed.data.darfAngerufenWerden ?? false,
-        ...aufnahmeWerte(parsed.data),
+        ...aufnahmeWerte(parsed.data), ...mithoerenWerte(parsed.data),
         notiz: parsed.data.notiz ?? "",
       })
       .returning();
@@ -431,8 +447,8 @@ router.patch("/lukas/telefon/:id", async (req, res) => {
     return void res.status(400).json({ error: "Ungültige Eingabe" });
   }
   try {
-    const { aufnahmeQuelle: _quelle, ...rest } = parsed.data;
-    const werte: Record<string, unknown> = { ...rest, ...aufnahmeWerte(parsed.data) };
+    const { aufnahmeQuelle: _quelle, mithoerenQuelle: _mithoerenQuelle, ...rest } = parsed.data;
+    const werte: Record<string, unknown> = { ...rest, ...aufnahmeWerte(parsed.data), ...mithoerenWerte(parsed.data) };
     if (typeof parsed.data.nummer === "string") {
       const nummer = normalisiere(parsed.data.nummer);
       if (!/^[1-9]\d{5,14}$/.test(nummer)) return void res.status(400).json({ error: "Nummer mit Ländervorwahl nötig." });
@@ -440,6 +456,7 @@ router.patch("/lukas/telefon/:id", async (req, res) => {
       const [doppelt] = await db.select().from(telefonNummern).where(eq(telefonNummern.nummer, nummer)).limit(1);
       if (doppelt && doppelt.id !== id) return void res.status(409).json({ error: "Diese Nummer steht schon in der Liste." });
       werte.nummer = nummer;
+      if (nummer !== bisher?.nummer && parsed.data.mithoerenZustimmung === undefined) Object.assign(werte, mithoerenWerte({ mithoerenZustimmung: false }));
       if (nummer !== bisher?.nummer && parsed.data.aufnahmeZustimmung === undefined) Object.assign(werte, aufnahmeWerte({ aufnahmeZustimmung: false }));
     }
     const [row] = await db

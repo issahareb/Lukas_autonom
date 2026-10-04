@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { inspectTelefonSetup } from "./lib/telefon-diagnose";
 import { pruefeLetzteTelefonAufnahme } from "./lib/telefon-aufnahme";
 import app from "./app";
+import { starteTelefonMithoeren } from "./lib/telefon-mithoeren";
 import { startMoltbookWorker, stopMoltbookWorker } from "./lib/moltbook-worker";
 import { startAutonomy, stopAutonomy } from "./lib/autonomy";
 import { startSelbstheilung, stopSelbstheilung } from "./lib/selbstheilung";
@@ -105,7 +106,9 @@ const server = app.listen(port, (err) => {
    * gestoppt werden muss. Railway schickt bei jedem Deployment ein SIGTERM —
    * ohne das hier wird mitten in einer Antwort abgeschnitten.
    */
+  const stopMithoeren = starteTelefonMithoeren(server);
   richteAbschiedEin(server, () => {
+    stopMithoeren();
     stopAutonomy();
     stopMoltbookWorker();
     stopSelbstheilung();

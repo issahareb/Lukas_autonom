@@ -47,6 +47,7 @@ async function buildAll() {
        * im Netzschutz, also genau dort, wo ein Ausfall am teuersten ist.
        */
       "undici",
+      "ws",
       "canvas",
       "bcrypt",
       "argon2",
