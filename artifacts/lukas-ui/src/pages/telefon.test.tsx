@@ -19,6 +19,7 @@ describe("Telefonkontakte", () => {
   it("speichert Namen und ausdrückliche Aufnahmezustimmung getrennt von der Anruffreigabe", async () => {
     const calls = setup();
     render(<Telefon />);
+    await userEvent.click(screen.getByRole("button", { name: "Kontakt hinzufügen" }));
     await userEvent.type(screen.getByLabelText("Telefonnummer"), "+4915112345678");
     await userEvent.type(screen.getByLabelText("Kontaktname"), "Max Muster");
     expect(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/)).toHaveValue("");
@@ -29,13 +30,14 @@ describe("Telefonkontakte", () => {
     await waitFor(() => expect(calls.some(c => c.init?.method === "POST")).toBe(true));
     const saved = JSON.parse(String(calls.find(c => c.init?.method === "POST")?.init?.body));
     expect(saved).toMatchObject({ name: "Max Muster", aufnahmeZustimmung: true, aufnahmeQuelle: "email", darfAngerufenWerden: false, mithoerenZustimmung: true, mithoerenQuelle: "homepage" });
-    expect(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/)).toHaveValue("");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
   it("kann die Zustimmung eines bestehenden Kontakts zurücknehmen", async () => {
     const calls = setup([kontakt]);
     render(<Telefon />);
     await screen.findAllByText("Max Muster");
-    await userEvent.selectOptions(screen.getAllByLabelText(/Zustimmung zur Gesprächsaufzeichnung/)[1], "");
+    await userEvent.click(screen.getByText("Kontakt bearbeiten"));
+    await userEvent.selectOptions(screen.getByLabelText(/Zustimmung zur Gesprächsaufzeichnung/), "");
     await waitFor(() => expect(calls.some(c => c.init?.method === "PATCH")).toBe(true));
     const patch = calls.find(c => c.init?.method === "PATCH")!;
     expect(patch.url).toBe("/api/lukas/telefon/7");
@@ -45,7 +47,21 @@ describe("Telefonkontakte", () => {
   it("zeigt Aufnahmen erst nach bestätigter Fertigstellung und lädt sie nur auf Klick", async () => {
     const calls = setup([kontakt], [{ id: 12, nummer: kontakt.nummer, richtung: "ausgehend", ergebnis: "beendet", createdAt: "2026-10-04T10:05:00Z", aufnahmeStatus: "completed", aufnahmeDauer: 34 }]);
     render(<Telefon />);
+    await userEvent.click(await screen.findByRole("tab", { name: /Aufnahmen/ }));
     expect(await screen.findByRole("button", { name: /Aufnahme anhören/ })).toBeEnabled();
     expect(calls.some(c => c.url.endsWith("/aufnahme"))).toBe(false);
+  });
+  it("zeigt kompakte Kontakte, durchsucht auch nicht angezeigte Kontakte und erreicht Aufnahmen direkt", async () => {
+    setup(Array.from({ length: 25 }, (_, i) => ({ ...kontakt, id: i + 1, name: `Kontakt ${i + 1}`, nummer: `4915112300${i + 1}` })), [{ id: 90, nummer: kontakt.nummer, richtung: "ausgehend", ergebnis: "beendet", createdAt: "2026-10-04T10:05:00Z", aufnahmeStatus: "completed" }]);
+    render(<Telefon />);
+    await screen.findByRole("heading", { name: "Kontakt 1" });
+    expect(screen.queryByRole("heading", { name: "Kontakt 25" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Kontaktname" })).toBeNull();
+    expect(screen.queryByText(/Telnyx · Ein/)).toBeNull();
+    await userEvent.type(screen.getByRole("searchbox"), "Kontakt 25");
+    expect(screen.getByRole("heading", { name: "Kontakt 25" })).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: /Aufnahmen/ }));
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getByRole("button", { name: /Aufnahme anhören/ })).toBeVisible();
   });
 });
