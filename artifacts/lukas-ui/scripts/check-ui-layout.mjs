@@ -76,7 +76,7 @@ try {
       else if (path === "/api/lukas/telefon") body = { anbieter: "telnyx", bereit: { webhook: true, anrufen: true },
         nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now }],
         anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }] };
-      else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
+      else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, konfiguriert: true, freigeschaltet: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
       else if (path === "/api/lukas/sms") body = { bereit: false, sms: [] };
       else if (path === "/api/lukas/wartet") body = { freigaben: [], meldungen: [], gesamt: { freigaben: 0, meldungen: 0 } };
       else if (path === "/api/anthropic/conversations" && method === "GET") body = conversations;
@@ -121,6 +121,8 @@ try {
     await page.goto(origin + "/telefon");
     await page.getByRole("heading", { name: "Kontakt hinzufügen" }).waitFor();
     await page.getByLabel("Telefonnummer", { exact: true }).fill("+491522222222");
+    const phoneBox = await page.getByLabel("Telefonnummer", { exact: true }).boundingBox();
+    assert.ok(phoneBox && phoneBox.height >= 39, "Telefonnummer bleibt auch mobil gut antippbar");
     await page.getByLabel("Kontaktname", { exact: true }).fill("Maria Muster");
     await page.getByLabel("Lukas darf diesen Kontakt anrufen", { exact: true }).check();
     await page.getByLabel("Zustimmung zur Gesprächsaufzeichnung", { exact: false }).first().selectOption("email");

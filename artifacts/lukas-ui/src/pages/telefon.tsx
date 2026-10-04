@@ -662,7 +662,7 @@ export default function Telefon() {
                 value={neu.nummer}
                 onChange={(e) => setNeu({ ...neu, nummer: e.target.value })}
                 placeholder="+49 151 12345678"
-                className="h-10 flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+                className="h-10 min-w-0 w-full rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08] sm:w-auto sm:flex-1"
               />
               <input
                 aria-label="Kontaktname"
