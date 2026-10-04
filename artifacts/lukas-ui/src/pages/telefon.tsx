@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Phone, PhoneIncoming, PhoneOutgoing, Plus, Trash2, ShieldAlert, MessageSquare, Send } from "lucide-react";
+import { Phone, PhoneIncoming, PhoneOutgoing, Plus, Trash2, ShieldAlert, MessageSquare, Send, Search, Settings2, ChevronRight, AudioLines } from "lucide-react";
 import { LiveMithoeren } from "@/components/telefon-mithoeren";
 import { Seite } from "@/components/seite";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -207,24 +209,23 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
     }
   };
 
-  return (
-    <div className="card-soft rounded-3xl p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{eintrag.name || "Ohne Namen"}</span>
-            <span className={`rounded px-2 py-0.5 text-[0.65rem] tracking-wide ${STUFE[eintrag.stufe].cls}`}>
-              {STUFE[eintrag.stufe].label}
-            </span>
-          </div>
-          <div className="mt-1 font-mono text-sm text-muted-foreground">{zeigeNummer(eintrag.nummer)}</div>
-          {eintrag.notiz && <div className="mt-1 text-sm text-muted-foreground">{eintrag.notiz}</div>}
-        </div>
-        <Button variant="ghost" size="icon" onClick={loeschen} disabled={busy} aria-label="Entfernen">
-          <Trash2 className="size-4" />
-        </Button>
+  return <article className="card-soft rounded-2xl p-4">
+    <div className="flex items-center gap-3">
+      <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{(eintrag.name || "?").slice(0, 1).toLocaleUpperCase("de")}</span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate font-medium">{eintrag.name || "Ohne Namen"}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">{zeigeNummer(eintrag.nummer)}</p>
       </div>
-
+      {eintrag.darfAngerufenWerden && eintrag.stufe !== "gesperrt" && <Button size="sm" variant="secondary" disabled={busy} onClick={testanruf} className="h-11 shrink-0 gap-2" aria-label={`Testanruf bei ${eintrag.name || zeigeNummer(eintrag.nummer)}`}><PhoneOutgoing className="size-4" /><span className="hidden sm:inline">Testanruf</span></Button>}
+    </div>
+    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+      <span className={`rounded-full px-2 py-1 ${STUFE[eintrag.stufe].cls}`}>{({ privat: "Privat", oeffentlich: "Öffentlich", gesperrt: "Gesperrt" })[eintrag.stufe]}</span>
+      {eintrag.aufnahmeZustimmung && <span className="rounded-full bg-secondary/60 px-2 py-1">Aufnahme erlaubt</span>}
+      {eintrag.mithoerenZustimmung && <span className="rounded-full bg-secondary/60 px-2 py-1">Mithören erlaubt</span>}
+    </div>
+    <details className="group mt-1">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">Kontakt bearbeiten <ChevronRight className="size-4 transition-transform group-open:rotate-90" /></summary>
+      {eintrag.notiz && <p className="break-words text-sm text-muted-foreground">{eintrag.notiz}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {(Object.keys(STUFE) as Stufe[]).map((s) => (
           <button
@@ -260,16 +261,12 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
         Hinterlegt am {new Date(eintrag.aufnahmeBestaetigtAm).toLocaleDateString("de-DE")}
       </p>}
 
-      {eintrag.darfAngerufenWerden && (
-        <Button size="sm" variant="ghost" className="mt-3 px-0" disabled={busy} onClick={testanruf}>
-          <PhoneOutgoing className="mr-2 size-4" /> Testanruf
-        </Button>
-      )}
 
-      {meldung && <p className="mt-2 text-xs text-emerald-300">{meldung}</p>}
-      {fehler && <p className="mt-2 text-xs text-red-400">{fehler}</p>}
-    </div>
-  );
+      <Button variant="ghost" size="sm" onClick={loeschen} disabled={busy} className="mt-3 gap-2 text-red-300"><Trash2 className="size-4" /> Kontakt entfernen</Button>
+    </details>
+    {meldung && <p role="status" className="mt-2 text-xs text-emerald-300">{meldung}</p>}
+    {fehler && <p role="alert" className="mt-2 text-xs text-red-400">{fehler}</p>}
+  </article>;
 }
 
 /*
@@ -597,6 +594,11 @@ export default function Telefon() {
   const leererKontakt = { nummer: "", name: "", stufe: "oeffentlich" as Stufe, darfAngerufenWerden: false, aufnahmeZustimmung: false, aufnahmeQuelle: "", mithoerenZustimmung: false, mithoerenQuelle: "" };
   const [neu, setNeu] = useState(leererKontakt);
   const [busy, setBusy] = useState(false);
+  const [bereich, setBereich] = useState("kontakte");
+  const [suche, setSuche] = useState("");
+  const [sichtbar, setSichtbar] = useState(8);
+  const [dialog, setDialog] = useState<"kontakt" | "sms" | "einrichtung" | null>(null);
+  const navigation = useRef<HTMLDivElement>(null);
 
   const laden = useCallback(async () => {
     try {
@@ -611,7 +613,7 @@ export default function Telefon() {
       if (!antwort || typeof antwort !== "object" || !antwort.bereit) {
         throw new Error("unerwartete Antwort vom Server");
       }
-      setDaten({ ...antwort, anrufe: Array.isArray(antwort.anrufe) ? antwort.anrufe : [] });
+      setDaten({ ...antwort, nummern: Array.isArray(antwort.nummern) ? antwort.nummern : [], anrufe: Array.isArray(antwort.anrufe) ? antwort.anrufe : [] });
       setFehler(null);
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Laden fehlgeschlagen");
@@ -631,6 +633,9 @@ export default function Telefon() {
     try {
       await api("", { method: "POST", body: JSON.stringify(neu) });
       setNeu(leererKontakt);
+      setDialog(null);
+      setSuche("");
+      setBereich("kontakte");
       await laden();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Fehler");
@@ -639,62 +644,96 @@ export default function Telefon() {
     }
   };
 
-  return (
-    <Seite
-      icon={Phone}
-      titel="Telefon"
-      unterzeile="Wer mit Lukas sprechen darf — und wen er anrufen darf."
-    >
-      <div className="space-y-6">
-          {/* Was noch fehlt, gehoert sichtbar hierher — sonst passiert schlicht nichts. */}
-          {daten && !daten.bereit.webhook && (
-            <div className="flex gap-3 rounded-3xl bg-amber-400/10 p-4 text-sm ring-1 ring-amber-400/25">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-300" />
-              <div>
-                <p className="font-medium text-amber-200">Anrufe kommen noch nicht an</p>
-                <p className="mt-1 text-muted-foreground">
-                  Es fehlt <code>OPENAI_WEBHOOK_SECRET</code>. Ohne geprüfte Signatur wird jeder
-                  eingehende Anruf abgewiesen — das ist Absicht.
-                </p>
-              </div>
-            </div>
-          )}
-          {daten && daten.bereit.webhook && !daten.bereit.anrufen && (
-            <div className="card-soft rounded-3xl p-5 text-sm text-muted-foreground">
-              Die Telefonie-Konfiguration ist noch unvollständig. Prüfe die Einrichtung des ausgewählten Anbieters.
-            </div>
-          )}
+  const wechsel = (value: string) => {
+    setBereich(value); setSuche(""); setSichtbar(8);
+    navigation.current?.closest(".overflow-y-auto")?.scrollTo?.({ top: 0 });
+  };
+  const kontakte = daten?.nummern ?? [];
+  const nameFuer = (a: Anruf) => kontakte.find(n => n.nummer === a.nummer)?.name || zeigeNummer(a.nummer);
+  const passt = (name: string, nummer: string) => !suche.trim() || name.toLocaleLowerCase("de").includes(suche.trim().toLocaleLowerCase("de")) || nummer.includes(suche.replace(/[^0-9]/g, "")) && /[0-9]/.test(suche);
+  const kontaktListe = kontakte.filter(n => passt(n.name, n.nummer));
+  const aktiv = (a: Anruf) => ["gewaehlt", "klingelt", "angenommen", "verbunden"].includes(a.ergebnis);
+  const laufend = (daten?.anrufe ?? []).filter(aktiv);
+  const vergangen = (daten?.anrufe ?? []).filter(a => !aktiv(a) && passt(nameFuer(a), a.nummer));
+  const aufnahmen = (daten?.anrufe ?? []).filter(a => a.aufnahmeStatus === "completed");
+  const aufnahmeListe = aufnahmen.filter(a => passt(nameFuer(a), a.nummer));
+  const anrufKarte = (a: Anruf, live = false, recordingOnly = false) => <article key={a.id} className={`card-soft space-y-3 rounded-2xl p-4 ${live ? "ring-1 ring-primary/35" : ""}`}>
+    <div className="flex items-start gap-3">
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${live ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+        {recordingOnly ? <AudioLines className="size-4" /> : a.richtung === "eingehend" ? <PhoneIncoming className="size-4" /> : <PhoneOutgoing className="size-4" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate font-medium">{nameFuer(a)}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit Lukas verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</p>
+      </div>
+      <time className="shrink-0 text-right text-[11px] text-muted-foreground" dateTime={a.createdAt}>{new Date(a.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}<br />{new Date(a.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</time>
+    </div>
+    {a.anlass && <p className="line-clamp-2 break-words text-xs text-muted-foreground">{a.anlass}</p>}
+    {live && daten?.anbieter === "telnyx" && <LiveMithoeren id={a.id} zustimmung={a.mithoerenZustimmung === true} aktiv={a.richtung === "ausgehend"} />}
+    {a.detail && /^(Mailbox erkannt|Nach Verabschiedung)/.test(a.detail) && <p className="text-xs text-muted-foreground">{a.detail}</p>}
+    <Aufnahme anruf={a} />
+  </article>;
+  const mehr = (gesamt: number) => gesamt > sichtbar && <Button variant="outline" className="h-11 w-full" onClick={() => setSichtbar(n => n + 8)}>Weitere anzeigen · {gesamt - sichtbar}</Button>;
+  const leer = (text: string) => <p className="rounded-2xl bg-secondary/30 px-5 py-8 text-center text-sm text-muted-foreground">{text}</p>;
 
-          {daten?.anbieter === "telnyx" ? <TelnyxEinrichtung /> : daten && <Einrichtung onChange={laden} />}
-          <p className="px-1 text-sm text-muted-foreground">
-            Für GPT Live muss der OpenAI-Webhook das Ereignis <code>live.transport.incoming</code>{" "}
-            an <code>/api/telefon/eingehend</code> zustellen. Ein hinterlegter Signaturschlüssel
-            bestätigt noch nicht, dass dieses Ereignis im OpenAI-Projekt aktiviert ist.
-          </p>
-
-          <div className="card-soft rounded-3xl p-5">
-            <h2 className="mb-3 flex items-center gap-2 font-medium">
-              <Plus className="size-4" /> Kontakt hinzufügen
-            </h2>
+  return <Seite icon={Phone} titel="Telefon" unterzeile="Kontakte, Gespräche und Aufnahmen."
+    aktionen={<><Button variant="ghost" size="sm" className="h-10 gap-2" onClick={() => setDialog("sms")}><MessageSquare className="size-4" /> SMS</Button><Button variant="ghost" size="sm" className="h-10 gap-2" onClick={() => setDialog("einrichtung")}><Settings2 className="size-4" /> Einrichtung</Button></>}>
+    <Tabs value={bereich} onValueChange={wechsel} className="space-y-4">
+      <div ref={navigation} className="sticky top-0 z-10 space-y-3 bg-background/95 pb-3 pt-1 backdrop-blur-xl">
+        <TabsList aria-label="Telefonbereiche" className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
+          <TabsTrigger value="kontakte" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Kontakte <span className="text-[10px] opacity-60">{kontakte.length}</span></TabsTrigger>
+          <TabsTrigger value="anrufe" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Anrufe {laufend.length > 0 && <span className="size-1.5 rounded-full bg-emerald-400" />}</TabsTrigger>
+          <TabsTrigger value="aufnahmen" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Aufnahmen <span className="text-[10px] opacity-60">{aufnahmen.length}</span></TabsTrigger>
+        </TabsList>
+        {laufend.length > 0 && bereich !== "anrufe" && <button onClick={() => wechsel("anrufe")} className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary/10 px-3 text-left text-xs text-primary"><span className="size-2 shrink-0 rounded-full bg-emerald-400" /><span className="min-w-0 flex-1 truncate">{laufend.length === 1 ? `${nameFuer(laufend[0])} · Anruf läuft` : `${laufend.length} Anrufe laufen`}</span><span className="shrink-0">Zum Gespräch →</span></button>}
+        <label className="flex h-11 items-center gap-2 rounded-xl bg-secondary/60 px-3 text-muted-foreground">
+          <Search className="size-4 shrink-0" /><input aria-label="Kontakte oder Anrufe suchen" type="search" value={suche} onChange={e => { setSuche(e.target.value); setSichtbar(8); }} placeholder={bereich === "kontakte" ? "Name oder Rufnummer suchen" : "Nach Kontakt suchen"} className="w-full min-w-0 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground" />
+        </label>
+      </div>
+      {fehler && <p role="alert" className="text-sm text-red-400">{fehler}</p>}
+      {!daten && !fehler && <p className="py-8 text-center text-sm text-muted-foreground">Telefon wird geladen …</p>}
+      {daten && (!daten.bereit.webhook || !daten.bereit.anrufen) && <button onClick={() => setDialog("einrichtung")} className="flex w-full items-center gap-2 rounded-xl bg-amber-400/10 p-3 text-left text-sm text-amber-200"><ShieldAlert className="size-4 shrink-0" /> Telefonie noch nicht vollständig eingerichtet <ChevronRight className="ml-auto size-4 shrink-0" /></button>}
+      <TabsContent value="kontakte" forceMount hidden={bereich !== "kontakte"} className="space-y-3">
+        <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">Deine Kontakte</h2><Button size="sm" className="h-11 gap-1.5" onClick={() => setDialog("kontakt")}><Plus className="size-4" /> Kontakt hinzufügen</Button></div>
+        {kontaktListe.slice(0, sichtbar).map(n => <NummerZeile key={n.id} eintrag={n} onChange={laden} />)}
+        {daten && !kontaktListe.length && leer(suche ? "Kein Kontakt passt zu deiner Suche." : "Noch keine Kontakte. Füge deinen ersten Kontakt hinzu.")}
+        {mehr(kontaktListe.length)}
+      </TabsContent>
+      <TabsContent value="anrufe" forceMount hidden={bereich !== "anrufe"} className="space-y-4">
+        {laufend.length > 0 && <section aria-label="Laufende Anrufe" className="space-y-3"><h2 className="text-sm font-medium">Jetzt im Gespräch</h2>{laufend.map(a => anrufKarte(a, true))}</section>}
+        <section aria-label="Letzte Anrufe" className="space-y-3"><h2 className="text-sm font-medium">Letzte Anrufe</h2>{vergangen.slice(0, sichtbar).map(a => anrufKarte(a))}{daten && !vergangen.length && leer(suche ? "Kein Anruf passt zu deiner Suche." : "Hier erscheinen deine abgeschlossenen Anrufe.")}{mehr(vergangen.length)}</section>
+      </TabsContent>
+      <TabsContent value="aufnahmen" forceMount hidden={bereich !== "aufnahmen"} className="space-y-3">
+        <h2 className="text-sm font-medium">Gesprächsaufnahmen</h2>
+        {aufnahmeListe.slice(0, sichtbar).map(a => anrufKarte(a, false, true))}
+        {daten && !aufnahmeListe.length && leer(suche ? "Keine Aufnahme passt zu deiner Suche." : "Noch keine fertigen Aufnahmen bei den letzten Anrufen.")}
+        {mehr(aufnahmeListe.length)}
+      </TabsContent>
+    </Tabs>
+    <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}>
+      <DialogContent className="max-h-[85dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-3xl p-5 sm:max-w-xl">
+        <DialogHeader className="pr-6 text-left"><DialogTitle>{dialog === "kontakt" ? "Kontakt hinzufügen" : dialog === "sms" ? "Nachrichten" : "Telefon einrichten"}</DialogTitle><DialogDescription>{dialog === "kontakt" ? "Name, Rufnummer und Freigaben für diesen Kontakt." : dialog === "sms" ? "SMS schreiben und letzte Nachrichten sehen." : "Verbindung und Rufnummer verwalten."}</DialogDescription></DialogHeader>
+        {dialog === "kontakt" && <div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 aria-label="Telefonnummer"
                 value={neu.nummer}
                 onChange={(e) => setNeu({ ...neu, nummer: e.target.value })}
                 placeholder="+49 151 12345678"
-                className="h-10 min-w-0 w-full rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08] sm:w-auto sm:flex-1"
+                className="h-11 min-w-0 w-full rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08] sm:w-auto sm:flex-1"
               />
               <input
                 aria-label="Kontaktname"
                 value={neu.name}
                 onChange={(e) => setNeu({ ...neu, name: e.target.value })}
                 placeholder="Name"
-                className="h-10 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08] sm:w-40"
+                className="h-11 rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08] sm:w-40"
               />
               <select
+                aria-label="Zugriff des neuen Kontakts"
                 value={neu.stufe}
                 onChange={(e) => setNeu({ ...neu, stufe: e.target.value as Stufe })}
-                className="h-10 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+                className="h-11 rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08]"
               >
                 <option value="privat">Privat</option>
                 <option value="oeffentlich">Öffentlich</option>
@@ -716,51 +755,14 @@ export default function Telefon() {
             <p className="mt-2 text-xs text-muted-foreground">
               Du kannst anschließend im Chat sagen: „Rufe {neu.name.trim() || "Kontaktname"} an.“
             </p>
-          </div>
-
-          <SmsBereich nummern={daten?.nummern ?? []} />
-
-          {fehler && <p className="text-sm text-red-400">{fehler}</p>}
-
-          <div className="space-y-3">
-            {daten?.nummern.map((n) => (
-              <NummerZeile key={n.id} eintrag={n} onChange={laden} />
-            ))}
-            {daten?.nummern.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Noch keine Nummer eingetragen. Trag deine eigene als „Privat" ein, damit Lukas dich
-                am Telefon erkennt.
-              </p>
-            )}
-          </div>
-
-          {daten && daten.anrufe.length > 0 && (
-            <div>
-              <h2 className="mb-3 font-medium">Letzte Anrufe</h2>
-              <div className="space-y-1">
-                {daten.anrufe.map((a) => (
-                  <div key={a.id} className="flex flex-wrap items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-secondary/40">
-                    {a.richtung === "eingehend" ? (
-                      <PhoneIncoming className="size-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <PhoneOutgoing className="size-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span>{daten.nummern.find(n => n.nummer === a.nummer)?.name || zeigeNummer(a.nummer)}</span>
-                    <span className="text-muted-foreground" title={a.detail}>{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit LUKAS verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</span>
-                    {a.anlass && <span className="truncate text-muted-foreground">— {a.anlass}</span>}
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                      {new Date(a.createdAt).toLocaleString("de-DE")}
-                    </span>
-                    {daten.anbieter === "telnyx" && <LiveMithoeren id={a.id} zustimmung={a.mithoerenZustimmung === true}
-                      aktiv={a.richtung === "ausgehend" && ["gewaehlt", "klingelt", "angenommen", "verbunden"].includes(a.ergebnis)} />}
-                    {a.detail && /^(Mailbox erkannt|Nach Verabschiedung)/.test(a.detail) && <p className="w-full text-xs text-muted-foreground">{a.detail}</p>}
-                    <Aufnahme anruf={a} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-      </div>
-    </Seite>
-  );
+          {fehler && <p role="alert" className="mt-3 text-sm text-red-400">{fehler}</p>}
+        </div>}
+        {dialog === "sms" && <SmsBereich nummern={kontakte} />}
+        {dialog === "einrichtung" && <div className="space-y-4">
+          {daten?.anbieter === "telnyx" ? <TelnyxEinrichtung /> : daten && <Einrichtung onChange={laden} />}
+          <details className="rounded-2xl bg-secondary/40 p-4 text-sm"><summary className="cursor-pointer">Technische Hinweise</summary><p className="mt-3 break-words text-xs text-muted-foreground">Für GPT Live muss der OpenAI-Webhook das Ereignis <code>live.transport.incoming</code> an <code>/api/telefon/eingehend</code> zustellen. Ein hinterlegter Signaturschlüssel bestätigt noch nicht, dass das Ereignis aktiviert ist.</p>{daten && !daten.bereit.webhook && <p className="mt-2 text-amber-200">Der Signaturschlüssel für eingehende Anrufe fehlt.</p>}</details>
+        </div>}
+      </DialogContent>
+    </Dialog>
+  </Seite>;
 }
