@@ -2,6 +2,7 @@ import { repairTelefonWebhookOnce } from "./lib/telefon-webhook-repair";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { inspectTelefonSetup } from "./lib/telefon-diagnose";
+import { pruefeLetzteTelefonAufnahme } from "./lib/telefon-aufnahme";
 import app from "./app";
 import { startMoltbookWorker, stopMoltbookWorker } from "./lib/moltbook-worker";
 import { startAutonomy, stopAutonomy } from "./lib/autonomy";
@@ -76,6 +77,7 @@ const server = app.listen(port, (err) => {
       if (repair.enabled) logger.info(repair, "Telefonie-Webhook-Einrichtung");
       const report = await inspectTelefonSetup(options);
       logger.info(report, "Telefonie-Konfigurationsprüfung");
+      if (istTelnyx()) logger.info(await pruefeLetzteTelefonAufnahme(), "Telefonaufnahme-Abrufprüfung");
     })().catch(() => logger.warn("Telefonie-Konfigurationsprüfung fehlgeschlagen"));
   }
 

@@ -113,6 +113,7 @@ export const nummerAusSip = () => 'untrusted', normalisiere = s => s.replace(/[^
 export const letzteAnrufe = async () => [], protokolliere = async () => {};
 export const telnyxStatusEingang = async (...args) => { globalThis.statusCalls.push(args); return true; }, aktualisiereAnruf = async () => {};
 export const telnyxAufnahmeEingang = async (...args) => { globalThis.recordingCalls.push(args); };
+export class TelefonAufnahmeFehler extends Error {}
 export const ladeTelefonAufnahme = async () => { globalThis.mediaAccess++; return new Response('test-audio', { headers: { 'content-type': 'audio/mpeg' } }); };
 export const twilioZugang = () => null, twilioStand = async () => ({}), twilioEinrichten = async () => [], starteAnruf = async () => '';
 export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorhanden = () => false, nimmSmsEntgegen = async () => ({}), meldeDichBeiIssa = async () => {}, recordDebugEvent = () => {};

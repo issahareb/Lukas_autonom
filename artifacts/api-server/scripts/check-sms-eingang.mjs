@@ -101,6 +101,7 @@ export const weiseAb = werkzeug("weiseAb");
 export const starteAnruf = werkzeug("starteAnruf");
 export const telefonStatus = werkzeug("telefonStatus");
 export const telnyxAufnahmeEingang = async () => {};
+export class TelefonAufnahmeFehler extends Error {}
 export const ladeTelefonAufnahme = async () => null;
 export const telnyxStatusEingang = async () => true, aktualisiereAnruf = async () => {};
 export const protokolliere = werkzeug("protokolliere");

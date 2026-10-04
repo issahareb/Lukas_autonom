@@ -216,7 +216,7 @@ export async function sicherFetch(
     }
 
     const antwort = await fetch(url.toString(), optionen as RequestInit);
-    if (antwort.status < 300 || antwort.status >= 400) return antwort;
+    if (rest.redirect === "manual" || antwort.status < 300 || antwort.status >= 400) return antwort;
 
     const weiter = antwort.headers.get("location");
     if (!weiter) return antwort;

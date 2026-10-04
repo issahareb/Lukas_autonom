@@ -26,7 +26,7 @@ import { sendeSms, letzteSms, zugangVorhanden, nimmSmsEntgegen } from "../lib/sm
 import { meldeDichBeiIssa } from "../lib/melden";
 import { recordDebugEvent } from "../lib/debug-log";
 import { telnyxStatusEingang, aktualisiereAnruf } from "../lib/telefon-status";
-import { telnyxAufnahmeEingang, ladeTelefonAufnahme } from "../lib/telefon-aufnahme";
+import { telnyxAufnahmeEingang, ladeTelefonAufnahme, TelefonAufnahmeFehler } from "../lib/telefon-aufnahme";
 
 export const telefonWebhookRouter = Router();
 
@@ -275,7 +275,9 @@ router.get("/lukas/telefon/anrufe/:id/aufnahme", async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Disposition", `inline; filename="anruf-${id}.${type?.includes("wav") ? "wav" : "mp3"}"`);
     await pipeline(Readable.fromWeb(media.body! as import("node:stream/web").ReadableStream), res);
-  } catch {
+  } catch (err) {
+    logger.warn({ anrufId: id, code: err instanceof TelefonAufnahmeFehler ? err.code : "stream_failed",
+      httpStatus: err instanceof TelefonAufnahmeFehler ? err.httpStatus : undefined }, "Telefonaufnahme laden fehlgeschlagen");
     if (!res.headersSent) res.status(502).json({ error: "Aufnahme konnte nicht geladen werden. Bitte erneut versuchen." });
     else res.destroy();
   }

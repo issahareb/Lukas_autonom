@@ -171,6 +171,12 @@ globalThis.fetch = async (url) => {
 };
 
 {
+  const response = await sicherFetch("https://harmlos.example/umleitung", { redirect: "manual", maxWeiterleitungen: 0 });
+  pruefe("manuelle Weiterleitung liefert den Status an den kontrollierenden Aufrufer", response.status === 302);
+  pruefe("manuelle Weiterleitung ruft ihr Ziel nicht selbst auf", antworten.length === 1);
+}
+
+{
   let geworfen = null;
   try {
     await sicherFetch("https://harmlos.example/umleitung");
