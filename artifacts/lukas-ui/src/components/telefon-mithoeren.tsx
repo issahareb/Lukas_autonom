@@ -64,7 +64,12 @@ export function LiveMithoeren({ id, aktiv, zustimmung }: { id: number; aktiv: bo
         const socket = new WebSocket(url);
         let ended = false;
         const timeout = window.setTimeout(() => { socket.close(); reject(new Error("Audiostream antwortet nicht. Bitte erneut starten.")); }, 10000);
-        const cleanup = () => { window.clearTimeout(timeout); controller.signal.removeEventListener("abort", abort); };
+        // Waiting/heartbeat messages prove a connection, not arriving audio.
+        // Only real playable frames renew the separate audio deadline.
+        let audioDeadline = window.setTimeout(() => {
+          cleanup(); socket.close(); reject(new Error("Verbunden, aber seit 15 Sekunden kein Gesprächsaudio empfangen. Bitte erneut verbinden. Das Telefonat läuft weiter."));
+        }, 15000);
+        const cleanup = () => { window.clearTimeout(timeout); window.clearTimeout(audioDeadline); controller.signal.removeEventListener("abort", abort); };
         const abort = () => { cleanup(); socket.close(); resolve(); };
         controller.signal.addEventListener("abort", abort, { once: true });
         socket.onmessage = event => {
@@ -74,7 +79,13 @@ export function LiveMithoeren({ id, aktiv, zustimmung }: { id: number; aktiv: bo
             const data = JSON.parse(event.data);
             if (data.type === "format") { player.format(data.codec, data.streamId); setStatus("Audiostream verbunden …"); }
             else if (data.type === "audio") {
-              if (player.play(data)) setStatus("Gesprächsaudio empfangen");
+              if (player.play(data)) {
+                setStatus("Gesprächsaudio empfangen");
+                window.clearTimeout(audioDeadline);
+                audioDeadline = window.setTimeout(() => {
+                  cleanup(); socket.close(); reject(new Error("Seit 15 Sekunden keine neuen Audiodaten. Bitte erneut verbinden. Das Telefonat läuft weiter."));
+                }, 15000);
+              }
             } else if (data.type === "waiting") setStatus(data.message || "Warte auf Gesprächsaudio …");
             else if (data.type === "end") { ended = true; setStatus(data.message); socket.close(); }
           } catch { cleanup(); socket.close(); reject(new Error("Ungültiger Audiostream.")); }
