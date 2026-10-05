@@ -1,0 +1,59 @@
+name: Telephone memory branch validation
+on:
+  push:
+    branches: [fix/telefon-kontaktgedaechtnis-20261005]
+permissions:
+  contents: write
+concurrency:
+  group: telephone-memory-branch-validation
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/fix/telefon-kontaktgedaechtnis-20261005'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/telefon-kontaktgedaechtnis-20261005
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Apply guarded integration patch
+        run: node scripts/apply-phone-memory.mjs
+      - name: Generate reviewed schema migration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: npm run db:generate
+      - name: Save integration and migration on the isolated branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add artifacts/api-server/src/lib/ai/live-session.ts artifacts/api-server/src/lib/telefon.ts artifacts/api-server/package.json lib/db/src/schema/telefon.ts lib/db/migrations
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(phone): wire persistent contact history and quiet live context'
+            git push origin HEAD:refs/heads/fix/telefon-kontaktgedaechtnis-20261005
+          fi
+          echo "Validated code commit: $(git rev-parse HEAD)"
+      - name: Verify real PostgreSQL memory behavior
+        env:
+          PHONE_MEMORY_SQL_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node artifacts/api-server/scripts/check-telefon-memory.mjs
+      - name: Check complete application
+        run: npm run build
