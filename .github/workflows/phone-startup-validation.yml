@@ -10,7 +10,7 @@ concurrency:
 jobs:
   validate:
     if: github.ref == 'refs/heads/fix/phone-speech-startup'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
