@@ -143,6 +143,7 @@ Antworte NUR mit einem JSON-Objekt, kein Markdown:
 Zu claims: Extrahiere 0-4 konkrete, merkwürdige Aussagen aus den Gesprächen. evidenceLevel: 0=dein Gedanke, 1=deine Beobachtung aus dem Gespräch. NIEMALS höher.`;
 
   const response = await callLukasModel({
+      quelle: "reflexion",
     route: directRoute("general"),
     maxTokens: 4096,
     messages: [{ role: "user", content: prompt }],

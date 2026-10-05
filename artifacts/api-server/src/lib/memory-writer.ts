@@ -1,3 +1,4 @@
+import { projektSchluessel } from "./projekt-aliasse";
 /*
  * Memory-Writer — die einzige Stelle, die ins Langzeitgedächtnis schreibt.
  *
@@ -104,7 +105,7 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "_").slice(0,
  *   status contradicted, confidence sinkt
  */
 export async function upsertClaim(input: ClaimInput): Promise<Claim> {
-  const subject = norm(input.subject);
+  const subject = projektSchluessel(input.subject);
   const predicate = norm(input.predicate);
   const value = input.value.trim().slice(0, 500);
   const level = clamp(Math.round(input.evidenceLevel ?? 2), 0, 2);

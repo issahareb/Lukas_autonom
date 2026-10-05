@@ -135,6 +135,16 @@ pruefe(
   "Der Abstand zum Einstieg muss stimmen, sonst laesst sich Nahes nicht hoeher gewichten",
 );
 
+// Existing subject/value variants must form one neighbourhood, without rewriting history.
+const taxi = laufeGraph(["taxibb"], [
+  claim(200, "taxi_bb", "domain", "taxibbessen.de"),
+  claim(201, "issa", "arbeitet_an", "Taxi BB Essen"),
+  claim(202, "issahareb/Taxibbessen", "branch", "main"),
+  claim(203, "taxibot", "nutzt", "React"),
+], 1, 24);
+pruefe(JSON.stringify(taxi.kanten.map(k => k.claim.id)) === "[200,201,202]", "Projektaliase treffen beide Kantenrichtungen, TaxiBot bleibt getrennt");
+pruefe(entitaetskandidaten("Was ist bei https://taxibbessen.de los?")[0] === "taxibb", "Domain steigt am kanonischen Projekt ein");
+
 // ── 3. Deckel ──────────────────────────────────────────────────────────────
 const viele = Array.from({ length: 100 }, (_, i) => claim(100 + i, "hareb_digital", "hat", "Ding" + i));
 const gedeckelt = laufeGraph(["hareb_digital"], viele, 2, 10);

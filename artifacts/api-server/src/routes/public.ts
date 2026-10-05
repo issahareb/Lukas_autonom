@@ -1,3 +1,4 @@
+import { merkeVerbrauch } from "../lib/ai/model-client";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import type OpenAI from "openai";
@@ -117,6 +118,7 @@ async function suggestFollowUp(
       { role: "assistant", content: answer.slice(0, 800) },
     ],
   });
+  merkeVerbrauch(PUBLIC_MODEL, resp.usage, "openai", "portfolio");
   const suggestion = resp.choices[0]?.message?.content?.trim() ?? "";
   return suggestion.length > 0 && suggestion.length < 160 ? suggestion : null;
 }
@@ -165,10 +167,12 @@ router.post("/public/chat", async (req, res) => {
       max_completion_tokens: 400,
       messages: [{ role: "system", content: systemPrompt }, ...convo],
       stream: true,
+      stream_options: { include_usage: true },
     });
 
     let full = "";
     for await (const chunk of stream) {
+      if (chunk.usage) merkeVerbrauch(PUBLIC_MODEL, chunk.usage, "openai", "portfolio");
       const delta = chunk.choices[0]?.delta?.content;
       if (delta) {
         full += delta;
@@ -534,6 +538,7 @@ ${extraSystem ? `\nZUSATZKONTEXT DES VOICE-AGENTEN:\n${extraSystem}` : ""}`;
         max_completion_tokens: 300,
         messages: messagesForModel,
       });
+      merkeVerbrauch(PUBLIC_MODEL, response.usage, "openai", "portfolio");
       const text = response.choices[0]?.message?.content ?? "";
       if (!text.trim()) {
         const lastUserMsg = String(convo[convo.length - 1]?.content ?? "").slice(0, 200);
@@ -582,11 +587,13 @@ ${extraSystem ? `\nZUSATZKONTEXT DES VOICE-AGENTEN:\n${extraSystem}` : ""}`;
       max_completion_tokens: 300,
       messages: messagesForModel,
       stream: true,
+      stream_options: { include_usage: true },
     });
 
     let receivedAnyContent = false;
     let lastFinishReason: string | null | undefined;
     for await (const ev of stream) {
+      if (ev.usage) merkeVerbrauch(PUBLIC_MODEL, ev.usage, "openai", "portfolio");
       const delta = ev.choices[0]?.delta?.content;
       if (delta) {
         receivedAnyContent = true;

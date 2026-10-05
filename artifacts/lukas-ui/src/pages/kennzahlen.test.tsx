@@ -30,9 +30,9 @@ const leererTag = (i: number) => ({
 });
 
 function mitDaten(daten: unknown) {
-  vi.stubGlobal("fetch", () =>
+  vi.stubGlobal("fetch", (url: string) =>
     Promise.resolve(
-      new Response(JSON.stringify(daten), {
+      new Response(JSON.stringify(String(url).endsWith("/verbrauch") ? { stand: new Date().toISOString(), tageswerte: [], modelle: [], liveModelle: [], guthaben: null } : daten), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -94,7 +94,7 @@ describe("Kennzahlen", () => {
   it("beschriftet den unauffälligen Fall, statt nichts anzuzeigen", async () => {
     mitDaten(grundgeruest);
     render(<Kennzahlen />);
-    expect(await screen.findByText(/Nichts Auffälliges/)).toBeInTheDocument();
+    expect(await screen.findByText(/Keine Auffälligkeit/)).toBeInTheDocument();
   });
 
   it("zeigt 'keine Daten' als – und nicht als 0", async () => {
@@ -106,7 +106,7 @@ describe("Kennzahlen", () => {
     mitDaten(grundgeruest);
     render(<Kennzahlen />);
 
-    await screen.findByText(/Nichts Auffälliges/);
+    await screen.findByText(/Keine Auffälligkeit/);
     const karte = screen.getByText("Werkzeuge gescheitert").parentElement;
     expect(karte?.textContent).toContain("–");
     expect(karte?.textContent).not.toMatch(/\b0\b/);
@@ -146,7 +146,7 @@ describe("Kennzahlen", () => {
     vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
       rufe.push({ url: String(url), init });
       return Promise.resolve(
-        new Response(JSON.stringify(grundgeruest), {
+        new Response(JSON.stringify(String(url).endsWith("/verbrauch") ? { stand: new Date().toISOString(), tageswerte: [], modelle: [], liveModelle: [], guthaben: null } : grundgeruest), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -154,9 +154,10 @@ describe("Kennzahlen", () => {
     });
     render(<Kennzahlen />);
 
-    await screen.findByText(/Nichts Auffälliges/);
-    expect(rufe[0].url).toBe("/api/lukas/kennzahlen");
-    expect((rufe[0].init?.headers as Record<string, string>).Authorization).toBe(
+    await screen.findByText(/Keine Auffälligkeit/);
+    const metrics = rufe.find(r => r.url === "/api/lukas/kennzahlen");
+    expect(metrics).toBeDefined();
+    expect((metrics?.init?.headers as Record<string, string>).Authorization).toBe(
       "Bearer geheim-123",
     );
   });

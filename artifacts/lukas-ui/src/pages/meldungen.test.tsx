@@ -45,6 +45,28 @@ const offen = {
 };
 
 describe("Meldungen", () => {
+  it("behält alte Meldungen offen und verlangt eine ausdrückliche Aktualitätsbestätigung", async () => {
+    const rufe = mitMeldungen([{ ...offen, veraltet: true }]);
+    render(<Meldungen />);
+    await screen.findByText(/ältere Meldung/);
+    expect(screen.queryByText(offen.betreff)).not.toBeInTheDocument();
+    expect(screen.getByText("1 offen")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ältere Meldungen prüfen" }));
+    expect(screen.getByText(offen.betreff)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Weiterhin aktuell" }));
+    expect(rufe.find(r => r.init?.method === "POST")?.url).toBe("/api/lukas/meldungen/7/bestaetigen");
+  });
+
+  it("behält den Antwortentwurf bei einem Serverfehler", async () => {
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => init?.method === "POST" ? new Response("", {status:503}) : Response.json([offen]));
+    render(<Meldungen />);
+    await screen.findByText(offen.betreff);
+    await userEvent.type(screen.getByRole("textbox"), "Mein Entwurf");
+    await userEvent.click(screen.getByRole("button", {name:/Antworten/}));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("textbox")).toHaveValue("Mein Entwurf");
+  });
+
   it("zeigt Betreff und Text der offenen Meldung", async () => {
     mitMeldungen([offen]);
     render(<Meldungen />);

@@ -1,3 +1,4 @@
+import Verbrauch from "@/components/verbrauch";
 import { useCallback, useEffect, useState } from "react";
 import { Seite, Fehler } from "@/components/seite";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +14,8 @@ type Tageswert = {
   modellAufrufe: number;
   tokenRein: number;
   tokenRaus: number;
+  tokenGesamt?: number;
+  verbrauchErfasst?: boolean;
   cacheQuote: number | null;
   freigabenGefragt: number;
   freigabenErteilt: number;
@@ -136,6 +139,7 @@ function Verlauf({
               }
               opacity={ueber !== null && ueber !== i ? 0.4 : 1}
               onMouseEnter={() => setUeber(i)}
+              onClick={() => setUeber(i)}
             />
           );
         })}
@@ -186,6 +190,7 @@ export default function KennzahlenSeite() {
       unterzeile="Vierzehn Tage, verglichen gegen den Median der Vortage."
     >
       <div className="space-y-6">
+      <Verbrauch />
       {laedt && <Skeleton className="h-24 w-full" />}
 
       {!laedt && !daten && (
@@ -198,8 +203,7 @@ export default function KennzahlenSeite() {
           <section className="space-y-2">
             {daten.auffaelligkeiten.length === 0 ? (
               <div className="card-soft rounded-3xl p-5 text-sm text-muted-foreground">
-                Nichts Auffälliges. Alle Größen liegen im Rahmen der letzten
-                vierzehn Tage — das ist der Normalfall und keine leere Seite.
+                Keine Auffälligkeit in den vorhandenen Messdaten erkannt. Fehlende Messungen sind keine Bestätigung eines störungsfreien Betriebs.
               </div>
             ) : (
               daten.auffaelligkeiten.map((a) => (
@@ -265,7 +269,7 @@ export default function KennzahlenSeite() {
             <Verlauf
               titel="Tokens"
               reihe={daten.reihe}
-              wert={(t) => t.tokenRein + t.tokenRaus}
+              wert={(t) => t.verbrauchErfasst === false ? null : (t.tokenGesamt ?? t.tokenRein + t.tokenRaus)}
               zeige={kurz}
             />
             <Verlauf

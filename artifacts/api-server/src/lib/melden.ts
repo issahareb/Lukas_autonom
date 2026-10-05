@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { meldungen, type Meldung } from "@workspace/db";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { normalisiereBetreff, meldungIstVeraltet } from "./meldungs-status";
 
 /*
  * Was Lukas von Issa braucht.
@@ -35,12 +36,11 @@ import { logger } from "./logger";
  * es geht ja darum, dass die Frage noch unbeantwortet ist.
  */
 async function bereitsOffen(betreff: string): Promise<Meldung | undefined> {
-  const [vorhanden] = await db
+  const rows = await db
     .select()
     .from(meldungen)
-    .where(and(eq(meldungen.betreff, betreff), eq(meldungen.status, "offen")))
-    .limit(1);
-  return vorhanden;
+    .where(eq(meldungen.status, "offen"));
+  return rows.find(m => normalisiereBetreff(m.betreff) === normalisiereBetreff(betreff));
 }
 
 export async function meldeDichBeiIssa(opts: {
@@ -143,16 +143,24 @@ export async function anfrageVonWebsite(opts: {
  * genau so entstehen Zaehler, die wochenlang auf 3 stehen. Wer den Betreff
  * liest, entscheidet in derselben Sekunde, ob es jetzt dran ist.
  *
- * Dringendes zuerst, danach das Aelteste: was am laengsten liegt, blockiert
- * Lukas am laengsten.
+ * Aktuell bestätigte Meldungen vor lange ungeprüften. Innerhalb dieser
+ * Gruppen: Dringendes zuerst, danach das Älteste.
  */
 export async function offeneMeldungen(limit = 5): Promise<Meldung[]> {
-  return db
+  const rows = await db
     .select()
     .from(meldungen)
     .where(eq(meldungen.status, "offen"))
-    .orderBy(desc(meldungen.dringend), asc(meldungen.createdAt))
-    .limit(limit);
+    .orderBy(desc(meldungen.dringend), asc(meldungen.createdAt));
+  return rows.sort((a, b) => Number(meldungIstVeraltet(a)) - Number(meldungIstVeraltet(b)) ||
+    Number(b.dringend) - Number(a.dringend) || a.createdAt.getTime() - b.createdAt.getTime()).slice(0, limit);
+}
+
+export async function bestaetigeMeldung(id: number): Promise<Meldung> {
+  const [row] = await db.update(meldungen).set({ geprueftAt: new Date() })
+    .where(and(eq(meldungen.id, id), eq(meldungen.status, "offen"))).returning();
+  if (!row) throw new Error("Offene Meldung nicht gefunden.");
+  return row;
 }
 
 export async function listeMeldungen(): Promise<Meldung[]> {

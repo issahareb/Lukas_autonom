@@ -1,3 +1,6 @@
+import { fuehreMeldungenZusammen } from "../lib/meldungen-merge";
+import { meldungIstVeraltet } from "../lib/meldungs-status";
+import { verbrauchsbericht, bestaetigeGuthaben } from "../lib/verbrauchsbericht";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
@@ -13,7 +16,7 @@ import { getLukasStatus, DEFAULT_STATUS } from "../lib/lukas-status";
 import { getCharacter } from "../lib/emotion-engine";
 import { runReflection } from "../lib/reflection";
 import { getDebugLog, recordDebugEvent } from "../lib/debug-log";
-import { listeMeldungen, beantworteMeldung } from "../lib/melden";
+import { listeMeldungen, beantworteMeldung, bestaetigeMeldung } from "../lib/melden";
 import { kennzahlen } from "../lib/kennzahlen";
 import { wartendes } from "../lib/wartet";
 import { listeZugaenge, setzeZugang, loescheZugang } from "../lib/zugaenge";
@@ -472,6 +475,21 @@ router.delete("/lukas/zugaenge/:sitzung/:feld", async (req, res) => {
  * Zug lesbar bleiben. Ein frei waehlbares Fenster laedt dazu ein, so lange
  * zu schieben, bis die Zahl gefaellt.
  */
+router.get("/lukas/verbrauch", async (_req, res) => {
+  try { res.json(await verbrauchsbericht()); }
+  catch (err) { logger.error({ err }, "Verbrauch nicht lesbar"); res.status(503).json({ error: "Verbrauchsdaten gerade nicht verfügbar." }); }
+});
+
+router.put("/lukas/openai-guthaben", async (req, res) => {
+  const { usd, organisation } = req.body ?? {};
+  if (typeof usd !== "number" || !Number.isFinite(usd) || usd < -1000000 || usd > 10000000 ||
+      typeof organisation !== "string" || !organisation.trim() || organisation.length > 120) {
+    return void res.status(400).json({ error: "Gültigen USD-Betrag und die OpenAI-Organisation angeben." });
+  }
+  try { res.json(await bestaetigeGuthaben(usd, organisation.trim())); }
+  catch (err) { logger.error({ err }, "Guthabenstand nicht gespeichert"); res.status(503).json({ error: "Guthabenstand konnte nicht gespeichert werden." }); }
+});
+
 router.get("/lukas/kennzahlen", async (_req, res) => {
   try {
     res.json(await kennzahlen(14));
@@ -496,12 +514,30 @@ router.get("/lukas/meldungen", async (_req, res) => {
         ...m,
         createdAt: m.createdAt.toISOString(),
         erledigtAt: m.erledigtAt?.toISOString() ?? null,
+        geprueftAt: m.geprueftAt?.toISOString() ?? null,
+        veraltet: m.status === "offen" && meldungIstVeraltet(m),
       })),
     );
   } catch (err) {
     logger.error({ err }, "Meldungen konnten nicht gelesen werden");
     res.status(500).json({ error: "Failed to get meldungen" });
   }
+});
+
+router.post("/lukas/meldungen/:id/zusammenfassen", async (req, res) => {
+  const id = Number(req.params.id), zielId = req.body?.zielId;
+  if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(zielId) || zielId <= 0 || id === zielId) {
+    return void res.status(400).json({ error: "Zwei verschiedene Meldungs-IDs erforderlich." });
+  }
+  try { await fuehreMeldungenZusammen(id, zielId); res.json({ ok: true }); }
+  catch (err) { logger.warn({ err }, "Meldungen nicht zusammengefasst"); res.status(409).json({ error: "Meldungen konnten nicht zusammengefasst werden." }); }
+});
+
+router.post("/lukas/meldungen/:id/bestaetigen", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return void res.status(400).json({ error: "id ungültig" });
+  try { res.json(await bestaetigeMeldung(id)); }
+  catch (err) { logger.warn({ err }, "Meldung nicht bestätigt"); res.status(409).json({ error: "Offene Meldung konnte nicht bestätigt werden." }); }
 });
 
 router.post("/lukas/meldungen/:id/antwort", async (req, res) => {

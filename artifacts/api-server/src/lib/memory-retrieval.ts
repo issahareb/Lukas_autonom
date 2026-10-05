@@ -1,3 +1,4 @@
+import { projekteImText, projektKontext } from "./projekt-aliasse";
 /*
  * Memory-Retrieval — bewertete Suche ueber Memories, Claims, Episoden UND den
  * rohen Chat-Archivbestand. Damit ist "nicht im aktuellen Modellkontext" nicht
@@ -86,7 +87,8 @@ function lexicalRelevance(query: string, text: string): number {
   if (words.length === 0) return 0;
   const t = text.toLowerCase();
   const hits = words.filter((w) => t.includes(w)).length;
-  return hits / words.length;
+  const projektTreffer = projekteImText(query).some(p => projekteImText(text).some(t => t.id === p.id));
+  return Math.max(hits / words.length, projektTreffer ? 0.9 : 0);
 }
 
 export async function embedNewRows(): Promise<number> {
@@ -153,7 +155,8 @@ async function archiveCandidates(query: string) {
   // die letzten 300 Erinnerungen beschraenkt. Dadurch kann Lukas auch sehr alte
   // Originalsaetze wiederfinden. Fuer semantische Paraphrasen helfen zusaetzlich
   // die kuratierten/embedded Memories.
-  const conditions = words.slice(0, 6).map((word) => ilike(messages.content, `%${word}%`));
+  const terms = [...new Set([...projekteImText(query).flatMap(p => p.aliases), ...words])].slice(0, 18);
+  const conditions = terms.map((word) => ilike(messages.content, `%${word}%`));
   return db
     .select()
     .from(messages)
@@ -307,8 +310,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
 export async function memoryContextFor(query: string, limit = 6): Promise<string> {
   const hits = await searchMemory(query, limit);
-  if (hits.length === 0) return "";
-  return hits.map((h) => `- ${h.text}`).join("\n");
+  return [projektKontext(query), ...hits.map((h) => `- ${h.text}`)].filter(Boolean).join("\n");
 }
 
 /*
@@ -357,6 +359,5 @@ export async function memoryContextOhne(
    */
   const hits = await searchMemory(query, limit + ausser.size);
   const uebrig = waehleOhneDoppel(hits, limit, ausser);
-  if (uebrig.length === 0) return "";
-  return uebrig.map((h) => `- ${h.text}`).join("\n");
+  return [projektKontext(query), ...uebrig.map((h) => `- ${h.text}`)].filter(Boolean).join("\n");
 }

@@ -1,3 +1,4 @@
+import { meldungIstVeraltet } from "./meldungs-status";
 /*
  * Was gerade auf Issa wartet.
  *
@@ -15,7 +16,7 @@
 import { db } from "@workspace/db";
 import { approvals } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
-import { offeneMeldungen } from "./melden";
+import { offeneMeldungen, offeneAnzahl } from "./melden";
 
 export type WartendeMeldung = {
   id: number;
@@ -23,6 +24,8 @@ export type WartendeMeldung = {
   text: string;
   dringend: boolean;
   createdAt: string;
+  veraltet?: boolean;
+  geprueftAt?: string | null;
 };
 
 export type WartendeFreigabe = {
@@ -44,14 +47,14 @@ export type Wartendes = {
 const ZEIGE = 5;
 
 export async function wartendes(jetzt = Date.now()): Promise<Wartendes> {
-  const [meldungen, roheFreigaben] = await Promise.all([
+  const [meldungen, roheFreigaben, anzahlMeldungen] = await Promise.all([
     offeneMeldungen(ZEIGE),
     db
       .select()
       .from(approvals)
       .where(eq(approvals.status, "pending"))
-      .orderBy(desc(approvals.createdAt))
-      .limit(50),
+      .orderBy(desc(approvals.createdAt)),
+    offeneAnzahl(),
   ]);
 
   /*
@@ -75,6 +78,8 @@ export async function wartendes(jetzt = Date.now()): Promise<Wartendes> {
       text: m.text,
       dringend: m.dringend,
       createdAt: m.createdAt.toISOString(),
+      veraltet: meldungIstVeraltet(m, jetzt),
+      geprueftAt: m.geprueftAt?.toISOString() ?? null,
     })),
     freigaben: offen.slice(0, ZEIGE).map((a) => ({
       id: a.id,
@@ -88,6 +93,6 @@ export async function wartendes(jetzt = Date.now()): Promise<Wartendes> {
      * eine ehrlichere Angabe als eine Liste, die stillschweigend endet —
      * sonst haelt man fuenf fuer alles und uebersieht den Rest dauerhaft.
      */
-    gesamt: { meldungen: meldungen.length, freigaben: offen.length },
+    gesamt: { meldungen: anzahlMeldungen, freigaben: offen.length },
   };
 }

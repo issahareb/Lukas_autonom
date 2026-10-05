@@ -43,6 +43,13 @@
       "when": 1791128575536,
       "tag": "0005_glossy_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791202310157,
+      "tag": "0006_overrated_loa",
+      "breakpoints": true
     }
   ]
 }

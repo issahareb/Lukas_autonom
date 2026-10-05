@@ -1,3 +1,4 @@
+import { projektFuerAlias, projekteImText } from "./projekt-aliasse";
 /*
  * Lukas' Gehirn als Knoten und Kanten.
  *
@@ -164,6 +165,11 @@ export async function baueGehirn(): Promise<Gehirn> {
     titel: string,
     opts: { gewicht?: number; text?: string; daten?: Record<string, string | number | boolean> } = {},
   ): string => {
+    if (art === "thema" || art === "subjekt") {
+      const project = projektFuerAlias(titel);
+      if (project) { art = "subjekt"; id = `subjekt/${project.id}`; titel = project.titel;
+        opts = { ...opts, text: `${project.titel}\nDomain: ${project.domain}\nRepository: ${project.repository}`, daten: { ...opts.daten, projekt: project.id } }; }
+    }
     const vorhanden = knoten.get(id);
     if (vorhanden) {
       // Hub-Knoten (Themen, Kategorien) entstehen mehrfach — der schwerste
@@ -265,6 +271,11 @@ export async function baueGehirn(): Promise<Gehirn> {
       },
     });
     verbinde(id, kat, "Kategorie", 0.4);
+    for (const project of projekteImText(m.content)) {
+      const hub = setze("subjekt", `subjekt/${project.id}`, project.titel, { gewicht: 0.6 });
+      verbinde(id, hub, "Projekt", 0.65);
+    }
+
 
     for (const t of m.tags ?? []) {
       if (!t?.trim()) continue;

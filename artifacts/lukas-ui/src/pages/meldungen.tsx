@@ -16,6 +16,8 @@ type Meldung = {
   antwort: string | null;
   createdAt: string;
   erledigtAt: string | null;
+  geprueftAt?: string | null;
+  veraltet?: boolean;
 };
 
 function authHeaders(): Record<string, string> {
@@ -38,13 +40,16 @@ export default function Meldungen() {
   const [rows, setRows] = useState<Meldung[]>([]);
   const [laedt, setLaedt] = useState(true);
   const [entwuerfe, setEntwuerfe] = useState<Record<number, string>>({});
+  const [mergeZiele, setMergeZiele] = useState<Record<number, string>>({});
+  const [fehler, setFehler] = useState("");
+  const [alteZeigen, setAlteZeigen] = useState(false);
   const [sendet, setSendet] = useState<number | null>(null);
 
   const laden = useCallback(() => {
     fetch(`${BASE}/api/lukas/meldungen`, { headers: authHeaders() })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d: Meldung[]) => setRows(Array.isArray(d) ? d : []))
-      .catch(() => setRows([]))
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((d: Meldung[]) => { setRows(Array.isArray(d) ? d : []); setFehler(""); })
+      .catch(() => setFehler("Meldungen konnten nicht aktualisiert werden."))
       .finally(() => setLaedt(false));
   }, []);
 
@@ -55,24 +60,45 @@ export default function Meldungen() {
     return () => clearInterval(t);
   }, [laden]);
 
-  const antworten = async (id: number) => {
-    const antwort = (entwuerfe[id] ?? "").trim();
+  const antworten = async (id: number, erledigen = false) => {
+    const antwort = erledigen ? "Von Issa als erledigt bestätigt." : (entwuerfe[id] ?? "").trim();
     if (!antwort) return;
     setSendet(id);
     try {
-      await fetch(`${BASE}/api/lukas/meldungen/${id}/antwort`, {
+      const response = await fetch(`${BASE}/api/lukas/meldungen/${id}/antwort`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ antwort }),
       });
+      if (!response.ok) throw new Error();
       setEntwuerfe((v) => ({ ...v, [id]: "" }));
       laden();
-    } finally {
+    } catch { setFehler("Antwort konnte nicht gespeichert werden. Dein Entwurf bleibt erhalten."); } finally {
       setSendet(null);
     }
   };
 
+  const bestaetigen = async (id: number) => {
+    setSendet(id);
+    try {
+      const r = await fetch(`${BASE}/api/lukas/meldungen/${id}/bestaetigen`, {method: "POST", headers: authHeaders()});
+      if (!r.ok) throw new Error();
+      laden();
+    } catch { setFehler("Meldung konnte nicht bestätigt werden."); }
+    finally { setSendet(null); }
+  };
+  const zusammenfassen = async (id: number) => {
+    setSendet(id);
+    try {
+      const r = await fetch(`${BASE}/api/lukas/meldungen/${id}/zusammenfassen`, { method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ zielId: Number(mergeZiele[id]) }) });
+      if (!r.ok) throw new Error();
+      laden();
+    } catch { setFehler("Meldungen konnten nicht zusammengefasst werden."); }
+    finally { setSendet(null); }
+  };
   const offen = rows.filter((m) => m.status === "offen");
+  const alt = offen.filter(m => m.veraltet);
+  const sichtbar = offen.filter(m => !m.veraltet || alteZeigen);
   const erledigt = rows.filter((m) => m.status !== "offen");
 
   return (
@@ -88,8 +114,10 @@ export default function Meldungen() {
     >
       <div className="space-y-9">
         {laedt && <Laedt />}
+        {fehler && <p role="alert" className="text-sm text-amber-400">{fehler}</p>}
+        {alt.length > 0 && <div className="card-soft rounded-3xl p-4 text-sm space-y-2"><p>{alt.length} ältere Meldung(en) ohne aktuelle Bestätigung. Sie bleiben offen, gelten aber nicht automatisch als aktuelle Störung.</p><button onClick={() => setAlteZeigen(v => !v)} className="underline">{alteZeigen ? "Ältere Meldungen einklappen" : "Ältere Meldungen prüfen"}</button></div>}
 
-        {!laedt && rows.length === 0 && (
+        {!laedt && !fehler && rows.length === 0 && (
           <Leer
             icon={Inbox}
             titel="Lukas hat sich noch nicht gemeldet"
@@ -102,7 +130,7 @@ export default function Meldungen() {
             <h2 className="px-1 text-[11px] tracking-wide text-muted-foreground">
               Wartet auf dich ({offen.length})
             </h2>
-            {offen.map((m, i) => (
+            {sichtbar.map((m, i) => (
               <div
                 key={m.id}
                 className={`card-soft rise space-y-3 rounded-3xl p-5 ${
@@ -127,6 +155,10 @@ export default function Meldungen() {
                   </div>
                 </div>
 
+                {m.veraltet && <p className="text-xs text-amber-400">Aktualität ungeprüft</p>}
+                {m.geprueftAt && <p className="text-xs text-muted-foreground">Von dir bestätigt: {new Date(m.geprueftAt).toLocaleString("de-DE")}</p>}
+                <div className="flex flex-wrap gap-3 text-sm"><button disabled={sendet === m.id} onClick={() => bestaetigen(m.id)} className="rounded-full border px-3 py-2">Weiterhin aktuell</button><button disabled={sendet === m.id} onClick={() => antworten(m.id, true)} className="rounded-full border px-3 py-2">Als erledigt markieren</button></div>
+                {offen.length > 1 && <details className="text-sm"><summary className="cursor-pointer text-muted-foreground">Doppelte Meldung zuordnen</summary><div className="mt-2 space-y-2"><p className="text-xs text-muted-foreground">Der Inhalt wird an die gewählte Meldung angehängt; das Anliegen bleibt dort offen.</p><select aria-label={`Zusammenführen: ${m.betreff}`} className="w-full rounded-xl border bg-background p-2" value={mergeZiele[m.id] ?? ""} onChange={e => setMergeZiele(v => ({ ...v, [m.id]: e.target.value }))}><option value="">Offene Zielmeldung wählen</option>{offen.filter(z => z.id !== m.id).map(z => <option value={z.id} key={z.id}>{z.betreff}</option>)}</select><button disabled={!mergeZiele[m.id] || sendet === m.id} onClick={() => zusammenfassen(m.id)} className="rounded-full border px-3 py-2 disabled:opacity-40">In gewählte Meldung zusammenführen</button></div></details>}
                 <p className="text-sm leading-relaxed whitespace-pre-wrap text-pretty">{m.text}</p>
 
                 <div className="space-y-2 pt-1">
@@ -176,7 +208,7 @@ export default function Meldungen() {
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.text}</p>
                 {m.antwort && (
                   <div className="rounded-2xl bg-primary/10 px-3.5 py-2.5 text-sm whitespace-pre-wrap">
-                    <span className="text-xs text-muted-foreground block mb-0.5">Deine Antwort</span>
+                    <span className="text-xs text-muted-foreground block mb-0.5">{m.antwort.startsWith("Zusammengeführt in Meldung #") ? "Zusammenführung" : "Deine Antwort"}</span>
                     {m.antwort}
                   </div>
                 )}

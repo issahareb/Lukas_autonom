@@ -58,6 +58,9 @@ export type Tageswert = {
   modellAufrufe: number;
   tokenRein: number;
   tokenRaus: number;
+  tokenCache: number;
+  tokenGesamt: number;
+  verbrauchErfasst: boolean;
   /** Anteil der Eingabe-Tokens, der aus dem Cache kam. 0..1, null ohne Aufrufe. */
   cacheQuote: number | null;
   freigabenGefragt: number;
@@ -122,6 +125,9 @@ export async function zeitreihe(tage = 14): Promise<Tageswert[]> {
     modellAufrufe: 0,
     tokenRein: 0,
     tokenRaus: 0,
+    tokenCache: 0,
+    tokenGesamt: 0,
+    verbrauchErfasst: false,
     cacheQuote: null,
     freigabenGefragt: 0,
     freigabenErteilt: 0,
@@ -160,6 +166,9 @@ export async function zeitreihe(tage = 14): Promise<Tageswert[]> {
     t.modellAufrufe += k.aufrufe;
     t.tokenRein += k.rein;
     t.tokenRaus += k.raus;
+    t.tokenCache += k.ausCache + k.inCache;
+    t.tokenGesamt += k.rein + k.raus + k.ausCache + k.inCache;
+    t.verbrauchErfasst = true;
     /*
      * Der NENNER ist der ganze Eingang, nicht der frisch bezahlte.
      *
@@ -299,7 +308,7 @@ export function auffaelligkeiten(reihe: Tageswert[], jetzt = new Date()): Auffae
 
   mengeVergleichen(
     "tokenverbrauch",
-    (t) => t.tokenRein + t.tokenRaus,
+    (t) => t.tokenGesamt ?? (t.tokenRein + t.tokenRaus),
     100_000,
     (ist, erwartet) =>
       `Bis jetzt ${ist.toLocaleString("de-DE")} Tokens verbraucht — um diese Uhrzeit ` +

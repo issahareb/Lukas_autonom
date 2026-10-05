@@ -30,6 +30,7 @@ import { db } from "@workspace/db";
 import { tageskostenTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import type { VerbrauchsQuelle } from "./verbrauch-quelle";
 
 const WARNUNG = () => Number(process.env.LUKAS_TAGESBUDGET_WARNUNG ?? 2_000_000);
 const STOPP = () => Number(process.env.LUKAS_TAGESBUDGET_STOPP ?? 0);
@@ -51,6 +52,7 @@ export async function verbucheTag(input: {
   raus: number;
   ausCache?: number;
   inCache?: number;
+  quelle?: VerbrauchsQuelle;
 }): Promise<void> {
   if (!kostenpflichtig(input.provider)) return;
   try {
@@ -60,6 +62,7 @@ export async function verbucheTag(input: {
         tag: heute(),
         provider: input.provider,
         model: input.model,
+        quelle: input.quelle ?? "sonstige",
         aufrufe: 1,
         rein: input.rein,
         raus: input.raus,
@@ -72,7 +75,7 @@ export async function verbucheTag(input: {
        * autonomen Betrieb laufen Dinge nebeneinander.
        */
       .onConflictDoUpdate({
-        target: [tageskostenTable.tag, tageskostenTable.provider, tageskostenTable.model],
+        target: [tageskostenTable.tag, tageskostenTable.provider, tageskostenTable.model, tageskostenTable.quelle],
         set: {
           aufrufe: sql`${tageskostenTable.aufrufe} + 1`,
           rein: sql`${tageskostenTable.rein} + ${input.rein}`,
@@ -84,7 +87,7 @@ export async function verbucheTag(input: {
       });
   } catch (err) {
     // Buchhaltung darf einen Zug nie kippen.
-    logger.debug({ err }, "Tagesverbrauch nicht gebucht");
+    logger.warn({ err }, "Tagesverbrauch nicht gebucht");
   }
 }
 
@@ -125,6 +128,13 @@ export async function tagesstand(): Promise<Tagesstand> {
   const warnung = WARNUNG();
   const stopp = STOPP();
 
+  const modelle = new Map<string, Tagesstand["jeModell"][number]>();
+  for (const z of zeilen) {
+    const key = JSON.stringify([z.provider, z.model]);
+    const m = modelle.get(key) ?? { model: z.model, provider: z.provider, tokens: 0, aufrufe: 0 };
+    m.tokens += summe(z); m.aufrufe += z.aufrufe; modelle.set(key, m);
+  }
+
   return {
     tag,
     tokens,
@@ -133,8 +143,7 @@ export async function tagesstand(): Promise<Tagesstand> {
     stopp,
     ueberWarnung: warnung > 0 && tokens >= warnung,
     ueberStopp: stopp > 0 && tokens >= stopp,
-    jeModell: zeilen
-      .map((z) => ({ model: z.model, provider: z.provider, tokens: summe(z), aufrufe: z.aufrufe }))
+    jeModell: [...modelle.values()]
       .sort((a, b) => b.tokens - a.tokens),
   };
 }

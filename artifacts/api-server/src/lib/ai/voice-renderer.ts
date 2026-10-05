@@ -117,7 +117,7 @@ export async function renderLukasVoice(opts: {
      * sondern eine Einladung.
      */
     const budget = Math.min(8192, Math.max(1200, Math.ceil(draft.length / 3) + 700));
-    const result = await callLukasModel({ route, messages, maxTokens: budget, signal: opts.signal });
+    const result = await callLukasModel({ quelle: "ausgabe", route, messages, maxTokens: budget, signal: opts.signal });
     opts.signal?.throwIfAborted();
     return result.content.trim() || draft;
   } catch (err) {

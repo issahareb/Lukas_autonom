@@ -12,6 +12,7 @@ import { recordDebugEvent } from "./debug-log";
 import { routeLukasModel, directRoute, previousRoutingTask } from "./ai/model-router";
 import { callLukasModel } from "./ai/model-client";
 import { renderLukasVoice } from "./ai/voice-renderer";
+import type { VerbrauchsQuelle } from "./verbrauch-quelle";
 import { Arbeitsschleife } from "./arbeitsschleife";
 
 /*
@@ -44,6 +45,7 @@ function fehlerGrund(err: unknown): string {
 }
 
 export async function runLukasTurn(opts: {
+  quelle?: VerbrauchsQuelle;
   history: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   userText: string;
   conversationId?: number;
@@ -147,6 +149,7 @@ export async function runLukasTurn(opts: {
     }
 
     const result = await callLukasModel({
+      quelle: opts.quelle ?? "sonstige",
       cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
       route,
       tools,
@@ -330,6 +333,7 @@ export async function runLukasTurn(opts: {
     logger.info({ usedTools }, "Durchlauf ohne Text — Abschlussrunde ohne Werkzeuge");
     try {
       const letzte = await callLukasModel({
+      quelle: opts.quelle ?? "sonstige",
         signal: opts.signal,
         cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
         route: opts.profil ? directRoute(opts.profil) : routeLukasModel({

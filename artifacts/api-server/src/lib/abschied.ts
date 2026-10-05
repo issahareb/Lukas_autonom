@@ -39,6 +39,7 @@
 import type { Server } from "node:http";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
+import { verbrauchLeeren } from "./verbrauch-quelle";
 
 let wirGehen = false;
 
@@ -89,6 +90,7 @@ export function richteAbschiedEin(
     server.close(() => {
       logger.info("Alle Anfragen beendet — Sprachverbindungen werden geschlossen");
       gestoppt
+        .then(() => verbrauchLeeren())
         .then(() => pool.end())
         .catch((err) => logger.warn({ err }, "Pool liess sich nicht sauber schliessen"))
         .finally(() => { clearTimeout(notaus); process.exit(0); });
