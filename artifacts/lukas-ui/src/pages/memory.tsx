@@ -36,6 +36,7 @@ const TON: Record<string, "gut" | "warnung" | "schlecht" | "info" | "akzent" | "
 
 export default function Memory() {
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("kuratiert");
   const [open, setOpen] = useState(false);
@@ -189,9 +190,9 @@ export default function Memory() {
                * langer Block ohne Leerzeichen — ein SHA-256-Hash etwa —
                * sprengt damit die ganze Karte nach rechts aus dem Bild.
                */}
-              <p className="min-w-0 flex-1 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                {m.content}
-              </p>
+              <div className="min-w-0 flex-1"><p id={`memory-content-${m.id}`} className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{m.content.length > 400 && !expanded.has(m.id) ? `${m.content.slice(0, 400)}…` : m.content}</p>
+                {m.content.length > 400 && <button type="button" aria-expanded={expanded.has(m.id)} aria-controls={`memory-content-${m.id}`} className="mt-3 text-xs text-primary" onClick={() => setExpanded(old => { const next = new Set(old); if (next.has(m.id)) next.delete(m.id); else next.add(m.id); return next; })}>{expanded.has(m.id) ? "Weniger anzeigen" : "Vollständig lesen"}</button>}
+              </div>
               <button
                 onClick={() => handleDelete(m.id)}
                 aria-label="Erinnerung löschen"

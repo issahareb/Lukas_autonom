@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useGetDiaryEntries } from "@workspace/api-client-react";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Search } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
@@ -31,22 +32,25 @@ const ENERGIE_TON: Record<string, string> = {
 };
 
 export default function Diary() {
+  const [search, setSearch] = useState("");
   const { data: entries = [], isLoading } = useGetDiaryEntries({ limit: 50 });
 
+  const visible = entries.filter(e => e.content.toLocaleLowerCase("de").includes(search.trim().toLocaleLowerCase("de")));
   return (
     <Seite
       icon={BookOpen}
       titel="Tagebuch"
-      unterzeile="Was Lukas sich nach einem Gespräch selbst notiert — unredigiert."
+      unterzeile="Gedanken, Beobachtungen und neue Erkenntnisse — in Lukas’ eigenen Worten."
+      unterKopf={<label className="workspace-search"><Search size={17} /><input type="search" aria-label="Tagebuch durchsuchen" placeholder="In den letzten 50 Einträgen suchen" value={search} onChange={e => setSearch(e.target.value)} /></label>}
     >
       {isLoading && <Laedt was="Einträge werden geladen…" />}
 
       <div className="space-y-5">
-        {entries.map((entry, idx) => (
-          <article key={entry.id} className="relative">
+        {visible.map((entry, idx) => (
+          <article key={entry.id} className="diary-entry relative">
             {/* Die Linie zum naechsten Eintrag. Am letzten faellt sie weg,
                 sonst haengt sie ins Nichts. */}
-            {idx < entries.length - 1 && (
+            {idx < visible.length - 1 && (
               <div className="absolute bottom-[-20px] left-[15px] top-10 w-px bg-border/60" />
             )}
             <div className="flex items-start gap-4">
@@ -82,10 +86,10 @@ export default function Diary() {
         ))}
       </div>
 
-      {!isLoading && entries.length === 0 && (
+      {!isLoading && visible.length === 0 && (
         <Leer
           icon={BookOpen}
-          titel="Noch nichts geschrieben"
+          titel={search ? "Keine passenden Einträge" : "Noch nichts geschrieben"}
           hinweis="Lukas schreibt nach jedem Gespräch einen Eintrag. Sobald ihr geredet habt, steht hier etwas."
         />
       )}

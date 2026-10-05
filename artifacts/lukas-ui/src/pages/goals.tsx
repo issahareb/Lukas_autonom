@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, CheckCircle2, Target, Clock, AlertCircle, RotateCcw } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Target, Clock, AlertCircle, RotateCcw, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
@@ -34,6 +34,7 @@ export default function Goals() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("high");
+  const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
 
   const { data: goals = [], isLoading } = useGetGoals();
@@ -41,7 +42,7 @@ export default function Goals() {
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
 
-  const filtered = filter === "all" ? goals : goals.filter((g) => g.status === filter);
+  const filtered = goals.filter(g => (filter === "all" || g.status === filter) && `${g.title} ${g.description} ${g.progress ?? ""}`.toLocaleLowerCase("de").includes(search.trim().toLocaleLowerCase("de")));
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) return;
@@ -67,6 +68,7 @@ export default function Goals() {
 
   return (
     <Seite
+      breit
       icon={Target}
       titel="Ziele"
       unterzeile={`${aktiv} aktiv, ${erledigt} erledigt`}
@@ -118,7 +120,7 @@ export default function Goals() {
          * Jetzt Pillen in Satzschrift, und der gewaehlte ist gefuellt statt
          * umrandet.
          */
-        <div className="flex flex-wrap gap-2">
+        <div className="workspace-filters">
           {FILTER.map((s) => {
             const gewaehlt = filter === s;
             const anzahl = s === "all" ? goals.length : goals.filter((g) => g.status === s).length;
@@ -139,14 +141,15 @@ export default function Goals() {
               </button>
             );
           })}
+          <label className="workspace-search"><Search size={17} /><input type="search" aria-label="Ziele suchen" placeholder="Ziel suchen" value={search} onChange={e => setSearch(e.target.value)} /></label>
         </div>
       }
     >
       {isLoading && <Laedt was="Ziele werden geladen…" />}
 
-      <div className="space-y-4">
+      <div className="goal-grid">
         {filtered.map((g, idx) => (
-          <Karte key={g.id} verzoegerung={staffel(idx)} className="group">
+          <Karte key={g.id} verzoegerung={staffel(idx)} className={`group goal-card goal-card--${g.status}`}>
             <div className="flex items-start gap-3">
               <span className="mt-0.5 shrink-0">{STAND_SYMBOL[g.status] ?? <Clock className="h-4 w-4" />}</span>
               <div className="min-w-0 flex-1">
@@ -222,7 +225,7 @@ export default function Goals() {
       {!isLoading && filtered.length === 0 && (
         <Leer
           icon={Target}
-          titel={filter === "all" ? "Noch keine Ziele" : `Nichts unter „${zielstand(filter)}“`}
+          titel={search ? "Keine passenden Ziele" : filter === "all" ? "Noch keine Ziele" : `Nichts unter „${zielstand(filter)}“`}
           hinweis={
             filter === "all"
               ? "Ein Ziel sagt Lukas, woran er zwischen euren Gesprächen arbeiten soll."

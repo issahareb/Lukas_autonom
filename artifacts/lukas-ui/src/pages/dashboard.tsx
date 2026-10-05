@@ -13,6 +13,9 @@ import {
   Network,
   MessageSquare,
   Paperclip,
+  Phone,
+  ShieldCheck,
+  Plug,
   Target,
   X,
 } from "lucide-react";
@@ -83,9 +86,9 @@ export default function Dashboard() {
     <div className="home-page">
       <header className="home-heading">
         <div>
-          <p className="home-eyebrow">Dein persönlicher Arbeitsraum</p>
+          <p className="home-eyebrow">Lukas · Dein Arbeitsraum</p>
           <h1>Hey Issa<span>.</span></h1>
-          <p className="home-intro">Deine Ziele. Lukas’ Gedanken. Alles im Blick.</p>
+          <p className="home-intro">Was ansteht. Was läuft. Was als Nächstes kommt.</p>
         </div>
         <button type="button" className="home-header-action" onClick={() => navigate("/chat")}>
           <MessageSquare size={18} aria-hidden="true" />
@@ -105,15 +108,25 @@ export default function Dashboard() {
         <WartetAufDich kompakt />
       </div>
 
+      <nav className="home-shortcuts" aria-label="Schnellzugriff">
+        {[{ path: "/telefon", icon: Phone, title: "Telefon", detail: "Kontakte & Gespräche", tone: "cyan" },
+          { path: "/approvals", icon: ShieldCheck, title: "Freigaben", detail: "Entscheiden & weiter", tone: "amber" },
+          { path: "/mcp", icon: Plug, title: "Verbindungen", detail: "Dienste & Werkzeuge", tone: "mint" },
+          { path: "/gehirn", icon: Network, title: "Gehirn", detail: "Wissen erkunden", tone: "violet" }].map(item => <button type="button" key={item.path} data-tone={item.tone} onClick={() => navigate(item.path)}>
+          <span className="home-shortcut-icon"><item.icon size={21} /></span>
+          <span><strong>{item.title}</strong><small>{item.detail}</small></span><ArrowUpRight size={16} />
+        </button>)}
+      </nav>
+
       <div className="home-columns">
         <section className="home-context" aria-labelledby="home-focus-heading">
           <div className="home-section-heading">
             <h2 id="home-focus-heading">Im Fokus</h2>
             {zuletztAktiv && <span>Zuletzt aktiv {zuletztAktiv}</span>}
           </div>
-          <button type="button" className="home-focus" onClick={() => navigate("/goals")}>
+          <button type="button" className="home-focus" data-tone="mint" onClick={() => navigate("/goals")}>
             <span className="home-focus-top">
-              <span><Target size={17} aria-hidden="true" /> Lukas’ aktuelles Thema</span>
+              <span><Target size={17} aria-hidden="true" /> Aktueller Fokus</span>
               <ArrowUpRight size={20} aria-hidden="true" />
             </span>
             <h3>{status?.obsession || (status ? "Raum für neue Ideen" : nichtVerfuegbar ? "Stand nicht verfügbar" : "Wird geladen …")}</h3>
@@ -175,7 +188,7 @@ export default function Dashboard() {
 
         <section className={"home-conversation " + (sprache.aktiv ? "is-active" : "")} aria-label="Mit Lukas sprechen oder schreiben">
           <div className="home-conversation-top">
-            <span className="home-eyebrow">Ein Gedanke genügt</span>
+            <span className="home-eyebrow">Direkt mit Lukas</span>
             <span className="home-conversation-mark" aria-hidden="true">L</span>
           </div>
           <div className="home-orb"><Orb zustand={zustand} pegel={pegel} groesse="mittel" /></div>

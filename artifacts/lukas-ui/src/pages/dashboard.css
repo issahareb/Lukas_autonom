@@ -269,3 +269,53 @@
 @media (prefers-reduced-motion: reduce) {
   .home-page * { scroll-behavior: auto !important; transition: none !important; }
 }
+
+/* Workspace overview: quick destinations, a bright focus card, a quiet voice panel. */
+.home-page { max-width: 1480px; padding: 36px clamp(20px,3vw,44px) 40px; }
+.home-heading { margin-bottom: 28px; }
+.home-heading h1 { font-size: clamp(38px,4vw,56px); font-weight: 500; }
+.home-eyebrow { color: #94b3a3; font-size: 10px; }
+.home-shortcuts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-bottom: 32px; }
+.home-shortcuts button { min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 17px 14px; border-radius: 15px; background: #141c1e; border: 1px solid #ffffff0d; }
+.home-shortcut-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: var(--area); background: color-mix(in srgb,var(--area) 10%,transparent); flex-shrink: 0; }
+.home-shortcuts button > span:nth-child(2) { min-width: 0; flex: 1; }
+.home-shortcuts strong { display: block; font-size: 13px; font-weight: 500; }
+.home-shortcuts small { display: block; margin-top: 5px; font-size: 10px; color: #9eafa7; }
+.home-shortcuts button > svg { color: #788e85; flex-shrink: 0; }
+.home-shortcuts button:hover { border-color: var(--area); background: #1a2425; }
+.home-columns { grid-template-columns: minmax(0,1.08fr) minmax(0,.92fr); gap: 26px; }
+.home-focus { background: #b1edcd; border: 0; border-radius: 20px; color: #183326; min-height: 225px; padding: 26px; }
+.home-focus-top, .home-focus-top > span { color: #365b47; }
+.home-focus h3 { color: #122c20; font-size: clamp(26px,2.6vw,36px); letter-spacing: -.045em; }
+.home-focus-bottom { border-color: #18332620; }
+.home-mood, .home-mood small, .home-focus-cta { color: #365b47; }
+.home-mood-dot { background: #2f7354; }
+.home-focus:hover { background: #c1f3d9; }
+.home-conversation { background: radial-gradient(ellipse at 50% 30%,#25383988,transparent 65%),#141c1e; border-color: #ffffff12; border-radius: 22px; }
+.home-conversation-mark { color: #b1edcd; background: #b1edcd12; }
+.home-conversation h2 { font-weight: 400; letter-spacing: -.05em; }
+.home-composer { background: #0e1719; border-color: #b1edcd22; }
+.home-speak, .home-send { background: #b1edcd; color: #183326; }
+.home-speak:hover, .home-send:hover { background: #d3f8e3; }
+.home-metrics button { background: #141c1e; border-radius: 16px; border-color: #ffffff0d; }
+.home-metrics button > svg:first-child { color: #b1edcd; }
+.home-metrics button:nth-child(2) > svg:first-child { color: #c6b5f9; }
+.home-recent button { background: #141c1e; border-radius: 16px; }
+.home-recent-icon { color: #c6b5f9; background: #c6b5f912; border: none; }
+.home-text-link, .home-brain-link { color: #b5cbbf; }
+.home-pending { margin-bottom: 20px; }
+@media (max-width: 1200px) { .home-shortcuts { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 1000px) { .home-columns { grid-template-columns: 1fr; } .home-conversation { order: -1; } }
+@media (max-width: 767px) {
+  .home-page { padding: 26px 18px 32px; }
+  .home-heading h1 { font-size: 40px; }
+  .home-heading { margin-bottom: 23px; }
+  .home-intro { max-width: 27ch; font-size: 12px; }
+  .home-shortcuts { gap: 9px; margin-bottom: 25px; }
+  .home-shortcuts button { padding: 14px 12px; gap: 10px; }
+  .home-shortcut-icon { width: 34px; height: 34px; border-radius: 10px; }
+  .home-shortcuts strong { font-size: 12px; }
+  .home-shortcuts small { font-size: 9px; }
+  .home-shortcuts button > svg { display: none; }
+  .home-focus { min-height: 208px; padding: 22px; }
+}

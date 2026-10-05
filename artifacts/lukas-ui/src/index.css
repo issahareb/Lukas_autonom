@@ -62,12 +62,12 @@
 :root {
   color-scheme: dark;
 
-  --background: #0b0e15;
+  --background: #0c1113;
   --foreground: oklch(0.97 0 0);
 
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
-  --ring: #c7bcfa;
+  --ring: #b1edcd;
 
   --card: oklch(0.16 0.008 265);
   --card-foreground: oklch(0.97 0 0);
@@ -90,8 +90,8 @@
   --blue: oklch(0.72 0.11 250);
   --purple: oklch(0.68 0.11 300);
 
-  --primary: #c7bcfa;
-  --primary-foreground: #252035;
+  --primary: #b1edcd;
+  --primary-foreground: #10251b;
 
   --secondary: oklch(0.22 0.006 265);
   --secondary-foreground: oklch(0.97 0 0);

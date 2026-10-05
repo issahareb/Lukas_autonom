@@ -31,6 +31,7 @@ import {
 } from "@/components/gehirn/modell";
 import { erschaffeSzene, type Szene } from "@/components/gehirn/szene";
 import { GehirnEintrag } from "@/components/gehirn/eintrag";
+import { PageHeader } from "@/components/page-header";
 import { useIsMobile } from "@/hooks/use-mobile";
 import * as Dialog from "@radix-ui/react-dialog";
 import "@/components/gehirn/gehirn.css";
@@ -485,16 +486,7 @@ export default function GehirnSeite() {
 
   return (
     <div className="gehirn-page">
-      <header className="gehirn-heading">
-        <div>
-          <p className="gehirn-eyebrow">LUKAS / GEDÄCHTNIS</p>
-          <h1>
-            Gehirn<span>.</span>
-          </h1>
-          <p className="gehirn-subtitle">
-            Erinnerungen. Beziehungen. Zusammenhänge.
-          </p>
-        </div>
+      <PageHeader icon={Network} title="Gehirn" subtitle="Erinnerungen, Beziehungen und Zusammenhänge erkunden." actions={
         <div className="gehirn-heading-actions">
           <button
             type="button"
@@ -525,7 +517,7 @@ export default function GehirnSeite() {
             <span>Obsidian-Vault</span>
           </button>
         </div>
-      </header>
+      } />
       {fehler && (
         <div className="gehirn-error" role="alert">
           {fehler}

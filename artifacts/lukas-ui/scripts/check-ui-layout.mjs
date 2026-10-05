@@ -48,7 +48,7 @@ async function screenshot(page, name) {
 }
 
 async function noOverflow(page, name) {
-  const bad = await page.locator(".app-shell, .app-scroll, .home-page, .home-columns, .chat-page, .chat-workspace, .chat-scroll, .chat-conversation-list").evaluateAll((nodes) => nodes.filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1).map((el) => ({ element: el.className, client: el.clientWidth, scroll: el.scrollWidth })));
+  const bad = await page.locator(".app-shell, .app-scroll, .home-page, .home-columns, .chat-page, .chat-workspace, .chat-scroll, .chat-conversation-list, .workspace-page, .workspace-content, .connection-grid, .approval-queue").evaluateAll((nodes) => nodes.filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1).map((el) => ({ element: el.className, client: el.clientWidth, scroll: el.scrollWidth })));
   assert.deepEqual(bad, [], name + ": horizontal overflow");
 }
 
@@ -77,6 +77,14 @@ try {
         nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now, mithoerenZustimmung: true, mithoerenQuelle: "email", mithoerenBestaetigtAm: now }],
         anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }, { id: 2, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "verbunden", mithoerenZustimmung: true, createdAt: now }] };
       else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, konfiguriert: true, freigeschaltet: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
+      else if (path === "/api/lukas/mcp") body = { servers: [
+        { id: 1, name: "Kalender", slug: "calendar", url: "https://example.com/mcp", status: "connected", tools: [{ name: "read_calendar", description: "Termine lesen" }], selectedTools: [], riskTier: "R2", enabled: true, authorized: true },
+        { id: 2, name: "Projektablage", slug: "files", url: "https://example.com/files", status: "error", lastError: "Verbindung abgelaufen", tools: [], selectedTools: [], riskTier: "R2", enabled: true, authorized: false },
+      ] };
+      else if (path === "/api/lukas/approvals") body = [
+        { id: 1, tool: "email_send", riskTier: "R3", argumentsPreview: 'an: kunde@example.com\nbetreff: Angebot zur neuen Website', status: "pending", createdAt: now, expiresAt: new Date(Date.now() + 3600000).toISOString(), expired: false },
+        { id: 2, tool: "file_read", riskTier: "R1", argumentsPreview: "Projektplan lesen", status: "used", createdAt: now, decidedAt: now, expired: false },
+      ];
       else if (path === "/api/lukas/sms") body = { bereit: false, sms: [] };
       else if (path === "/api/lukas/wartet") body = { freigaben: [], meldungen: [], gesamt: { freigaben: 0, meldungen: 0 } };
       else if (path === "/api/anthropic/conversations" && method === "GET") body = conversations;
@@ -150,6 +158,27 @@ try {
     assert.equal(neuerKontakt.darfAngerufenWerden, true);
     assert.equal(neuerKontakt.mithoerenZustimmung, true);
     assert.equal(neuerKontakt.mithoerenQuelle, "homepage");
+    await page.goto(origin + "/mcp");
+    await page.getByText("Kalender", { exact: true }).waitFor();
+    await noOverflow(page, "Verbindungen " + name);
+    if (name === "desktop" || name === "mobil") await screenshot(page, "verbindungen-" + name);
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+    assert.equal(await page.getByText("Kalender", { exact: true }).count(), 0);
+    await page.getByText("Projektablage", { exact: true }).waitFor();
+    await page.goto(origin + "/approvals");
+    await page.getByText("email_send", { exact: true }).waitFor();
+    await noOverflow(page, "Freigaben " + name);
+    if (name === "desktop" || name === "mobil") await screenshot(page, "freigaben-" + name);
+    await page.getByRole("button", { name: /^Verlauf/ }).click();
+    await page.getByText("file_read", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Erlauben", exact: true }).count(), 0);
+    if (width < 768) {
+      await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
+      await page.getByRole("searchbox", { name: "Bereiche suchen" }).fill("Verbindungen");
+      await page.getByRole("dialog").getByRole("link", { name: "Verbindungen", exact: true }).click();
+      await page.getByRole("heading", { name: "Verbindungen", exact: true }).waitFor();
+      assert.equal(await page.getByRole("dialog").count(), 0);
+    }
     console.log("OK — " + name + " (" + width + " px): layout, search, keyboard selection, draft handoff, suggestion.");
     await context.close();
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { ShieldCheck, RefreshCw, Check, CheckCheck, X, Clock } from "lucide-react";
+import { ShieldCheck, RefreshCw, Check, CheckCheck, X, Clock, Search, History } from "lucide-react";
 import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 import { freigabe } from "@/lib/worte";
 
@@ -46,6 +46,11 @@ const STATUS_TON = {
 } as const;
 
 export default function Approvals() {
+  const [filter, setFilter] = useState<"offen" | "verlauf" | "alle">("offen");
+  const [suche, setSuche] = useState("");
+  const [busy, setBusy] = useState<number | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [limit, setLimit] = useState(20);
   const [rows, setRows] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,18 +91,30 @@ export default function Approvals() {
   }, [load]);
 
   const decide = async (id: number, action: "allow" | "deny" | "allow-auftrag") => {
-    await fetch(`${BASE}/api/lukas/approvals/${id}/${action}`, {
-      method: "POST",
-      headers: authHeaders(),
-    }).catch(() => {});
-    load();
+    if (busy !== null) return;
+    setBusy(id);
+    setDecisionError(null);
+    try {
+      const res = await fetch(`${BASE}/api/lukas/approvals/${id}/${action}`, { method: "POST", headers: authHeaders() });
+      if (!res.ok) throw new Error(`Entscheidung nicht gespeichert (HTTP ${res.status}). Bitte erneut versuchen.`);
+      await load();
+    } catch (err) {
+      setDecisionError(err instanceof Error ? err.message : "Entscheidung nicht gespeichert.");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const pending = rows.filter((r) => r.status === "pending" && !r.expired);
   const rest = rows.filter((r) => !(r.status === "pending" && !r.expired));
+  const matches = (r: Approval) => `${r.tool} ${r.argumentsPreview}`.toLocaleLowerCase("de").includes(suche.trim().toLocaleLowerCase("de"));
+  const shownPending = filter === "verlauf" ? [] : pending.filter(matches);
+  const shownRest = filter === "offen" ? [] : rest.filter(matches);
+  const changeFilter = (next: typeof filter) => { setFilter(next); setLimit(20); };
 
   return (
     <Seite
+      breit
       icon={ShieldCheck}
       titel="Freigaben"
       unterzeile="Aktionen, die Lukas nur mit deiner ausdrücklichen Zustimmung ausführen darf."
@@ -111,10 +128,20 @@ export default function Approvals() {
         </button>
       }
     >
+      <div className="workspace-stats" aria-label="Freigaben im Überblick">
+        <div className="workspace-stat"><Clock /><div><strong>{(loading || error) && !rows.length ? "–" : pending.length}</strong><span>Warten auf dich</span></div></div>
+        <div className="workspace-stat"><CheckCheck /><div><strong>{(loading || error) && !rows.length ? "–" : rows.filter(r => r.status === "allowed" || r.status === "used").length}</strong><span>Freigegeben</span></div></div>
+        <div className="workspace-stat"><History /><div><strong>{(loading || error) && !rows.length ? "–" : rest.length}</strong><span>Im Verlauf</span></div></div>
+      </div>
+      <div className="workspace-filters" aria-label="Freigaben filtern">
+        {([{ key: "offen", label: "Offen", count: pending.length }, { key: "verlauf", label: "Verlauf", count: rest.length }, { key: "alle", label: "Alle", count: rows.length }] as const).map(item => <button key={item.key} type="button" aria-pressed={filter === item.key} onClick={() => changeFilter(item.key)}>{item.label}<span>{item.count}</span></button>)}
+        <label className="workspace-search"><Search size={17} /><input type="search" aria-label="Freigaben suchen" placeholder="Aktion oder Inhalt suchen" value={suche} onChange={e => { setSuche(e.target.value); setLimit(20); }} /></label>
+      </div>
+      {decisionError && <Fehler text={decisionError} />}
       {loading && rows.length === 0 && <Laedt was="Freigaben werden geladen…" />}
       {error && <Fehler text={`Die Freigaben liessen sich nicht laden: ${error}`} />}
 
-      {pending.length === 0 && !loading && !error && (
+      {pending.length === 0 && filter === "offen" && !suche && !loading && !error && (
         <Leer
           icon={ShieldCheck}
           titel="Nichts offen"
@@ -122,8 +149,8 @@ export default function Approvals() {
         />
       )}
 
-      <div className="space-y-4">
-        {pending.map((r, idx) => (
+      <div className="approval-queue">
+        {shownPending.map((r, idx) => (
           <div key={r.id} data-testid={`approval-${r.id}`}>
             {/*
               Die offenen Freigaben tragen als Einzige einen farbigen Rand —
@@ -156,9 +183,10 @@ export default function Approvals() {
                 {r.argumentsPreview}
               </pre>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="approval-actions mt-4">
                 <button
                   type="button"
+                  disabled={busy !== null}
                   onClick={() => decide(r.id, "allow")}
                   className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.03]"
                 >
@@ -169,7 +197,8 @@ export default function Approvals() {
                 {r.riskTier !== "R3" && (
                   <button
                     type="button"
-                    onClick={() => decide(r.id, "allow-auftrag")}
+                    disabled={busy !== null}
+                  onClick={() => decide(r.id, "allow-auftrag")}
                     title="Gilt für dieses Werkzeug in dieser Unterhaltung — 30 Minuten, höchstens 25 Aufrufe"
                     className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-4 py-2 text-sm transition-colors hover:bg-white/[0.12]"
                   >
@@ -178,6 +207,7 @@ export default function Approvals() {
                 )}
                 <button
                   type="button"
+                  disabled={busy !== null}
                   onClick={() => decide(r.id, "deny")}
                   className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-300 transition-colors hover:bg-destructive/20"
                 >
@@ -185,7 +215,7 @@ export default function Approvals() {
                 </button>
               </div>
 
-              <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              <details className="approval-details"><summary>Geltungsbereich der Freigabe</summary><p className="mt-2 leading-relaxed">
                 <strong className="font-medium text-foreground/80">Erlauben</strong> gilt nur für
                 genau diese Argumente und nur einmal — ändert Lukas ein Zeichen, braucht es eine
                 neue Freigabe.{" "}
@@ -197,42 +227,25 @@ export default function Approvals() {
                     bestätigen willst.
                   </>
                 )}
-              </p>
+              </p></details>
             </Karte>
           </div>
         ))}
       </div>
 
-      {rest.length > 0 && (
-        <div className="mt-9">
-          <h2 className="px-1 text-[11px] tracking-wide text-muted-foreground">Verlauf</h2>
-          <div className="mt-2.5 overflow-hidden rounded-3xl bg-white/[0.03]">
-            {rest.map((r, idx) => (
-              <div
-                key={r.id}
-                className={`flex items-center justify-between gap-3 px-4 py-3 text-sm ${
-                  idx > 0 ? "border-t border-white/[0.04]" : ""
-                }`}
-              >
-                <span className="truncate font-mono text-[13px]">{r.tool}</span>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Chip ton={TIER_TON[r.riskTier as keyof typeof TIER_TON] ?? "neutral"}>
-                    {TIER_WORT[r.riskTier] ?? r.riskTier}
-                  </Chip>
-                  {(() => {
-                    const stand = r.expired && r.status === "pending" ? "expired" : r.status;
-                    return (
-                      <Chip ton={STATUS_TON[stand as keyof typeof STATUS_TON] ?? "neutral"}>
-                        {stand === "used" ? "benutzt" : freigabe(stand)}
-                      </Chip>
-                    );
-                  })()}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {!loading && !error && (suche || filter !== "offen") && shownPending.length + shownRest.length === 0 && <Leer icon={Search} titel="Keine passenden Freigaben" hinweis="Ändere die Suche oder den ausgewählten Bereich." />}
+      {shownRest.length > 0 && <section>
+        <div className="workspace-subhead"><h2>Entscheidungsverlauf</h2><p>{shownRest.length} Einträge</p></div>
+        <div className="approval-history">{shownRest.slice(0, limit).map(r => {
+          const stand = r.expired && r.status === "pending" ? "expired" : r.status;
+          return <div key={r.id} className="approval-history-row">
+            <div><span className="font-mono text-[13px] break-all">{r.tool}</span><time dateTime={r.decidedAt ?? r.createdAt}>{new Date(r.decidedAt ?? r.createdAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</time></div>
+            <div className="flex flex-wrap gap-2"><Chip ton={TIER_TON[r.riskTier as keyof typeof TIER_TON] ?? "neutral"}>{TIER_WORT[r.riskTier] ?? r.riskTier}</Chip><Chip ton={STATUS_TON[stand]}>{stand === "used" ? "benutzt" : freigabe(stand)}</Chip></div>
+          </div>;
+        })}</div>
+        {shownRest.length > limit && <button type="button" className="mt-4 min-h-11 w-full rounded-xl bg-white/5 text-sm" onClick={() => setLimit(n => n + 20)}>Weitere Entscheidungen anzeigen</button>}
+      </section>}
+
     </Seite>
   );
 }

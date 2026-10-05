@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Plug, RefreshCw, Plus, Trash2, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import { Plug, RefreshCw, Plus, Trash2, ExternalLink, ChevronDown, ChevronRight, Search, CircleCheck, Wrench, AlertCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Seite, Leer, Laedt, Fehler } from "@/components/seite";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -23,10 +24,10 @@ type McpServer = {
 };
 
 const STATUS: Record<McpServer["status"], { label: string; cls: string }> = {
-  new: { label: "NICHT VERBUNDEN", cls: "bg-secondary text-muted-foreground" },
-  awaiting_auth: { label: "WARTET AUF ANMELDUNG", cls: "bg-amber-500/15 text-amber-300" },
-  connected: { label: "VERBUNDEN", cls: "bg-emerald-500/15 text-emerald-300" },
-  error: { label: "FEHLER", cls: "bg-red-500/15 text-red-300" },
+  new: { label: "Nicht verbunden", cls: "bg-secondary text-muted-foreground" },
+  awaiting_auth: { label: "Anmeldung nötig", cls: "bg-amber-500/15 text-amber-300" },
+  connected: { label: "Verbunden", cls: "bg-emerald-500/15 text-emerald-300" },
+  error: { label: "Fehler", cls: "bg-red-500/15 text-red-300" },
 };
 
 const RISK_HINT: Record<McpServer["riskTier"], string> = {
@@ -113,9 +114,10 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
   const s = STATUS[server.status];
 
   return (
-    <div className="card-soft rise space-y-3 rounded-3xl p-5" data-testid={`mcp-${server.id}`}>
+    <div className="connection-card card-soft rise space-y-3 rounded-3xl p-5" data-status={server.status} data-testid={`mcp-${server.id}`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
+        <span className="connection-avatar" aria-hidden="true">{server.name.slice(0, 1).toLocaleUpperCase("de")}</span>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{server.name}</span>
             <span className={`text-[11px] px-1.5 py-0.5 rounded ${s.cls}`}>{s.label}</span>
@@ -132,7 +134,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
             <ExternalLink className="w-4 h-4" />
             {server.authorized ? "Neu verbinden" : "Verbinden"}
           </Button>
-          <Button size="sm" variant="outline" disabled={busy} onClick={remove}>
+          <Button size="sm" variant="outline" aria-label={`${server.name} entfernen`} disabled={busy} onClick={remove}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -148,6 +150,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
       {server.tools.length > 0 && (
         <div>
           <button
+            type="button" aria-expanded={showTools}
             onClick={() => setShowTools((v) => !v)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
@@ -155,7 +158,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
             {proposalSelection().length} von {server.tools.length} Werkzeugen aktiv
           </button>
           {showTools && (
-            <ul className="mt-2 space-y-1">
+            <ul className="connection-tools mt-2 space-y-1">
               {server.tools.map((t) => {
                 const an = proposalSelection().includes(t.name);
                 return (
@@ -169,7 +172,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
                         className="mt-0.5 shrink-0"
                       />
                       <span className="min-w-0">
-                        <span className={`font-mono ${an ? "" : "text-muted-foreground"}`}>{t.name}</span>
+                        <span className={`break-all font-mono ${an ? "" : "text-muted-foreground"}`}>{t.name}</span>
                         {t.description && (
                           <p className="text-muted-foreground mt-0.5 break-words">{t.description}</p>
                         )}
@@ -183,6 +186,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
         </div>
       )}
 
+      <details className="connection-settings"><summary>Zugriff & Einstellungen</summary>
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <label className="text-xs text-muted-foreground">
           Freigabe:{" "}
@@ -207,7 +211,8 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
           aktiv
         </label>
       </div>
-      <p className="text-[11px] text-muted-foreground">{RISK_HINT[server.riskTier]}</p>
+      <p className="mt-3 text-[11px] text-muted-foreground">{RISK_HINT[server.riskTier]}</p>
+      </details>
     </div>
   );
 }
@@ -220,6 +225,9 @@ export default function Mcp() {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"alle" | "aktiv" | "pruefen">("alle");
 
   const load = useCallback(async () => {
     try {
@@ -253,6 +261,7 @@ export default function Mcp() {
       await api("", { method: "POST", body: JSON.stringify({ name: name.trim(), url: url.trim() }) });
       setName("");
       setUrl("");
+      setOpen(false);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
@@ -261,12 +270,17 @@ export default function Mcp() {
     }
   };
 
+  const connected = servers.filter(s => s.status === "connected" && s.enabled);
+  const needsAttention = servers.filter(s => s.status === "error" || s.status === "awaiting_auth");
+  const visible = servers.filter(s => `${s.name} ${s.url}`.toLocaleLowerCase("de").includes(search.trim().toLocaleLowerCase("de")) && (filter === "alle" || (filter === "aktiv" ? s.status === "connected" && s.enabled : s.status === "error" || s.status === "awaiting_auth")));
+
   return (
     <Seite
+      breit
       icon={Plug}
-      titel="MCP"
-      unterzeile="Fremde Werkzeuge, die Lukas mitbenutzen darf."
-      aktionen={
+      titel="Verbindungen"
+      unterzeile="Deine Dienste. Lukas’ Werkzeuge. Du behältst die Kontrolle."
+      aktionen={<>
         <button
           type="button"
           onClick={load}
@@ -274,18 +288,31 @@ export default function Mcp() {
         >
           <RefreshCw className="h-4 w-4" /> Aktualisieren
         </button>
-      }
+        <Button onClick={() => setOpen(true)} className="gap-2"><Plus size={16} /> Verbindung hinzufügen</Button>
+      </>}
     >
       <div className="space-y-5">
+        <div className="workspace-stats" aria-label="Verbindungsübersicht">
+          <div className="workspace-stat"><CircleCheck /><div><strong>{(loading || error) && !servers.length ? "–" : connected.length}</strong><span>Aktive Dienste</span></div></div>
+          <div className="workspace-stat"><Wrench /><div><strong>{(loading || error) && !servers.length ? "–" : connected.reduce((sum, server) => sum + (server.selectedTools.length ? server.selectedTools.filter(name => server.tools.some(t => t.name === name)).length : Math.min(12, server.tools.length)), 0)}</strong><span>Aktive Werkzeuge</span></div></div>
+          <div className="workspace-stat"><AlertCircle /><div><strong>{(loading || error) && !servers.length ? "–" : needsAttention.length}</strong><span>Bitte prüfen</span></div></div>
+        </div>
+        <div className="workspace-filters" aria-label="Verbindungen filtern">
+          {([{ key: "alle", label: "Alle Dienste" }, { key: "aktiv", label: "Aktiv" }, { key: "pruefen", label: "Prüfen" }] as const).map(f => <button type="button" key={f.key} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</button>)}
+          <label className="workspace-search"><Search size={17} /><input type="search" aria-label="Verbindungen suchen" placeholder="Dienst suchen" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-h-[85dvh] overflow-y-auto rounded-2xl">
+            <DialogHeader><DialogTitle>Verbindung hinzufügen</DialogTitle><DialogDescription>Verbinde einen Dienst über seine MCP-Adresse.</DialogDescription></DialogHeader>
         <div className="card-soft space-y-3 rounded-3xl p-5">
-          <h2 className="font-medium">Server hinzufügen</h2>
-          <div className="flex flex-col gap-2 sm:flex-row">
+
+          <div className="flex flex-col gap-3">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Name, z.B. Kalender"
               aria-label="Name des Servers"
-              className="h-11 flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              className="h-11 min-w-0 w-full flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
               data-testid="input-mcp-name"
             />
             <input
@@ -293,7 +320,7 @@ export default function Mcp() {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://…/mcp"
               aria-label="Adresse des Servers"
-              className="h-11 flex-[2] rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              className="h-11 min-w-0 w-full flex-[2] rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
               data-testid="input-mcp-url"
             />
             <button
@@ -306,8 +333,7 @@ export default function Mcp() {
             </button>
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Nach dem Anlegen auf „Verbinden“ — du wirst zum Anbieter geschickt, meldest dich dort
-            an, und landest wieder hier. Danach kennt Lukas dessen Werkzeuge.
+            Lege den Dienst an und wähle anschließend „Verbinden“. Wenn nötig, meldest du dich beim Anbieter an und kehrst danach hierher zurück.
           </p>
           {callback && (
             <p className="text-[11px] break-all text-muted-foreground">
@@ -317,20 +343,23 @@ export default function Mcp() {
           )}
         </div>
 
+            {error && <Fehler text={error} />}
+          </DialogContent>
+        </Dialog>
+
         {error && <Fehler text={error} />}
         {loading && servers.length === 0 && <Laedt />}
 
-        {!loading && servers.length === 0 && (
+        {!loading && !error && servers.length === 0 && (
           <Leer
             icon={Plug}
-            titel="Noch kein MCP-Server eingetragen"
+            titel="Dein Netzwerk beginnt hier"
             hinweis="Über MCP kann Lukas Werkzeuge fremder Dienste mitbenutzen — einen Kalender etwa, oder eine Ablage."
           />
         )}
 
-        {servers.map((s) => (
-          <ServerCard key={s.id} server={s} onChange={load} />
-        ))}
+        {!loading && !error && servers.length > 0 && visible.length === 0 && <Leer icon={Search} titel="Keine passenden Dienste" hinweis="Ändere die Suche oder wähle einen anderen Filter." />}
+        <div className="connection-grid">{visible.map((s) => <ServerCard key={s.id} server={s} onChange={load} />)}</div>
       </div>
     </Seite>
   );

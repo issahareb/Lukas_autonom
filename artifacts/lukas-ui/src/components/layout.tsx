@@ -3,63 +3,25 @@ import { Link, useLocation } from "wouter";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { Fehlergrenze } from "@/components/fehlergrenze";
-import {
-  BarChart3,
-  KeyRound,
-  Brain,
-  Target,
-  BookOpen,
-  MessageSquare,
-  Film,
-  LogOut,
-  AlertTriangle,
-  ShieldCheck,
-  Lightbulb,
-  Plug,
-  Inbox,
-  Network,
-  X,
-  Phone,
-  House,
-  Grid2X2,
-  ArrowUpRight,
-} from "lucide-react";
+import { LogOut, X, Grid2X2, ArrowUpRight, Search, ChevronRight } from "lucide-react";
+import { navigation, navigationGroups, mobileNavigation } from "@/lib/navigation";
 import "./app-shell.css";
-
-const navigation = [
-  { href: "/", label: "Heute", icon: House },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/gehirn", label: "Gehirn", icon: Network },
-  { href: "/memory", label: "Gedächtnis", icon: Brain },
-  { href: "/goals", label: "Ziele", icon: Target },
-  { href: "/diary", label: "Tagebuch", icon: BookOpen },
-  { href: "/studio", label: "Studio", icon: Film },
-  { href: "/meldungen", label: "Meldungen", icon: Inbox },
-  { href: "/proposals", label: "Vorschläge", icon: Lightbulb },
-  { href: "/approvals", label: "Freigaben", icon: ShieldCheck },
-  { href: "/mcp", label: "Verbindungen", icon: Plug },
-  { href: "/telefon", label: "Telefon", icon: Phone },
-  { href: "/kennzahlen", label: "Kennzahlen", icon: BarChart3 },
-  { href: "/zugaenge", label: "Zugänge", icon: KeyRound },
-  { href: "/diagnostics", label: "Diagnose", icon: AlertTriangle },
-];
-const navigationGroups = [
-  { label: "Arbeitsraum", paths: ["/", "/chat", "/goals", "/studio"] },
-  { label: "Wissen", paths: ["/gehirn", "/memory", "/diary"] },
-  { label: "Entscheidungen", paths: ["/meldungen", "/proposals", "/approvals"] },
-  { label: "System", paths: ["/mcp", "/telefon", "/kennzahlen", "/zugaenge", "/diagnostics"] },
-];
+import "./workspace.css";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: health, isError: healthError } = useHealthCheck();
   const [mehr, setMehr] = useState(false);
+  const [suche, setSuche] = useState("");
   const shell = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null);
-  const title = navigation.find((n) => n.href === location)?.label ?? "Lukas";
+  const current = navigation.find((n) => n.href === location);
+  const title = current?.label ?? "Lukas";
+  const shown = navigation.filter(n => n.label.toLocaleLowerCase("de").includes(suche.toLocaleLowerCase("de")));
   const online = !healthError && health?.status === "ok";
   useEffect(() => {
     setMehr(false);
+    setSuche("");
     scroll.current?.scrollTo({ top: 0 });
   }, [location]);
   useEffect(() => {
@@ -105,19 +67,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </span>
   );
   return (
-    <div ref={shell} className="app-shell">
+    <div ref={shell} className="app-shell" data-tone={current?.tone ?? "mint"} data-page={location}>
       <aside className="app-sidebar" aria-label="Desktop-Navigation">
         <Link href="/" className="app-brand">
           <span className="app-monogram">L</span>
           <span>
-            Lukas<small>Dein persönlicher Assistent</small>
+            LUKAS<small>Dein persönlicher Arbeitsraum</small>
           </span>
         </Link>
         <nav aria-label="Bereiche">
           {navigationGroups.map((group, index) => (
-            <section className="app-nav-group" key={group.label} aria-labelledby={"app-nav-group-" + index}>
-              <h2 id={"app-nav-group-" + index} className="app-nav-heading">{group.label}</h2>
-              {navigation.filter((n) => group.paths.includes(n.href)).map((n) => (
+            <section className="app-nav-group" key={group} aria-labelledby={"app-nav-group-" + index}>
+              <h2 id={"app-nav-group-" + index} className="app-nav-heading">{group}</h2>
+              {navigation.filter((n) => n.group === group).map((n) => (
                 <Link key={n.href} href={n.href} aria-current={location === n.href ? "page" : undefined} className="app-sidebar-link">
                   <n.icon size={18} aria-hidden="true" />
                   {n.label}
@@ -141,14 +103,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </Link>
         {status}
       </header>
-      <main className="app-main">
+      <main className="app-main" id="arbeitsbereich">
+        <div className="app-topbar">
+          <span className="app-breadcrumb">Lukas <ChevronRight size={13} /> {current?.group} <ChevronRight size={13} /> <strong>{title}</strong></span>
+          <button type="button" className="app-jump" onClick={() => setMehr(true)}><Search size={15} /> Bereich wechseln <Grid2X2 size={14} /></button>
+        </div>
         <div className="app-scroll" ref={scroll}>
           <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
         </div>
       </main>
       <Dialog.Root open={mehr} onOpenChange={setMehr}>
         <nav className="app-tabbar" aria-label="Hauptnavigation">
-          {navigation.slice(0, 3).map((n) => (
+          {navigation.filter(n => mobileNavigation.includes(n.href)).map((n) => (
             <Link
               key={n.href}
               href={n.href}
@@ -164,7 +130,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               className={
-                !navigation.slice(0, 3).some((n) => n.href === location)
+                !navigation.filter(n => mobileNavigation.includes(n.href)).some((n) => n.href === location)
                   ? "is-current"
                   : ""
               }
@@ -193,19 +159,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <X size={20} />
               </Dialog.Close>
             </div>
-            <nav className="app-sheet-grid" aria-label="Weitere Bereiche">
-              {navigation.slice(3).map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  onClick={() => setMehr(false)}
-                  aria-current={location === n.href ? "page" : undefined}
-                >
-                  <n.icon size={20} aria-hidden="true" />
-                  <span>{n.label}</span>
-                  <ArrowUpRight size={14} aria-hidden="true" />
-                </Link>
-              ))}
+            <label className="workspace-search app-menu-search"><Search size={18} /><input type="search" aria-label="Bereiche suchen" placeholder="Wohin möchtest du?" value={suche} onChange={e => setSuche(e.target.value)} /></label>
+            <nav className="app-menu-groups" aria-label="Weitere Bereiche">
+              {navigationGroups.map(group => {
+                const entries = shown.filter(n => n.group === group);
+                return entries.length > 0 && <section key={group}>
+                  <h3>{group}</h3>
+                  <div className="app-sheet-grid">{entries.map(n => <Link key={n.href} href={n.href} onClick={() => setMehr(false)} aria-current={location === n.href ? "page" : undefined} data-tone={n.tone}>
+                    <n.icon size={20} aria-hidden="true" /><span>{n.label}</span><ArrowUpRight size={14} aria-hidden="true" />
+                  </Link>)}</div>
+                </section>;
+              })}
+              {shown.length === 0 && <p className="workspace-muted">Kein Bereich passt zu deiner Suche.</p>}
             </nav>
             <button type="button" className="app-sheet-logout" onClick={logout}>
               <LogOut size={17} aria-hidden="true" />

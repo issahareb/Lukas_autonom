@@ -133,6 +133,7 @@ describe("Freigaben", () => {
     mitFreigaben([{ ...offen, expired: true }]);
     render(<Approvals />);
 
+    await userEvent.click(await screen.findByRole("button", { name: /Verlauf/ }));
     await screen.findByText("email_send");
     expect(screen.queryByRole("button", { name: /Erlauben/ })).not.toBeInTheDocument();
     expect(screen.getByText("abgelaufen")).toBeInTheDocument();
@@ -149,4 +150,29 @@ describe("Freigaben", () => {
     render(<Approvals />);
     expect(await screen.findByText(/liessen sich nicht laden/)).toBeInTheDocument();
   });
+});
+
+it("filtert Verlauf und Suchtext ohne offene Aktionen versehentlich freizugeben", async () => {
+  const rufe = mitFreigaben([offen, { ...offen, id: 43, tool: "file_read", status: "used" }]);
+  render(<Approvals />);
+  await screen.findByText("email_send");
+  expect(screen.queryByText("file_read")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /Verlauf/ }));
+  expect(screen.getByText("file_read")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Erlauben/ })).not.toBeInTheDocument();
+  await userEvent.type(screen.getByRole("searchbox"), "unbekannt");
+  expect(screen.getByText("Keine passenden Freigaben")).toBeInTheDocument();
+  expect(rufe.some(r => r.init?.method === "POST")).toBe(false);
+});
+
+it("zeigt eine abgelehnte Serverantwort statt eine erfolgreiche Entscheidung vorzutäuschen", async () => {
+  vi.stubGlobal("fetch", (_url: string, init?: RequestInit) => Promise.resolve(new Response(
+    JSON.stringify(init?.method === "POST" ? { error: "expired" } : [offen]),
+    { status: init?.method === "POST" ? 409 : 200, headers: { "content-type": "application/json" } },
+  )));
+  render(<Approvals />);
+  await screen.findByText("email_send");
+  await userEvent.click(screen.getByRole("button", { name: /Erlauben/ }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Entscheidung nicht gespeichert");
+  expect(screen.getByText("email_send")).toBeInTheDocument();
 });

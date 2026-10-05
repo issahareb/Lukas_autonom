@@ -646,7 +646,7 @@ export default function Telefon() {
 
   const wechsel = (value: string) => {
     setBereich(value); setSuche(""); setSichtbar(8);
-    navigation.current?.closest(".overflow-y-auto")?.scrollTo?.({ top: 0 });
+    navigation.current?.closest(".app-scroll")?.scrollTo?.({ top: 0 });
   };
   const kontakte = daten?.nummern ?? [];
   const nameFuer = (a: Anruf) => kontakte.find(n => n.nummer === a.nummer)?.name || zeigeNummer(a.nummer);
@@ -676,8 +676,12 @@ export default function Telefon() {
   const mehr = (gesamt: number) => gesamt > sichtbar && <Button variant="outline" className="h-11 w-full" onClick={() => setSichtbar(n => n + 8)}>Weitere anzeigen · {gesamt - sichtbar}</Button>;
   const leer = (text: string) => <p className="rounded-2xl bg-secondary/30 px-5 py-8 text-center text-sm text-muted-foreground">{text}</p>;
 
-  return <Seite icon={Phone} titel="Telefon" unterzeile="Kontakte, Gespräche und Aufnahmen."
-    aktionen={<><Button variant="ghost" size="sm" className="h-10 gap-2" onClick={() => setDialog("sms")}><MessageSquare className="size-4" /> SMS</Button><Button variant="ghost" size="sm" className="h-10 gap-2" onClick={() => setDialog("einrichtung")}><Settings2 className="size-4" /> Einrichtung</Button></>}>
+  return <Seite breit icon={Phone} titel="Telefon" unterzeile="Kontakte, Gespräche und Aufnahmen."
+    aktionen={<><Button variant="ghost" size="sm" aria-label="SMS" className="phone-header-action h-10 gap-2" onClick={() => setDialog("sms")}><MessageSquare className="size-4" /><span>SMS</span></Button><Button variant="ghost" size="sm" aria-label="Einrichtung" className="phone-header-action h-10 gap-2" onClick={() => setDialog("einrichtung")}><Settings2 className="size-4" /><span>Einrichtung</span></Button></>}>
+    <section className="phone-summary" aria-label="Telefonübersicht">
+      <div><strong>{!daten ? "Telefonübersicht" : laufend.length ? `${laufend.length} ${laufend.length === 1 ? "Gespräch läuft" : "Gespräche laufen"}` : "Dein direkter Draht"}</strong><p>{daten ? `${kontakte.length} Kontakte · ${aufnahmen.length} fertige Aufnahmen bei den letzten Anrufen` : fehler ? "Stand gerade nicht erreichbar" : "Kontakte und Gespräche werden geladen …"}</p></div>
+      <span className="phone-summary-icon"><Phone size={22} aria-hidden="true" /></span>
+    </section>
     <Tabs value={bereich} onValueChange={wechsel} className="space-y-4">
       <div ref={navigation} className="sticky top-0 z-10 space-y-3 bg-background/95 pb-3 pt-1 backdrop-blur-xl">
         <TabsList aria-label="Telefonbereiche" className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
@@ -695,7 +699,7 @@ export default function Telefon() {
       {daten && (!daten.bereit.webhook || !daten.bereit.anrufen) && <button onClick={() => setDialog("einrichtung")} className="flex w-full items-center gap-2 rounded-xl bg-amber-400/10 p-3 text-left text-sm text-amber-200"><ShieldAlert className="size-4 shrink-0" /> Telefonie noch nicht vollständig eingerichtet <ChevronRight className="ml-auto size-4 shrink-0" /></button>}
       <TabsContent value="kontakte" forceMount hidden={bereich !== "kontakte"} className="space-y-3">
         <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">Deine Kontakte</h2><Button size="sm" className="h-11 gap-1.5" onClick={() => setDialog("kontakt")}><Plus className="size-4" /> Kontakt hinzufügen</Button></div>
-        {kontaktListe.slice(0, sichtbar).map(n => <NummerZeile key={n.id} eintrag={n} onChange={laden} />)}
+        <div className="phone-contact-grid">{kontaktListe.slice(0, sichtbar).map(n => <NummerZeile key={n.id} eintrag={n} onChange={laden} />)}</div>
         {daten && !kontaktListe.length && leer(suche ? "Kein Kontakt passt zu deiner Suche." : "Noch keine Kontakte. Füge deinen ersten Kontakt hinzu.")}
         {mehr(kontaktListe.length)}
       </TabsContent>
@@ -705,7 +709,7 @@ export default function Telefon() {
       </TabsContent>
       <TabsContent value="aufnahmen" forceMount hidden={bereich !== "aufnahmen"} className="space-y-3">
         <h2 className="text-sm font-medium">Gesprächsaufnahmen</h2>
-        {aufnahmeListe.slice(0, sichtbar).map(a => anrufKarte(a, false, true))}
+        <div className="phone-contact-grid">{aufnahmeListe.slice(0, sichtbar).map(a => anrufKarte(a, false, true))}</div>
         {daten && !aufnahmeListe.length && leer(suche ? "Keine Aufnahme passt zu deiner Suche." : "Noch keine fertigen Aufnahmen bei den letzten Anrufen.")}
         {mehr(aufnahmeListe.length)}
       </TabsContent>
