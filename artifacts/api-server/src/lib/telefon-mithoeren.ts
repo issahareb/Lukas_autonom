@@ -110,12 +110,20 @@ export function streamFormat(message: Record<string, any>): Format | null {
 }
 export function streamAudio(message: Record<string, any>, format: Format): Audio | null {
   const m = message.media;
-  const track = m?.track;
+  // Telnyx documents chunk/timestamp as numeric strings and explicitly says
+  // media events may arrive out of order. Validate the envelope, not packet order/size.
+  const rawTrack = m?.track;
+  const track = rawTrack === "inbound_track" ? "inbound" : rawTrack === "outbound_track" ? "outbound" : rawTrack;
   const timestamp = Number(m?.timestamp), chunk = Number(m?.chunk);
+  const payload = m?.payload;
   if ((message.stream_id ?? message.streamSid) !== format.streamId || !["inbound", "outbound"].includes(track) ||
     !Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > 43200000 || !Number.isSafeInteger(chunk) || chunk < 0 ||
-    typeof m?.payload !== "string" || !/^[A-Za-z0-9+/]{4,2732}={0,2}$/.test(m.payload) || m.payload.length % 4 !== 0) return null;
-  return { type: "audio", streamId: format.streamId, track, timestamp, chunk, payload: m.payload };
+    typeof payload !== "string" || payload.length < 4 || payload.length > 12288 || payload.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) return null;
+  // Reject malformed base64 without assuming a fixed Telnyx packet duration.
+  const decoded = Buffer.from(payload, "base64");
+  if (!decoded.length || decoded.length > 8192 || decoded.toString("base64") !== payload) return null;
+  return { type: "audio", streamId: format.streamId, track, timestamp, chunk, payload };
 }
 
 /** The provider socket is ingestion-only and uses a signed, call-bound capability. */
@@ -227,7 +235,12 @@ export function starteTelefonMithoeren(server: Server): () => void {
           if (msg.event === "stop") { beenden(k, "Mithören beendet."); return; }
           if (msg.event === "media") {
             const frame = streamAudio(msg, format);
-            if (!frame) { logger.warn({ callId: k.id, phase: "invalid_media" }, "Telefon-Live-Audioweg"); ws.close(1008, "invalid media"); return; }
+            if (!frame) {
+              // A single malformed/provider-variant frame must not kill the entire
+              // monitor. The stream is authenticated and bounded by maxPayload/rate.
+              logger.warn({ callId: k.id, phase: "invalid_media_dropped" }, "Telefon-Live-Audioweg");
+              return;
+            }
             if (k.frames[frame.track]++ === 0) logger.info({ callId: k.id, phase: "first_audio", track: frame.track }, "Telefon-Live-Audioweg");
             k.lastAudio = Date.now(); senden(k, frame);
           }
