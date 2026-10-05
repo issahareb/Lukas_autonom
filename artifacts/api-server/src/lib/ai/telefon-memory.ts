@@ -68,27 +68,23 @@ function keywords(text: string): string {
 const empty = (): MemoryData => ({ contact: null, history: [], calls: [] });
 const sqlStore: PhoneMemoryStore = {
   async read(number, visibility, query, sessionId) {
-    const result = await pool.query<Contact>({ text: "SELECT id, nummer, name, stufe, aufnahme_zustimmung, aufnahme_bestaetigt_am, created_at FROM lukas_telefon_nummern WHERE nummer=$1 LIMIT 2", values: [number], query_timeout: 2000 });
+    const result = await pool.query<Contact>("SELECT id, nummer, name, stufe, aufnahme_zustimmung, aufnahme_bestaetigt_am, created_at FROM lukas_telefon_nummern WHERE nummer=$1 LIMIT 2", [number]);
     if (result.rows.length !== 1 || result.rows[0].stufe === "gesperrt") return empty();
     const contact = result.rows[0];
     // Never broaden public/private scope when a caller ID happens to match a saved number.
     const stufe = visibility === "private" ? "privat" : "oeffentlich";
     if (visibility === "private" && contact.stufe !== "privat") return empty();
     const terms = keywords(query);
-    const calls = await pool.query<Call>({
-      text: `SELECT created_at, anlass, ergebnis, ziel_status, live_bereit FROM lukas_telefon_anrufe
+    const calls = await pool.query<Call>(`SELECT created_at, anlass, ergebnis, ziel_status, live_bereit FROM lukas_telefon_anrufe
         WHERE nummer=$1 AND stufe=$2 AND created_at >= $3 AND anlass <> ''
         ORDER BY CASE WHEN $4='' THEN false ELSE to_tsvector('german', anlass) @@ to_tsquery('german', $4) END DESC, created_at DESC LIMIT 6`,
-      values: [number, stufe, contact.created_at, terms], query_timeout: 2000,
-    });
+      [number, stufe, contact.created_at, terms]);
     let history: History[] = [];
     if (contact.aufnahme_zustimmung && contact.aufnahme_bestaetigt_am) {
-      const rows = await pool.query<History>({
-        text: `SELECT updated_at, transkript, vollstaendig FROM lukas_telefon_gedaechtnis
+      const rows = await pool.query<History>(`SELECT updated_at, transkript, vollstaendig FROM lukas_telefon_gedaechtnis
           WHERE kontakt_id=$1 AND nummer=$2 AND sichtbarkeit=$3 AND session_id<>$4 AND zustimmung_am=$5
           ORDER BY CASE WHEN $6='' THEN false ELSE to_tsvector('german', transkript) @@ to_tsquery('german', $6) END DESC, updated_at DESC LIMIT 3`,
-        values: [contact.id, number, visibility, sessionId, contact.aufnahme_bestaetigt_am, terms], query_timeout: 2000,
-      });
+        [contact.id, number, visibility, sessionId, contact.aufnahme_bestaetigt_am, terms]);
       history = rows.rows;
     }
     return { contact, history, calls: calls.rows };
@@ -96,8 +92,7 @@ const sqlStore: PhoneMemoryStore = {
   async save(value) {
     const { contact, peer } = value;
     if (!contact.aufnahme_zustimmung || !contact.aufnahme_bestaetigt_am) return false;
-    const result = await pool.query({
-      text: `INSERT INTO lukas_telefon_gedaechtnis
+    const result = await pool.query(`INSERT INTO lukas_telefon_gedaechtnis
         (session_id, kontakt_id, nummer, sichtbarkeit, richtung, transkript, revision, vollstaendig, zustimmung_am)
         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9
         WHERE EXISTS (SELECT 1 FROM lukas_telefon_nummern WHERE id=$2 AND nummer=$3 AND stufe<>'gesperrt'
@@ -107,9 +102,7 @@ const sqlStore: PhoneMemoryStore = {
         WHERE lukas_telefon_gedaechtnis.kontakt_id=EXCLUDED.kontakt_id
           AND lukas_telefon_gedaechtnis.sichtbarkeit=EXCLUDED.sichtbarkeit
           AND lukas_telefon_gedaechtnis.revision<EXCLUDED.revision`,
-      values: [value.sessionId, contact.id, peer.nummer, value.visibility, peer.richtung, value.transcript, value.revision, value.complete, contact.aufnahme_bestaetigt_am],
-      query_timeout: 3000,
-    });
+      [value.sessionId, contact.id, peer.nummer, value.visibility, peer.richtung, value.transcript, value.revision, value.complete, contact.aufnahme_bestaetigt_am]);
     return (result.rowCount ?? 0) > 0;
   },
 };
