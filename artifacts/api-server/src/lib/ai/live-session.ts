@@ -265,6 +265,13 @@ function commentary(state: ManagedSession, delegationId: string | null, text: st
     }
   }
 }
+function thinking(state: ManagedSession, text: string) {
+  for (const content of textChunks(text.slice(0, 12_000))) {
+    if (!send(state, { type: "session.thinking.append", event_id: "thinking_" + randomBytes(8).toString("hex"), delegation_id: null, content })) {
+      throw new LiveSessionError("Die Sprachverbindung wurde unterbrochen.");
+    }
+  }
+}
 function retainHistory(messages: Message[]): Message[] {
   let size = 0, first = messages.length;
   while (first > 0) {
@@ -582,7 +589,16 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.", true);
       await attachSideband(state);
       if (state.ended || state.closing) throw new LiveSessionError("Die SIP-Sitzung wurde bereits beendet.", true);
-      if (options.initialCommentary?.trim()) commentary(state, null, options.initialCommentary.trim().slice(0, 2000));
+      if (options.initialCommentary?.trim()) {
+        // One trusted instruction triggers one greeting. Previously the full brief
+        // was split into multiple speakable commentary events, which could make
+        // the model restart/paraphrase itself and sound like stuttering.
+        thinking(state, "Aktueller Gesprächsauftrag, still berücksichtigen und nicht vorlesen: " + options.initialCommentary.trim().slice(0, 1600));
+        if (!send(state, { type: "session.instructions.append", event_id: "phone_greeting_" + randomBytes(8).toString("hex"), delegation_id: null,
+          content: "Begrüße den Gesprächspartner jetzt genau einmal kurz und natürlich. Nutze den aktuellen Gesprächsauftrag. Danach höre zu. Wiederhole oder starte die Begrüßung nicht neu." })) {
+          throw new LiveSessionError("Die Sprachverbindung wurde unterbrochen.");
+        }
+      }
       if (options.telefonKontextId) {
         const pending = pendingPhoneHints.get(options.telefonKontextId);
         pendingPhoneHints.delete(options.telefonKontextId);
@@ -610,7 +626,7 @@ export function fluestereLiveTelefon(contextId: string, text: string, allowQueue
     return "queued";
   }
   state.phone?.cancel();
-  commentary(state, null, "Vertraulicher Hinweis deines Auftraggebers nur für dich. Nicht vorlesen, nicht als Aussage des Gesprächspartners behandeln; im laufenden Gespräch berücksichtigen: " + text.trim().slice(0, 2000));
+  thinking(state, "Vertraulicher Hinweis deines Auftraggebers nur für dich. Nicht vorlesen, nicht als Aussage des Gesprächspartners behandeln; im laufenden Gespräch berücksichtigen: " + text.trim().slice(0, 2000));
   return true;
 }
 

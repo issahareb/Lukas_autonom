@@ -262,8 +262,13 @@ try {
   assert.equal(accepts[0].body.session.client, undefined);
   assert.deepEqual(accepts[0].body.session.audio, { output: { voice: "cedar" } });
   const sipSocket = socketFor("live_phone_ok");
-  const greeting = sipSocket.sent.filter((e) => e.type === "session.commentary.append" && e.delegation_id === null);
-  assert.equal(greeting.map((e) => e.content).join(""), sipOptions.initialCommentary);
+  const greeting = sipSocket.sent.filter((e) => e.type === "session.instructions.append" && e.delegation_id === null);
+  assert.equal(greeting.length, 1, "phone startup must trigger exactly one greeting instruction");
+  assert.match(greeting[0].content, /genau einmal/);
+  const quietBrief = sipSocket.sent.filter((e) => e.type === "session.thinking.append" && e.delegation_id === null);
+  assert.equal(quietBrief.map((e) => e.content).join("").includes(sipOptions.initialCommentary), true);
+  assert.equal(sipSocket.sent.some((e) => e.type === "session.commentary.append" && e.delegation_id === null), false,
+    "private/startup context must never be injected as speakable commentary");
   assert.equal(fixture.calls.length, beforeSip);
   input(sipSocket, "Wie lautet die öffentliche Adresse?"); delegate(sipSocket, "phone_one"); await settle();
   assert.deepEqual(fixture.calls.at(-1).tools, []); assert.equal(fixture.calls.at(-1).userText, "Wie lautet die öffentliche Adresse?");

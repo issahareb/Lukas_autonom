@@ -73,6 +73,13 @@ export const logger={warn(){},error(){},info(){}};
   ws.send(JSON.stringify(start));assert.equal((await listener.next('format')).codec,'PCMU');
   const audio=track=>({event:'media',stream_id:'stream-one',media:{track,chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}});
   for(const track of ['inbound','outbound']){ws.send(JSON.stringify(audio(track)));assert.equal((await listener.next('audio')).track,track);}
+  // Telnyx may deliver larger packets and out of order; neither may tear down monitoring.
+  const large={event:'media',stream_id:'stream-one',media:{track:'inbound_track',chunk:'9',timestamp:'180',payload:Buffer.alloc(4096,127).toString('base64')}};
+  ws.send(JSON.stringify(large));const largeFrame=await listener.next('audio');assert.equal(largeFrame.track,'inbound');assert.equal(largeFrame.chunk,9);
+  ws.send(JSON.stringify({...audio('outbound'),media:{...audio('outbound').media,chunk:'8',timestamp:'160'}}));
+  assert.equal((await listener.next('audio')).chunk,8);
+  ws.send(JSON.stringify({...audio('inbound'),media:{...audio('inbound').media,chunk:'10',payload:'!!!!'}}));
+  await new Promise(r=>setTimeout(r,30));assert.equal(ws.readyState,WebSocket.OPEN,'one malformed frame must not kill monitoring');
   assert.equal((await fetch(base+path+'-ticket',{method:'POST'})).status,401);
   const ticketResponse=await fetch(base+path+'-ticket',{method:'POST',headers:{Authorization:'Bearer test-owner'}});
   assert.equal(ticketResponse.status,200);
