@@ -7,6 +7,7 @@ import { verbrauchSchreiben } from "../verbrauch-quelle";
 import { sprachModell, sprachStimme } from "./sprach-sitzung";
 
 import { TelefonGespraech } from "./telefon-gespraech";
+import { TELEFON_SPRACHREGELN, telefonStartInput } from "./telefon-sprachprofil";
 
 type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type Visibility = "private" | "public";
@@ -35,6 +36,8 @@ type ManagedSession = {
   socketGeneration: number; lifetime: ReturnType<typeof setTimeout>;
   reconnectTimer?: ReturnType<typeof setTimeout>; reconnectAttempts: number;
   phone?: TelefonGespraech;
+  phoneSpeechObserved?: boolean;
+  phoneGreetingTimer?: ReturnType<typeof setTimeout>;
   ended: boolean; closing?: Promise<void>; expiresAt?: number;
   seenEvents: Set<string>; seenDelegations: Set<string>;
   transcript: Transcript[]; history: Message[]; queue: Work[]; working: boolean;
@@ -113,10 +116,11 @@ function reserve(visibility: Visibility): symbol {
   }
   const token = Symbol("live"); reservations.set(token, visibility); return token;
 }
-function sessionConfig(config: { model: string; voice: string }, browser: boolean) {
+function sessionConfig(config: { model: string; voice: string }, browser: boolean, input: Json[] = []) {
   return {
     model: config.model, audio: { output: { voice: config.voice } },
-    instructions: FRONTEND_INSTRUCTIONS + (!browser ? "\nTelefonat: Wenn das Gespräch fertig ist, verabschiede dich kurz mit Tschüss oder Auf Wiederhören. Danach schweige und warte auf eine mögliche Antwort. Die Telefonsteuerung beendet nach fünf Sekunden ohne Antwort. Bei einer eindeutigen Mailboxansage führe kein Gespräch mit der Aufnahme. Vertrauliche Auftraggeberhinweise aus dem Backend werden still berücksichtigt und nicht vorgelesen." : ""), delegation: { type: "client" }, store: false,
+    ...(!browser && input.length ? { input } : {}),
+    instructions: (browser ? FRONTEND_INSTRUCTIONS : TELEFON_SPRACHREGELN) + (!browser ? "\nTelefonat: Wenn das Gespräch fertig ist, verabschiede dich kurz mit Tschüss oder Auf Wiederhören. Danach schweige und warte auf eine mögliche Antwort. Die Telefonsteuerung beendet nach fünf Sekunden ohne Antwort. Bei einer eindeutigen Mailboxansage führe kein Gespräch mit der Aufnahme. Vertrauliche Auftraggeberhinweise aus dem Backend werden still berücksichtigt und nicht vorgelesen." : ""), delegation: { type: "client" }, store: false,
     ...(browser ? { client: { data_channel: {
       allowed_client_events: ["session.close"],
       allowed_server_events: ["session.started", "session.input_transcript.delta",
@@ -353,6 +357,10 @@ function observe(state: ManagedSession, event: Json) {
     const role = event.type === "session.input_transcript.delta" ? "user" : "assistant";
     // Keep each timestamped fragment intact: a later fragment must never move
     // earlier speech past the delegation cutoff or authorize earlier work.
+    if (state.transport === "sip" && event.delta.trim()) {
+      state.phoneSpeechObserved = true;
+      if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
+    }
     state.phone?.observe(role, event.delta);
     state.transcript.push({ role, text: event.delta, endMs: event.end_ms });
     if (role === "user") state.userCharacters += event.delta.length;
@@ -449,6 +457,7 @@ function finishSession(state: ManagedSession, reason: string) {
   persistUsage(state, reason !== "provider_expiry_after_unconfirmed_close");
   state.phone?.close();
   clearTimeout(state.lifetime);
+  if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
   if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
   state.queue = []; state.transcript = []; state.history = [];
   if (sessions.get(state.id) === state) sessions.delete(state.id);
@@ -581,7 +590,9 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
     try {
       const connection = connectionConfig(), config = liveConfig();
       await apiRequest(connection, "/live/sessions/" + encodeURIComponent(options.sessionId) + "/accept", {
-        session: sessionConfig(config, false),
+        // Startup context is available before the first generated phoneme.
+        // Runtime thinking appends arrive gradually and must not carry the initial brief.
+        session: sessionConfig(config, false, telefonStartInput(options.initialCommentary)),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
       state = startManaged(options.sessionId, { ...options, allowTools: false }, connection, config, "sip");
@@ -589,16 +600,22 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.", true);
       await attachSideband(state);
       if (state.ended || state.closing) throw new LiveSessionError("Die SIP-Sitzung wurde bereits beendet.", true);
-      if (options.initialCommentary?.trim()) {
-        // One trusted instruction triggers one greeting. Previously the full brief
-        // was split into multiple speakable commentary events, which could make
-        // the model restart/paraphrase itself and sound like stuttering.
-        thinking(state, "Aktueller Gesprächsauftrag, still berücksichtigen und nicht vorlesen: " + options.initialCommentary.trim().slice(0, 1600));
-        if (!send(state, { type: "session.instructions.append", event_id: "phone_greeting_" + randomBytes(8).toString("hex"), delegation_id: null,
-          content: "Begrüße den Gesprächspartner jetzt genau einmal kurz und natürlich. Nutze den aktuellen Gesprächsauftrag. Danach höre zu. Wiederhole oder starte die Begrüßung nicht neu." })) {
-          throw new LiveSessionError("Die Sprachverbindung wurde unterbrochen.");
-        }
+      if (options.initialCommentary?.trim() && !state.phoneSpeechObserved) {
+        // Sideband attachment replays recent events. Let that replay arrive before
+        // asking for a greeting, otherwise an already speaking model is interrupted.
+        const phoneState = state;
+        phoneState.phoneGreetingTimer = setTimeout(() => {
+          phoneState.phoneGreetingTimer = undefined;
+          if (phoneState.ended || phoneState.closing || phoneState.phoneSpeechObserved) return;
+          const delivered = send(phoneState, { type: "session.instructions.append",
+            event_id: "phone_greeting_" + randomBytes(8).toString("hex"), delegation_id: null,
+            content: "Begrüße den Gesprächspartner jetzt genau einmal in einem kurzen Satz gemäß dem aktuellen Gesprächsauftrag. Danach höre zu." });
+          logger.info({ sessionId: phoneState.id, phase: "phone_greeting", delivered }, "Telefon-Sprachstart");
+        }, 250);
+        phoneState.phoneGreetingTimer.unref();
       }
+      logger.info({ sessionId: state.id, phase: "phone_ready", startupContext: Boolean(options.initialCommentary?.trim()),
+        speechAlreadyObserved: Boolean(state.phoneSpeechObserved) }, "Telefon-Sprachstart");
       if (options.telefonKontextId) {
         const pending = pendingPhoneHints.get(options.telefonKontextId);
         pendingPhoneHints.delete(options.telefonKontextId);

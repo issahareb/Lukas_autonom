@@ -262,11 +262,18 @@ try {
   assert.equal(accepts[0].body.session.client, undefined);
   assert.deepEqual(accepts[0].body.session.audio, { output: { voice: "cedar" } });
   const sipSocket = socketFor("live_phone_ok");
+  assert.ok(accepts[0].body.session.instructions.includes("Backchannel policy:"));
+  assert.ok(accepts[0].body.session.instructions.includes("Interruption policy:"));
+  assert.ok(!JSON.stringify(accepts[0].body.session).includes("PHONE_PRIVATE_BACKEND"), "private backend context remains private");
+  assert.equal(accepts[0].body.session.input[0].role, "developer");
+  assert.ok(accepts[0].body.session.input[0].content[0].text.includes(sipOptions.initialCommentary), "entire brief is present at accept");
+  assert.equal(sipSocket.sent.length, 0, "no competing context or greeting during attachment replay");
+  fire(250); await settle();
   const greeting = sipSocket.sent.filter((e) => e.type === "session.instructions.append" && e.delegation_id === null);
   assert.equal(greeting.length, 1, "phone startup must trigger exactly one greeting instruction");
   assert.match(greeting[0].content, /genau einmal/);
   const quietBrief = sipSocket.sent.filter((e) => e.type === "session.thinking.append" && e.delegation_id === null);
-  assert.equal(quietBrief.map((e) => e.content).join("").includes(sipOptions.initialCommentary), true);
+  assert.equal(quietBrief.length, 0, "startup context must not be streamed after speech can already begin");
   assert.equal(sipSocket.sent.some((e) => e.type === "session.commentary.append" && e.delegation_id === null), false,
     "private/startup context must never be injected as speakable commentary");
   assert.equal(fixture.calls.length, beforeSip);
@@ -275,6 +282,23 @@ try {
   sipSocket.emit({ type: "session.closed", reason: "peer_disconnected", usage: { seconds: 3 } });
   await assert.rejects(api.acceptLiveSipSession(sipOptions), (error) => error.accepted === true);
   assert.equal(fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept")).length, 1);
+  // A first word arriving during sideband replay must cancel the extra greeting.
+  for (const role of ["user", "assistant"]) {
+    const sessionId = "live_phone_already_" + role;
+    await api.acceptLiveSipSession({ ...sipOptions, sessionId });
+    const active = socketFor(sessionId);
+    active.emit({ type: role === "user" ? "session.input_transcript.delta" : "session.output_transcript.delta",
+      event_id: "first_" + role, delta: "Hallo", start_ms: 0, end_ms: 100 });
+    assert.ok(![...timers.values()].some(timer => timer.milliseconds === 250), "speech cancels pending greeting");
+    assert.equal(active.sent.some(event => event.type === "session.instructions.append"), false);
+    active.emit({ type: "session.closed" });
+  }
+  const longBrief = "Auftrag Anfang " + "ä".repeat(1800) + " AUFTRAG_ENDE";
+  await api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_phone_long_brief", initialCommentary: longBrief });
+  const longAccept = fixture.requests.find(r => r.url.endsWith("/live_phone_long_brief/accept"));
+  assert.ok(longAccept.body.session.input[0].content[0].text.endsWith("AUFTRAG_ENDE"), "do not truncate startup to four streamed chunks");
+  socketFor("live_phone_long_brief").emit({ type: "session.closed" });
+  assert.ok(![...timers.values()].some(timer => timer.milliseconds === 250), "close cancels pending greeting");
   fixture.failSockets = 1;
   await assert.rejects(api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_phone_attach_failure" }), (error) => error.accepted === true);
   assert.ok(fixture.requests.some((r) => r.url.endsWith("/live_phone_attach_failure/hangup")));
