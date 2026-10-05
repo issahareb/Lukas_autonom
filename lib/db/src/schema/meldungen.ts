@@ -35,6 +35,8 @@ export const meldungen = pgTable("lukas_meldungen", {
   gelesen: boolean("gelesen").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   erledigtAt: timestamp("erledigt_at", { withTimezone: true }),
+  /** Explicit confirmation by the owner; age alone never resolves an issue. */
+  geprueftAt: timestamp("geprueft_at", { withTimezone: true }),
 });
 
 export const insertMeldungSchema = createInsertSchema(meldungen).omit({

@@ -150,7 +150,7 @@ export type DebugLogRow = typeof debugLogTable.$inferSelect;
  * beantworten, und ein Tagesbudget schon gar nicht: es haette bei jedem
  * Deployment wieder bei null angefangen.
  *
- * Eine Zeile je Tag und Modell. Klein genug, dass niemand sie aufraeumen
+ * Eine Zeile je Tag, Anbieter, Modell und Quelle. Klein genug, dass niemand sie aufraeumen
  * muss, und genau die Koernung, in der man spaeter sieht, WELCHES Modell
  * teuer war.
  */
@@ -162,6 +162,7 @@ export const tageskostenTable = pgTable(
     tag: text("tag").notNull(),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
+    quelle: text("quelle").notNull().default("unzugeordnet"),
     aufrufe: integer("aufrufe").notNull().default(0),
     rein: integer("rein").notNull().default(0),
     raus: integer("raus").notNull().default(0),
@@ -169,7 +170,7 @@ export const tageskostenTable = pgTable(
     inCache: integer("in_cache").notNull().default(0),
     aktualisiert: timestamp("aktualisiert").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("lukas_tageskosten_tag_modell_idx").on(t.tag, t.provider, t.model)],
+  (t) => [uniqueIndex("lukas_tageskosten_tag_modell_quelle_idx").on(t.tag, t.provider, t.model, t.quelle)],
 );
 
 export type Tageskosten = typeof tageskostenTable.$inferSelect;

@@ -3,6 +3,7 @@ import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { WebSocket } from "undici";
 import type OpenAI from "openai";
 import { logger } from "../logger";
+import { verbrauchSchreiben } from "../verbrauch-quelle";
 import { sprachModell, sprachStimme } from "./sprach-sitzung";
 
 import { TelefonGespraech } from "./telefon-gespraech";
@@ -37,7 +38,7 @@ type ManagedSession = {
   ended: boolean; closing?: Promise<void>; expiresAt?: number;
   seenEvents: Set<string>; seenDelegations: Set<string>;
   transcript: Transcript[]; history: Message[]; queue: Work[]; working: boolean;
-  userCharacters: number; delegatedCharacters: number; usageSeconds: number; createdAt: number;
+  userCharacters: number; delegatedCharacters: number; usageSeconds: number; usageReported?: boolean; createdAt: number;
 };
 const setups = new Set<Promise<unknown>>();
 function trackSetup<T>(job: Promise<T>): Promise<T> {
@@ -237,6 +238,7 @@ function startManaged(
     void terminateSession(state, reason).then(() => options.onTelefonEnd?.(reason)).catch(() => {});
   });
   sessions.set(id, state);
+  persistUsage(state);
   state.lifetime = setTimeout(() => {
     void terminateSession(state, "duration_limit").catch(() => {});
   }, (options.visibility === "public" ? 180 : 1800) * 1000);
@@ -284,6 +286,7 @@ async function drainWork(state: ManagedSession) {
         const { runLukasTurn } = await import("../lukas-brain");
         state.controller.signal.throwIfAborted();
         const answer = await runLukasTurn({
+          quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
           history: [...state.history], userText: work.userText,
           systemPromptOverride: state.options.instructions + (state.options.allowTools ? "" :
             "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung."),
@@ -306,6 +309,15 @@ async function drainWork(state: ManagedSession) {
   } finally { state.working = false; }
 }
 
+function persistUsage(state: ManagedSession, endeBestaetigt = false) {
+  const input = { id: state.id, model: state.model,
+    quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
+    sekunden: state.usageReported ? state.usageSeconds : null,
+    gestartetAt: new Date(state.createdAt), beendet: endeBestaetigt };
+  verbrauchSchreiben(import("../live-verbrauch").then(m => m.speichereLiveVerbrauch(input))
+    .catch(err => logger.warn({ err }, "Live-Verbrauch nicht gespeichert")));
+}
+
 function observe(state: ManagedSession, event: Json) {
   if (state.ended) return;
   if (typeof event.event_id === "string") {
@@ -316,8 +328,10 @@ function observe(state: ManagedSession, event: Json) {
   const snapshot = object(event.session);
   if (typeof snapshot?.expires_at === "number" && Number.isFinite(snapshot.expires_at)) state.expiresAt = snapshot.expires_at * 1000;
   const usage = object(event.usage);
-  if (typeof usage?.seconds === "number" && Number.isFinite(usage.seconds)) {
+  if (typeof usage?.seconds === "number" && Number.isFinite(usage.seconds) && usage.seconds >= 0) {
     state.usageSeconds = Math.max(state.usageSeconds, usage.seconds);
+    state.usageReported = true;
+    persistUsage(state);
   }
   if (event.type === "session.closed") { finishSession(state, "provider_closed"); return; }
   if (state.closing || state.controller.signal.aborted) return;
@@ -425,6 +439,7 @@ function scheduleReconnect(state: ManagedSession) {
 function finishSession(state: ManagedSession, reason: string) {
   if (state.ended) return;
   state.ended = true; state.controller.abort();
+  persistUsage(state, reason !== "provider_expiry_after_unconfirmed_close");
   state.phone?.close();
   clearTimeout(state.lifetime);
   if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
@@ -453,7 +468,10 @@ async function closeWebRtc(state: ManagedSession): Promise<boolean> {
       };
       const onMessage = (event: { data: unknown }) => {
         if (typeof event.data !== "string") return;
-        try { if (JSON.parse(event.data)?.type === "session.closed") finish(true); } catch {}
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed?.type === "session.closed") { observe(state, parsed); finish(true); }
+        } catch {}
       };
       const onOpen = () => {
         try { socket.send(JSON.stringify({ type: "session.close" })); } catch { finish(false); }

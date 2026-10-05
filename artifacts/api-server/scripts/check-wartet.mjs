@@ -54,6 +54,7 @@ export const db = {
     const bau = (bed, ordnung) => ({
       where: (b) => bau(b, ordnung),
       orderBy: (...o) => bau(bed, o),
+      then: (r, e) => bau(bed, ordnung).limit(Infinity).then(r, e),
       limit: async (n) => {
         let r = alle().filter((z) => (bed ? bed(z) : true));
         if (ordnung?.length) r = [...r].sort(vergleiche(ordnung));
@@ -169,6 +170,18 @@ globalThis.__freigaben = Array.from({ length: 9 }, (_, i) => freigabe(i + 1, 30)
   const w = await wartendes(JETZT);
   pruefe("gezeigt werden höchstens fünf", w.freigaben.length === 5);
   pruefe("die Gesamtzahl nennt alle neun", w.gesamt.freigaben === 9);
+}
+
+globalThis.__meldungen = Array.from({ length: 9 }, (_, i) => meldung(i + 1, false, i));
+{
+  const w = await wartendes(JETZT);
+  pruefe("auch Meldungen werden ehrlich gezählt", w.meldungen.length === 5 && w.gesamt.meldungen === 9);
+}
+globalThis.__meldungen = [meldung(1, true, 20_000), meldung(2, false, 5)];
+{
+  const w = await wartendes(JETZT);
+  pruefe("aktuelle Meldung vor lange ungeprüfter", w.meldungen[0].id === 2);
+  pruefe("alte Meldung bleibt offen und als ungeprüft erkennbar", w.meldungen[1].veraltet === true && w.gesamt.meldungen === 2);
 }
 
 // ── 6. Nichts offen ist ein gültiges Ergebnis, kein Fehler ───────────────

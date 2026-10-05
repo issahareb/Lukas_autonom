@@ -258,6 +258,7 @@ export async function runAutonomyCycle(): Promise<void> {
   const episode = await openEpisode("autonomer_lauf");
   try {
     const result = await runLukasTurn({
+      quelle: "autonomie",
       history: [{ role: "user", content: auftrag }],
       userText: auftrag,
       // Ziele und Tagebuch stehen oben im Auftrag — nicht noch einmal.

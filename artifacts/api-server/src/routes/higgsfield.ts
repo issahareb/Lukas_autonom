@@ -49,6 +49,7 @@ Erstelle einen cinematischen, detaillierten Prompt auf Englisch der das Beste au
 Antworte NUR mit dem JSON-Objekt.`;
 
     const response = await callLukasModel({
+      quelle: "studio",
       route: directRoute("general"),
       maxTokens: 4096,
       messages: [

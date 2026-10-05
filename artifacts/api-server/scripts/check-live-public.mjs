@@ -19,6 +19,7 @@ writeFileSync(fixture, [
  'const state = globalThis.__livePublicCheck;',
  'export function Router() { return { post(path, handler) { state.handlers.set(path, handler); }, get() {} }; }',
  'export const db = {}; export const memoriesTable = {};',
+ 'export const merkeVerbrauch = () => {};',
  'export const desc = () => ({}); export const eq = () => ({}); export const openai = {};',
  'export async function buildPublicSystemPrompt() { state.promptCalls++; return "CURATED_PUBLIC_CONTEXT"; }',
  'export const anfrageVonWebsite = async () => ({});',

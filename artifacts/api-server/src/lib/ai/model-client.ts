@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../logger";
+import { verbrauchSchreiben, type VerbrauchsQuelle } from "../verbrauch-quelle";
 import { fitLukasContext } from "./context-window";
 import type { ModelRoute } from "./model-router";
 import { fallbackRoutes, localBaseUrl, providerAvailable } from "./model-router";
@@ -27,6 +28,7 @@ export type LukasModelResult = {
 };
 
 type CallInput = {
+  quelle?: VerbrauchsQuelle;
   route: ModelRoute;
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
@@ -350,7 +352,7 @@ function cacheTreffer(usage: any): { gelesen: number; geschrieben: number; imEin
   };
 }
 
-function merkeVerbrauch(model: string, usage: any, provider = "unbekannt"): { rein: number; raus: number } {
+export function merkeVerbrauch(model: string, usage: any, provider = "unbekannt", quelle: VerbrauchsQuelle = "sonstige"): { rein: number; raus: number } {
   if (!usage) return { rein: 0, raus: 0 };
   const eintrag = verbrauch.get(model) ?? { aufrufe: 0, rein: 0, raus: 0, ausCache: 0, inCache: 0 };
   const cache = cacheTreffer(usage);
@@ -397,16 +399,17 @@ function merkeVerbrauch(model: string, usage: any, provider = "unbekannt"): { re
    * Die Buchhaltung ist ohnehin nebenlaeufig ("void"), also kostet der spaete
    * Import nichts: er passiert einmal beim ersten Modellaufruf.
    */
-  void import("../tagesbudget").then(({ verbucheTag }) =>
+  verbrauchSchreiben(import("../tagesbudget").then(({ verbucheTag }) =>
     verbucheTag({
     provider,
     model,
+    quelle,
     rein: cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet,
     raus: Number(usage.output_tokens ?? usage.completion_tokens ?? 0),
       ausCache: cache.gelesen,
       inCache: cache.geschrieben,
     }),
-  ).catch((err) => logger.warn({ err }, "Tagesverbrauch nicht gebucht"));
+  ).catch((err) => logger.warn({ err }, "Tagesverbrauch nicht gebucht")));
 
   // Fuer das Budget zaehlt der ganze Eingang, auch der gecachte Teil: guenstiger
   // heisst nicht kostenlos.
@@ -502,7 +505,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
    *
    * Die Zahlen kommen ohnehin in jeder Antwort mit, sie wurden nur weggeworfen.
    */
-  const verbraucht = merkeVerbrauch(input.route.model, response.usage, input.route.provider);
+  const verbraucht = merkeVerbrauch(input.route.model, response.usage, input.route.provider, input.quelle);
 
   const content = String(response.output_text ?? "");
 
@@ -602,7 +605,7 @@ async function callAnthropic(input: CallInput): Promise<LukasModelResult> {
   const raw = await response.text();
   if (!response.ok) throw new Error(`Anthropic ${response.status}: ${raw.slice(0, 1000)}`);
   const data = JSON.parse(raw) as any;
-  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider);
+  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const text: string[] = [];
   const toolCalls: LukasToolCall[] = [];
   for (const block of data.content ?? []) {
@@ -678,7 +681,7 @@ async function callLocal(input: CallInput): Promise<LukasModelResult> {
     throw new Error(`Lokales Modell hat kein JSON geliefert: ${raw.slice(0, 300)}`);
   }
 
-  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider);
+  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const choice = data.choices?.[0];
   const toolCalls: LukasToolCall[] = [];
   for (const tc of choice?.message?.tool_calls ?? []) {
@@ -723,7 +726,7 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
   const raw = await response.text();
   if (!response.ok) throw new Error(`Gemini ${response.status}: ${raw.slice(0, 1000)}`);
   const data = JSON.parse(raw) as any;
-  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider);
+  const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const choice = data.choices?.[0];
   const toolCalls: LukasToolCall[] = [];
   for (const tc of choice?.message?.tool_calls ?? []) {

@@ -268,6 +268,7 @@ Antworte NUR mit JSON:
 Leere Arrays sind völlig okay — nicht jeder Feed ist spannend.`;
 
     const response = await callLukasModel({
+      quelle: "moltbook",
       route: directRoute("general"),
       maxTokens: 4096,
       messages: [{ role: "user", content: prompt }],

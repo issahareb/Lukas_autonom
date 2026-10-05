@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 const directory = await mkdtemp(join(tmpdir(), "lukas-live-check-")), output = join(directory, "live-session.mjs");
-const fixture = { sockets: [], requests: [], calls: [], logs: [], failSockets: 0,
+const fixture = { sockets: [], requests: [], calls: [], logs: [], usage: [], failSockets: 0,
   failCreate: false, sequence: 0, answer: "Bestätigtes Ergebnis.", backend: null };
 globalThis.__liveSessionTest = fixture;
 const stubSources = {
@@ -23,6 +23,7 @@ const stubSources = {
     'emit(data) { this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(data) })); }',
     '}',
   ].join("\n"),
+  "../live-verbrauch": 'export async function speichereLiveVerbrauch(input) { globalThis.__liveSessionTest.usage.push(input); }',
   "../logger": 'const record = (data, message) => globalThis.__liveSessionTest.logs.push({data, message}); export const logger = { info: record, warn: record, error: record };',
   "./sprach-sitzung": 'export const sprachModell = () => process.env.LUKAS_LIVE_MODEL || "gpt-live-1"; export const sprachStimme = () => process.env.LUKAS_LIVE_VOICE || "cedar";',
   "../lukas-brain": 'export async function runLukasTurn(options) { const fixture = globalThis.__liveSessionTest; fixture.calls.push(options); return fixture.backend ? await fixture.backend(options) : fixture.answer; }',
@@ -31,7 +32,7 @@ await build({
   entryPoints: [resolve(dirname(fileURLToPath(import.meta.url)), "../src/lib/ai/live-session.ts")],
   outfile: output, bundle: true, platform: "node", target: "node22", format: "esm", logLevel: "silent",
   plugins: [{ name: "live-isolation", setup(builder) {
-    builder.onResolve({ filter: /^(undici|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain)$/ },
+    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain)$/ },
       (args) => ({ path: args.path, namespace: "live-stub" }));
     builder.onLoad({ filter: /.*/, namespace: "live-stub" }, (args) => ({ contents: stubSources[args.path], loader: "js" }));
   } }],
@@ -133,7 +134,12 @@ try {
   for (const seconds of [2, 5, 3]) publicSocket.emit({ type: "session.usage.updated", usage: { seconds } });
   fire(180_000); await settle();
   const finalLog = fixture.logs.find((entry) => entry.data.sessionId === publicSession.sessionId && entry.message === "GPT-Live-Sitzung beendet");
-  assert.equal(finalLog.data.audioSeconds, 5); assert.equal(publicSocket.readyState, 3);
+  assert.equal(finalLog.data.audioSeconds, 5);
+  const usage = fixture.usage.filter(u => u.id === publicSession.sessionId);
+  assert.equal(usage[0].sekunden, null, "missing measurement is not zero");
+  assert.equal(usage.at(-1).sekunden, 5, "out-of-order and repeated usage is cumulative");
+  assert.equal(usage.at(-1).beendet, true); assert.equal(usage.at(-1).quelle, "portfolio");
+  assert.equal(publicCall.quelle, "portfolio"); assert.equal(publicSocket.readyState, 3);
 
   fixture.answer = "Bestätigtes Ergebnis.";
   const cutoffSession = await api.createLiveWebRtcSession(createOptions), cutoffSocket = socketFor(cutoffSession.sessionId);

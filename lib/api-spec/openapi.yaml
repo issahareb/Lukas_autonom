@@ -18,6 +18,133 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /lukas/verbrauch:
+    get:
+      operationId: getVerbrauch
+      tags: [lukas]
+      summary: Erfasster Modellverbrauch der letzten vierzehn UTC-Tage
+      description: >
+        Eingabe enthält frische Tokens. Cache-Lesen, Cache-Schreiben und Ausgabe
+        werden jeweils einmal addiert. Fehlende Messungen belegen keinen Nullverbrauch.
+        Quellen vor Einführung der Zuordnung heißen unzugeordnet. Live-Sekunden sind
+        kumulative Providerwerte pro Sitzung am UTC-Starttag, separat von Modell-Tokens.
+        Das Guthaben ist ein manuell bestätigter USD-Stand, keine Live-Abfrage.
+      security:
+        - LukasBearer: []
+      responses:
+        "200":
+          description: Verbrauch mit Messlücken und optionalem Guthabenstand.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stand, zeitzone, tageswerte, modelle, liveModelle, guthaben]
+                properties:
+                  stand: { type: string, format: date-time }
+                  zeitzone: { type: string, enum: [UTC] }
+                  tageswerte:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                    description: tag, erfasst, aufrufe, eingabe, ausgabe, cacheLesen, cacheSchreiben, gesamt, liveSekunden, liveSitzungen, liveOhneMesswert, liveOffen.
+                  modelle:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                    description: provider, model, quelle, aufrufe, eingabe, ausgabe, cacheLesen, cacheSchreiben, gesamt.
+                  liveModelle:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                    description: model, quelle, sekunden, sitzungen, ohneMesswert, offen.
+                  guthaben:
+                    anyOf:
+                      - $ref: "#/components/schemas/OpenaiGuthaben"
+                      - type: "null"
+        "401":
+          description: Zugang erforderlich.
+        "503":
+          description: Verbrauchsdaten gerade nicht verfügbar.
+  /lukas/openai-guthaben:
+    put:
+      operationId: confirmOpenaiGuthaben
+      tags: [lukas]
+      summary: Manuell abgelesenen OpenAI-Guthabenstand bestätigen
+      description: Keine automatische Verrechnung von Nutzung, Aufladungen oder abgelaufenen Credits.
+      security:
+        - LukasBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usd, organisation]
+              properties:
+                usd: { type: number, minimum: -1000000, maximum: 10000000 }
+                organisation: { type: string, minLength: 1, maxLength: 120 }
+      responses:
+        "200":
+          description: Gespeicherter Stand mit serverseitigem Bestätigungszeitpunkt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiGuthaben"
+        "400":
+          description: Betrag oder Organisation ungültig.
+        "401":
+          description: Zugang erforderlich.
+        "503":
+          description: Guthabenstand konnte nicht gespeichert werden.
+  /lukas/meldungen/{id}/bestaetigen:
+    post:
+      operationId: confirmMeldungAktuell
+      tags: [lukas]
+      summary: Offene Meldung als weiterhin aktuell bestätigen
+      security:
+        - LukasBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Meldung bleibt offen, geprueftAt wurde aktualisiert.
+        "400":
+          description: ID ungültig.
+        "401":
+          description: Zugang erforderlich.
+        "409":
+          description: Offene Meldung konnte nicht bestätigt werden.
+  /lukas/meldungen/{id}/zusammenfassen:
+    post:
+      operationId: mergeMeldungen
+      tags: [lukas]
+      summary: Zwei ausgewählte offene Meldungen zusammenführen
+      description: Texte bleiben erhalten. Das Ziel bleibt offen; die Quelle erhält einen Verweis und wird nicht als neue Besitzerantwort zugestellt.
+      security:
+        - LukasBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [zielId]
+              properties:
+                zielId: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Meldungen zusammengeführt.
+        "400":
+          description: Zwei verschiedene gültige IDs erforderlich.
+        "401":
+          description: Zugang erforderlich.
+        "409":
+          description: Meldungen nicht offen, nicht vorhanden oder zu lang.
   /lukas/live-session:
     post:
       operationId: createPrivateLiveSession
@@ -1241,6 +1368,14 @@ components:
       type: http
       scheme: bearer
   schemas:
+    OpenaiGuthaben:
+      type: object
+      required: [id, usd, organisation, bestaetigtAt]
+      properties:
+        id: { type: integer }
+        usd: { type: number }
+        organisation: { type: string }
+        bestaetigtAt: { type: string, format: date-time }
     HealthStatus:
       type: object
       properties:

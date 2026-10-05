@@ -36,7 +36,7 @@ export const db = {
     values: (v) => ({
       onConflictDoUpdate: async ({ set }) => {
         const vorhanden = globalThis.__zeilen.find(
-          (z) => z.tag === v.tag && z.provider === v.provider && z.model === v.model,
+          (z) => z.tag === v.tag && z.provider === v.provider && z.model === v.model && z.quelle === v.quelle,
         );
         if (!vorhanden) { globalThis.__zeilen.push({ ...v }); return; }
         // Aufaddieren wie im echten SQL.
@@ -78,6 +78,13 @@ await verbucheTag({ provider: "anthropic", model: "claude", rein: 300, raus: 50 
   pruefe("und je Modell getrennt", s.jeModell.length === 2);
   pruefe("das teuerste Modell steht oben", s.jeModell[0].model === "gpt-5.6");
 }
+
+// A model used in different areas has separate ledger rows, one budget total.
+await verbucheTag({ provider: "openai", model: "gpt-5.6", quelle: "chat", rein: 10, raus: 2 });
+await verbucheTag({ provider: "openai", model: "gpt-5.6", quelle: "autonomie", rein: 20, raus: 4 });
+pruefe("Bereiche bleiben getrennt", globalThis.__zeilen.filter(z => z.model === "gpt-5.6").length === 3);
+pruefe("Budget fasst dasselbe Modell über Bereiche zusammen", (await tagesstand()).jeModell.filter(z => z.model === "gpt-5.6").length === 1);
+pruefe("Budgetsumme enthält alle Bereiche", (await tagesstand()).tokens === 2186);
 
 // ── 2. Kostenlose Arbeit zählt NICHT ─────────────────────────────────────
 {

@@ -122,7 +122,11 @@ const pruefe = (was, bedingung) => {
   }
 };
 
+globalThis.__daten.memories.push({ id: 90, content: "Taxi BB hat ein Kontaktformular.", category: "arbeit", importance: 8, tags: ["taxibbessen.de"], createdAt: new Date() });
+globalThis.__daten.claims.push({ ...globalThis.__daten.claims[0], id: 91, subject: "TaxiBB", value: "issahareb/Taxibbessen", episodeId: null });
 const g = await baueGehirn();
+pruefe("TaxiBB hat einen gemeinsamen Projektknoten", g.knoten.filter(k => k.daten.projekt === "taxibb").length === 1);
+pruefe("Erinnerung hängt am TaxiBB-Projekt", g.kanten.some(k => k.von === "erinnerung/90" && k.nach === "subjekt/taxibb"));
 const nach = new Map(g.knoten.map((k) => [k.id, k]));
 
 // Der echte HTTP-Handler muss auch den Teil nach Zeichen 600 ausliefern.

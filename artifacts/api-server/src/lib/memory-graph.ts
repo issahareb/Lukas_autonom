@@ -1,3 +1,4 @@
+import { projektSchluessel, projekteImText, aliasSchluessel } from "./projekt-aliasse";
 /*
  * Gezielter Zugriff aufs Gedaechtnis ueber den Graphen — statt alles zu lesen.
  *
@@ -29,7 +30,7 @@ import { logger } from "./logger";
 
 /** Dieselbe Normalisierung wie in memory-writer.ts — Schluessel muessen passen. */
 export function normEntitaet(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 120);
+  return projektSchluessel(s);
 }
 
 /*
@@ -61,7 +62,7 @@ export function entitaetskandidaten(frage: string, maximal = 12): string[] {
     .map((w) => w.trim())
     .filter(Boolean);
 
-  const kandidaten: string[] = [];
+  const kandidaten: string[] = projekteImText(frage).map(p => p.id);
   for (const laenge of [3, 2, 1]) {
     for (let i = 0; i + laenge <= woerter.length; i++) {
       const teil = woerter.slice(i, i + laenge);
@@ -161,6 +162,7 @@ const wertSchluessel = sql<string>`lower(regexp_replace(btrim(${claimsTable.valu
 /** Claims, die mit einer der gesuchten Entitaeten zu tun haben — auf beiden Seiten. */
 async function claimsUm(schluessel: string[], grenze: number): Promise<Claim[]> {
   if (schluessel.length === 0) return [];
+  schluessel = aliasSchluessel(schluessel);
   return db
     .select()
     .from(claimsTable)
@@ -191,12 +193,12 @@ export async function einstiegsknoten(frage: string): Promise<string[]> {
   const treffer = await db
     .selectDistinct({ subjekt: claimsTable.subject, wert: wertSchluessel })
     .from(claimsTable)
-    .where(or(inArray(claimsTable.subject, kandidaten), inArray(wertSchluessel, kandidaten)));
+    .where(or(inArray(claimsTable.subject, aliasSchluessel(kandidaten)), inArray(wertSchluessel, aliasSchluessel(kandidaten))));
 
   const vorhanden = new Set<string>();
   for (const t of treffer) {
     vorhanden.add(normEntitaet(t.subjekt));
-    if (t.wert) vorhanden.add(String(t.wert));
+    if (t.wert) vorhanden.add(normEntitaet(String(t.wert)));
   }
 
   // Reihenfolge der Kandidaten beibehalten: laengste Wortfolge zuerst.
@@ -273,7 +275,7 @@ export async function erinnerungenZuKnoten(knoten: string[], grenze = 5) {
   if (knoten.length === 0) return [];
   try {
     // Zwei Wege zur selben Entitaet: als Tag gesetzt oder im Text genannt.
-    const bedingungen = knoten.flatMap((k) => {
+    const bedingungen = aliasSchluessel(knoten).flatMap((k) => {
       const klartext = k.replace(/_/g, " ");
       return [
         sql`${memoriesTable.tags} @> ${JSON.stringify([k])}::jsonb`,

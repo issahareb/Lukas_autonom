@@ -21,6 +21,8 @@ type WartendeMeldung = {
   text: string;
   dringend: boolean;
   createdAt: string;
+  veraltet?: boolean;
+  geprueftAt?: string | null;
 };
 
 type WartendeFreigabe = {
@@ -257,6 +259,8 @@ export function WartetAufDich({ kompakt = false }: { kompakt?: boolean } = {}) {
             </span>
           </div>
 
+          {m.veraltet && <p className="text-xs text-amber-400">Ältere Meldung · erneut prüfen, bevor sie als aktueller Blocker gilt.</p>}
+          {m.geprueftAt && <p className="text-xs text-muted-foreground">Von dir bestätigt: {new Date(m.geprueftAt).toLocaleString("de-DE")}</p>}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {m.text}
           </p>
