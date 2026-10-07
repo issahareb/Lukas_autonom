@@ -32,6 +32,8 @@ try {
   Date.now = now;
   assert.throws(() => t.telnyxXml('"/><Say>bad', 'eingehend'));
   assert.match(t.telnyxXml('', 'eingehend'), /transport=tls;secure=srtp\?X-Lukas-Context=/);
+  assert.doesNotMatch(t.telnyxXml('', 'eingehend'), /audioUrl=/, 'incoming callers retain normal ringback until the SIP leg answers');
+  process.env.LUKAS_PUBLIC_URL = 'https://lukas.example.test';
   let calls = [], numberStatus = 'requirement-info-pending';
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options });
@@ -44,11 +46,12 @@ try {
   assert.equal(dial.url, 'https://api.telnyx.com/v2/texml/calls/test-app');
   const payload = JSON.parse(dial.options.body);
   assert.match(payload.Texml, /<Sip>sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "outbound bridge requires TLS signaling and SRTP audio");
+  const ringbackUrl = payload.Texml.match(/audioUrl="([^"]+)"/)[1];
+  assert.equal(ringbackUrl, 'https://lukas.example.test/audio/telnyx-ringback-silence.wav');
   assert.equal(payload.From, process.env.TELNYX_NUMMER); assert.equal(payload.To, '+4915112345678');
   const context = t.pruefeTelefonKontext(payload.Texml.match(/X-Lukas-Context=([^<]+)/)[1]);
   assert.equal(context.nummer, payload.To); assert.equal(context.richtung, 'ausgehend');
   assert.match((await t.telnyxStand()).hinweis, /noch nicht geprüft/);
-  process.env.LUKAS_PUBLIC_URL = 'https://lukas.example.test';
   const setupCalls = [];
   globalThis.fetch = async (url, options) => {
     setupCalls.push({ url, ...options });
@@ -66,6 +69,7 @@ try {
   assert.match(tracked.Texml, /record="do-not-record"/);
   const recordingXml = t.telnyxXml('+4915112345678', 'ausgehend', 'Test', '00000000-0000-4000-8000-000000000000', true);
   assert.match(recordingXml, /record="record-from-answer-dual"/);
+  assert.match(recordingXml, /audioUrl="https:\/\/lukas.example.test\/audio\/telnyx-ringback-silence.wav"/);
   assert.match(recordingXml, /recordingStatusCallback="https:\/\/lukas.example.test\/api\/telefon\/telnyx\/aufnahme\?anruf=/);
   assert.doesNotMatch(recordingXml, /<Say|<Play|<Record/);
   assert.throws(() => t.telnyxXml('+4915112345678', 'eingehend', '', undefined, true));
@@ -136,10 +140,30 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   process.env.LUKAS_API_TOKEN = 'local-recording-test';
   globalThis.acceptedCalls = []; globalThis.rejectedCalls = 0; globalThis.telefonLogs = [];
   const app = express(), capture = (req, _res, bytes) => { req.rawBody = bytes; };
+  // Match app.ts: public assets are served before private API authentication.
+  app.use(express.static('public'));
   app.use(express.json({ verify: capture })); app.use(express.urlencoded({ extended: false, verify: capture })); app.use('/api', telefonWebhookRouter);
   app.use('/api', lukasAuth, telefonRouter);
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api`;
+  const silentAudio = await oldFetch(new URL(new URL(ringbackUrl).pathname, base));
+  assert.equal(silentAudio.status, 200, 'Telnyx must fetch the ringback file without authentication');
+  assert.equal(silentAudio.headers.get('content-type'), 'audio/wav');
+  const wav = Buffer.from(await silentAudio.arrayBuffer());
+  assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
+  assert.equal(wav.toString('ascii', 12, 16), 'fmt ');
+  assert.equal(wav.readUInt16LE(20), 1, 'uncompressed PCM');
+  assert.equal(wav.readUInt16LE(22), 1, 'mono');
+  assert.equal(wav.readUInt32LE(24), 8000, '8 kHz telephony audio');
+  assert.equal(wav.readUInt16LE(34), 16, '16-bit PCM');
+  assert.equal(wav.toString('ascii', 36, 40), 'data');
+  const dialTimeout = Number(payload.Texml.match(/timeout="(\d+)"/)[1]);
+  const dataSize = wav.readUInt32LE(40);
+  assert.equal(dataSize / wav.readUInt32LE(28), dialTimeout, 'silence covers the full bridge timeout without assuming playback loops');
+  assert.equal(wav.length, 44 + dataSize);
+  assert.equal(wav.readUInt32LE(4), wav.length - 8);
+  assert.ok(wav.subarray(44).every(sample => sample === 0), 'the entire audio must be silent');
   globalThis.mediaAccess = 0;
   assert.equal((await oldFetch(base + '/lukas/telefon/anrufe/42/aufnahme')).status, 401);
   assert.equal(globalThis.mediaAccess, 0, 'Unauthenticated clients cannot retrieve recordings');

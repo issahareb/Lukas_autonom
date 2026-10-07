@@ -112,7 +112,13 @@ export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], 
   }
   // TLS schützt die SIP-Signalisierung; GPT Live verlangt zusätzlich SRTP für Audio.
   const target = `sip:${projekt}@${host};transport=tls;secure=srtp?X-Lukas-Context=${encodeURIComponent(token)}`;
-  return `<?xml version="1.0" encoding="UTF-8"?><Response>${stream}<Dial answerOnBridge="true" timeout="30"${recording}><Sip${callback}>${xml(target)}</Sip></Dial></Response>`;
+  // Outbound TeXML runs after the person answers. Silence replaces Telnyx's
+  // default ringback while the SIP leg connects; answerOnBridge cannot do that
+  // for an already answered call. Inbound callers keep their normal ringback.
+  const ringback = richtung === "ausgehend"
+    ? ` audioUrl="${xml(new URL("/audio/telnyx-ringback-silence.wav", telnyxStatusUrl()).href)}"`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><Response>${stream}<Dial answerOnBridge="true" timeout="30"${ringback}${recording}><Sip${callback}>${xml(target)}</Sip></Dial></Response>`;
 }
 
 export type TelnyxStand = {
