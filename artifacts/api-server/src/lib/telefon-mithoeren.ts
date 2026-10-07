@@ -108,7 +108,9 @@ export function streamFormat(message: Record<string, any>): Format | null {
     Number(format?.channels) !== 1 || typeof streamId !== "string" || streamId.length > 128 || !streamId) return null;
   return { type: "format", codec, streamId };
 }
-export function streamAudio(message: Record<string, any>, format: Format): Audio | null {
+export type MediaRejectReason = "stream_id" | "track" | "timestamp" | "chunk" | "payload_envelope" | "payload_size" | "payload_base64";
+export function streamAudio(message: Record<string, any>, format: Format, onReject?: (reason: MediaRejectReason) => void): Audio | null {
+  const reject = (reason: MediaRejectReason): null => { onReject?.(reason); return null; };
   const m = message.media;
   // Telnyx documents chunk/timestamp as numeric strings and explicitly says
   // media events may arrive out of order. Validate the envelope, not packet order/size.
@@ -116,13 +118,16 @@ export function streamAudio(message: Record<string, any>, format: Format): Audio
   const track = rawTrack === "inbound_track" ? "inbound" : rawTrack === "outbound_track" ? "outbound" : rawTrack;
   const timestamp = Number(m?.timestamp), chunk = Number(m?.chunk);
   const payload = m?.payload;
-  if ((message.stream_id ?? message.streamSid) !== format.streamId || !["inbound", "outbound"].includes(track) ||
-    !Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > 43200000 || !Number.isSafeInteger(chunk) || chunk < 0 ||
-    typeof payload !== "string" || payload.length < 4 || payload.length > 12288 || payload.length % 4 !== 0 ||
-    !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) return null;
+  if ((message.stream_id ?? message.streamSid) !== format.streamId) return reject("stream_id");
+  if (!["inbound", "outbound"].includes(track)) return reject("track");
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > 43200000) return reject("timestamp");
+  if (!Number.isSafeInteger(chunk) || chunk < 0) return reject("chunk");
+  if (typeof payload !== "string" || payload.length < 4 || payload.length > 12288 || payload.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) return reject("payload_envelope");
   // Reject malformed base64 without assuming a fixed Telnyx packet duration.
   const decoded = Buffer.from(payload, "base64");
-  if (!decoded.length || decoded.length > 8192 || decoded.toString("base64") !== payload) return null;
+  if (!decoded.length || decoded.length > 8192) return reject("payload_size");
+  if (decoded.toString("base64") !== payload) return reject("payload_base64");
   return { type: "audio", streamId: format.streamId, track, timestamp, chunk, payload };
 }
 
@@ -181,9 +186,16 @@ export function starteTelefonMithoeren(server: Server): () => void {
       wss.handleUpgrade(req, socket, head, ws => {
         logger.info({ callId: k.id, phase: "provider_connected" }, "Telefon-Live-Audioweg");
         let format: Format | null = null, starting = false, windowStart = Date.now(), bytes = 0;
+        // Count fixed reasons only. Provider values and audio must never reach logs.
+        const rejectedFrames: Partial<Record<MediaRejectReason, number>> = {};
+        const rejected = (reason: MediaRejectReason) => {
+          const count = (rejectedFrames[reason] ?? 0) + 1;
+          rejectedFrames[reason] = count;
+          if (count === 1) logger.warn({ callId: k.id, phase: "invalid_media_dropped", reason }, "Telefon-Live-Audioweg");
+        };
         const startDeadline = setTimeout(() => ws.close(1008, "start required"), 7000);
         const finish = (code: number) => {
-          logger.info({ callId: k.id, phase: "provider_closed", code, formatAccepted: Boolean(format), frames: { ...k.frames } }, "Telefon-Live-Audioweg");
+          logger.info({ callId: k.id, phase: "provider_closed", code, formatAccepted: Boolean(format), frames: { ...k.frames }, rejectedFrames: { ...rejectedFrames } }, "Telefon-Live-Audioweg");
           clearTimeout(startDeadline);
           if (k.provider === ws) {
             k.provider = undefined; k.format = undefined;
@@ -234,13 +246,9 @@ export function starteTelefonMithoeren(server: Server): () => void {
           if (!format || k.provider !== ws) return; // Drop early frames; never queue unverified audio.
           if (msg.event === "stop") { beenden(k, "Mithören beendet."); return; }
           if (msg.event === "media") {
-            const frame = streamAudio(msg, format);
-            if (!frame) {
-              // A single malformed/provider-variant frame must not kill the entire
-              // monitor. The stream is authenticated and bounded by maxPayload/rate.
-              logger.warn({ callId: k.id, phase: "invalid_media_dropped" }, "Telefon-Live-Audioweg");
-              return;
-            }
+            const frame = streamAudio(msg, format, rejected);
+            // Keep monitoring after a malformed frame; log once per fixed reason.
+            if (!frame) return;
             if (k.frames[frame.track]++ === 0) logger.info({ callId: k.id, phase: "first_audio", track: frame.track }, "Telefon-Live-Audioweg");
             k.lastAudio = Date.now(); senden(k, frame);
           }

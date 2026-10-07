@@ -8,6 +8,7 @@ import { WebSocket } from 'ws';
 const dir = mkdtempSync(resolve('.mithoeren-check-'));
 let server, stop;
 const sockets = [], aborts = [];
+globalThis.monitorLogs = [];
 try {
   const stub = join(dir, 'db.mjs');
   writeFileSync(stub, `
@@ -17,7 +18,11 @@ export const db = { select:()=>({from:table=>({where:condition=>({limit:async()=
  const rows=table===telefonAnrufe?[globalThis.liveCall]:[globalThis.liveContact];
  return rows.filter(row=>row && row[condition.field]===condition.value);
 }})})}) };
-export const logger={warn(){},error(){},info(){}};
+export const logger={
+ warn(data,message){globalThis.monitorLogs.push({level:'warn',data:structuredClone(data),message});},
+ error(data,message){globalThis.monitorLogs.push({level:'error',data:structuredClone(data),message});},
+ info(data,message){globalThis.monitorLogs.push({level:'info',data:structuredClone(data),message});}
+};
 `);
   const out = join(dir, 'live.mjs');
   await build({ stdin:{contents:'export * from "./src/lib/telefon-mithoeren.ts"; export * from "./src/lib/telnyx.ts"; export {lukasAuth} from "./src/middlewares/auth.ts";',resolveDir:process.cwd(),loader:'ts'},
@@ -72,14 +77,45 @@ export const logger={warn(){},error(){},info(){}};
   const start={event:'start',stream_id:'stream-one',start:{call_control_id:'v3:root',media_format:{encoding:'PCMU',sample_rate:8000,channels:1}}};
   ws.send(JSON.stringify(start));assert.equal((await listener.next('format')).codec,'PCMU');
   const audio=track=>({event:'media',stream_id:'stream-one',media:{track,chunk:'1',timestamp:'0',payload:Buffer.alloc(160,255).toString('base64')}});
+  const format = m.streamFormat(start), reasons = [];
+  const reject = reason => reasons.push(reason), seed = audio('inbound');
+  const invalidCases = [
+    ['stream_id', { ...seed, stream_id: 'private-stream-id-sentinel' }],
+    ['track', { ...seed, media: { ...seed.media, track: 'private-track-sentinel' } }],
+    ['timestamp', { ...seed, media: { ...seed.media, timestamp: undefined } }],
+    ['timestamp', { ...seed, media: { ...seed.media, timestamp: '1.5' } }],
+    ['chunk', { ...seed, media: { ...seed.media, chunk: undefined } }],
+    ['payload_envelope', { ...seed, media: { ...seed.media, payload: 'PRIVATE_PAYLOAD_SENTINEL!' } }],
+    ['payload_size', { ...seed, media: { ...seed.media, payload: Buffer.alloc(8193).toString('base64') } }],
+    ['payload_base64', { ...seed, media: { ...seed.media, payload: 'AB==' } }],
+  ];
+  for (const [expected, event] of invalidCases) {
+    reasons.length = 0;
+    assert.equal(m.streamAudio(event, format, reject), null);
+    assert.deepEqual(reasons, [expected], 'one precise reason per rejected frame');
+  }
+  reasons.length = 0;
+  for (const track of ['inbound', 'outbound', 'inbound_track', 'outbound_track']) {
+    assert.ok(m.streamAudio({ ...seed, media: { ...seed.media, track } }, format, reject));
+    assert.ok(m.streamAudio({ ...seed, media: { ...seed.media, track, timestamp: 0, chunk: 1 } }, format, reject));
+  }
+  assert.deepEqual(reasons, [], 'valid documented variants never count as rejected');
   for(const track of ['inbound','outbound']){ws.send(JSON.stringify(audio(track)));assert.equal((await listener.next('audio')).track,track);}
   // Telnyx may deliver larger packets and out of order; neither may tear down monitoring.
   const large={event:'media',stream_id:'stream-one',media:{track:'inbound_track',chunk:'9',timestamp:'180',payload:Buffer.alloc(4096,127).toString('base64')}};
   ws.send(JSON.stringify(large));const largeFrame=await listener.next('audio');assert.equal(largeFrame.track,'inbound');assert.equal(largeFrame.chunk,9);
   ws.send(JSON.stringify({...audio('outbound'),media:{...audio('outbound').media,chunk:'8',timestamp:'160'}}));
   assert.equal((await listener.next('audio')).chunk,8);
-  ws.send(JSON.stringify({...audio('inbound'),media:{...audio('inbound').media,chunk:'10',payload:'!!!!'}}));
-  await new Promise(r=>setTimeout(r,30));assert.equal(ws.readyState,WebSocket.OPEN,'one malformed frame must not kill monitoring');
+  const warningsBefore = monitorLogs.filter(x=>x.data?.phase==='invalid_media_dropped').length;
+  for (let i=0;i<50;i++) ws.send(JSON.stringify({...audio('inbound'),media:{...audio('inbound').media,chunk:'10',payload:'PRIVATE_PAYLOAD_SENTINEL!'}}));
+  ws.send(JSON.stringify(invalidCases[0][1]));
+  ws.send(JSON.stringify(invalidCases[1][1]));
+  ws.send(JSON.stringify({...audio('outbound'),media:{...audio('outbound').media,chunk:'11'}}));
+  assert.equal((await listener.next('audio')).chunk,11,'valid audio continues after rejected frames');
+  assert.equal(ws.readyState,WebSocket.OPEN,'malformed frames must not kill monitoring');
+  const rejectionWarnings = monitorLogs.filter(x=>x.data?.phase==='invalid_media_dropped').slice(warningsBefore);
+  assert.deepEqual(rejectionWarnings.map(x=>x.data.reason),['payload_envelope','stream_id','track']);
+  assert.equal(rejectionWarnings.filter(x=>x.data.reason==='payload_envelope').length,1,'50 rejected packets produce one warning');
   assert.equal((await fetch(base+path+'-ticket',{method:'POST'})).status,401);
   const ticketResponse=await fetch(base+path+'-ticket',{method:'POST',headers:{Authorization:'Bearer test-owner'}});
   assert.equal(ticketResponse.status,200);
@@ -106,6 +142,17 @@ export const logger={warn(){},error(){},info(){}};
   liveContact.mithoerenZustimmung=false;
   const closed=once(ws,'close');
   assert.match((await listener.next('end')).message,/Zustimmung/);await closed;
+  let closeSummary;
+  for (let attempt=0;attempt<100;attempt++) {
+    closeSummary = monitorLogs.find(x=>x.data?.phase==='provider_closed' && x.data.formatAccepted===true);
+    if (closeSummary) break;
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(closeSummary,'provider close emits rejection totals');
+  assert.deepEqual(closeSummary.data.rejectedFrames,{payload_envelope:50,stream_id:1,track:1});
+  for (const row of rejectionWarnings) assert.deepEqual(Object.keys(row.data).sort(),['callId','phase','reason']);
+  for (const secret of ['PRIVATE_PAYLOAD_SENTINEL!','private-stream-id-sentinel','private-track-sentinel','v3:root','stream-one',seed.media.payload])
+    assert.ok(!JSON.stringify(monitorLogs).includes(secret),'never log provider fields or audio');
   liveContact.mithoerenZustimmung=true;liveContact.mithoerenBestaetigtAm=new Date(date.getTime()+1000);
   assert.equal(await m.erlaubterMithoerAnruf(1),null,'Re-enabled consent cannot authorize an old call');
   liveContact.mithoerenBestaetigtAm=date;liveCall.zielStatus='completed';
@@ -116,5 +163,5 @@ export const logger={warn(){},error(){},info(){}};
   for(const controller of aborts)controller.abort();
   stop?.();for(const ws of sockets)ws.terminate();
   if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}
-  delete globalThis.liveCall;delete globalThis.liveContact;
+  delete globalThis.liveCall;delete globalThis.liveContact;delete globalThis.monitorLogs;
 }
