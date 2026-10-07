@@ -35,6 +35,7 @@ type ManagedSession = {
   controller: AbortController; conversationId: number; socket?: Socket;
   socketGeneration: number; lifetime: ReturnType<typeof setTimeout>;
   reconnectTimer?: ReturnType<typeof setTimeout>; reconnectAttempts: number;
+  reconnects: number; requestedCloseReason?: string; providerCloseReason?: string;
   phone?: TelefonGespraech;
   phoneSpeechObserved?: boolean;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
@@ -234,7 +235,7 @@ function startManaged(
     },
     connection, ...config, transport, controller: new AbortController(),
     conversationId: -randomInt(1, 2_147_483_648), socketGeneration: 0,
-    lifetime: undefined as unknown as ReturnType<typeof setTimeout>, reconnectAttempts: 0,
+    lifetime: undefined as unknown as ReturnType<typeof setTimeout>, reconnectAttempts: 0, reconnects: 0,
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
@@ -344,10 +345,20 @@ function observe(state: ManagedSession, event: Json) {
     state.usageReported = true;
     persistUsage(state);
   }
-  if (event.type === "session.closed") { finishSession(state, "provider_closed"); return; }
+  if (event.type === "session.closed") {
+    state.providerCloseReason = typeof event.reason === "string"
+      ? (["close_requested", "expired", "content", "remote_hangup", "connection_lost"].includes(event.reason) ? event.reason : "unknown")
+      : undefined;
+    finishSession(state, state.requestedCloseReason ?? "provider_closed");
+    return;
+  }
   if (state.closing || state.controller.signal.aborted) return;
   if (event.type === "error") {
-    logger.warn({ sessionId: state.id }, "GPT-Live-Protokollfehler");
+    const diagnostic = liveApiFailure("/live/sessions/" + encodeURIComponent(state.id) + "/attach",
+      0, { error: event.error }, state.connection);
+    // Only allowlisted machine fields; no provider message or user content.
+    logger.warn({ sessionId: state.id, code: diagnostic.code,
+      errorType: diagnostic.errorType, param: diagnostic.param }, "GPT-Live-Protokollfehler");
     void terminateSession(state, "provider_error").catch(() => {}); return;
   }
   if (event.type === "session.input_transcript.delta" || event.type === "session.output_transcript.delta") {
@@ -411,7 +422,7 @@ async function attachSideband(state: ManagedSession): Promise<void> {
   const socket = sidebandSocket(state);
   state.socket = socket;
   await new Promise<void>((resolve, reject) => {
-    let opened = false, failed = false;
+    let opened = false, failed = false, openedAt: number | undefined;
     const fail = () => {
       if (opened || failed) return;
       failed = true; clearTimeout(timeout);
@@ -421,7 +432,11 @@ async function attachSideband(state: ManagedSession): Promise<void> {
     const timeout = setTimeout(fail, 10_000); timeout.unref();
     socket.addEventListener("open", () => {
       if (failed || state.ended || state.closing || generation !== state.socketGeneration) { fail(); try { socket.close(); } catch {} return; }
-      opened = true; clearTimeout(timeout); resolve();
+      opened = true; openedAt = Date.now(); clearTimeout(timeout);
+      const recoveredAfterAttempts = state.reconnectAttempts;
+      logger.info({ sessionId: state.id, transport: state.transport, generation,
+        recoveredAfterAttempts, reconnects: state.reconnects }, "GPT-Live-Steuerverbindung verbunden");
+      resolve();
     });
     socket.addEventListener("message", (message) => {
       if (failed || state.ended || generation !== state.socketGeneration || typeof message.data !== "string" || message.data.length > 1_000_000) return;
@@ -429,13 +444,29 @@ async function attachSideband(state: ManagedSession): Promise<void> {
       catch { logger.warn({ sessionId: state.id }, "Ungültiges GPT-Live-Ereignis"); }
     });
     socket.addEventListener("error", () => {
+      if (state.ended || generation !== state.socketGeneration) return;
+      // Error objects and close reason text may contain provider/user data.
+      logger.warn({ sessionId: state.id, transport: state.transport, generation,
+        opened, reconnectAttempts: state.reconnectAttempts }, "GPT-Live-Steuerverbindung Fehler");
       if (!opened) fail();
       else { try { socket.close(); } catch {} }
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
       clearTimeout(timeout);
+      if (!state.ended && generation === state.socketGeneration) {
+        const code = Number.isInteger(event.code) && event.code >= 1000 && event.code <= 4999 ? event.code : null;
+        logger.info({ sessionId: state.id, transport: state.transport, generation,
+          code, wasClean: typeof event.wasClean === "boolean" ? event.wasClean : null,
+          closing: Boolean(state.closing), reconnectAttempts: state.reconnectAttempts },
+          "GPT-Live-Steuerverbindung geschlossen");
+      }
       if (!opened) { fail(); return; }
-      if (!state.ended && !state.closing && generation === state.socketGeneration) scheduleReconnect(state);
+      if (!state.ended && !state.closing && generation === state.socketGeneration) {
+        // A stable connection gets a fresh retry budget. Immediate open/close
+        // flapping still exhausts three attempts instead of looping forever.
+        if (openedAt !== undefined && Date.now() - openedAt >= 10_000) state.reconnectAttempts = 0;
+        scheduleReconnect(state);
+      }
     });
   });
 }
@@ -445,6 +476,10 @@ function scheduleReconnect(state: ManagedSession) {
     void terminateSession(state, "sideband_reconnect_limit").catch(() => {}); return;
   }
   const delay = 500 * 2 ** state.reconnectAttempts++;
+  state.reconnects++;
+  logger.info({ sessionId: state.id, transport: state.transport,
+    attempt: state.reconnectAttempts, delayMs: delay, reconnects: state.reconnects },
+    "GPT-Live-Steuerverbindung wird wiederhergestellt");
   state.reconnectTimer = setTimeout(() => {
     state.reconnectTimer = undefined;
     void attachSideband(state).catch(() => scheduleReconnect(state));
@@ -465,7 +500,10 @@ function finishSession(state: ManagedSession, reason: string) {
   logger.info({ sessionId: state.id, model: state.model, visibility: state.options.visibility,
     transport: state.transport, audioSeconds: state.usageSeconds,
     elapsedSeconds: Math.round((Date.now() - state.createdAt) / 1000),
-    delegations: state.seenDelegations.size, reason }, "GPT-Live-Sitzung beendet");
+    delegations: state.seenDelegations.size, reason,
+    requestedCloseReason: state.requestedCloseReason ?? null,
+    providerCloseReason: state.providerCloseReason ?? null,
+    reconnects: state.reconnects }, "GPT-Live-Sitzung beendet");
 }
 /** WebRTC has no REST hangup. Wait for session.closed, attaching again if needed. */
 async function closeWebRtc(state: ManagedSession): Promise<boolean> {
@@ -508,6 +546,7 @@ async function closeWebRtc(state: ManagedSession): Promise<boolean> {
 function terminateSession(state: ManagedSession, reason: string): Promise<void> {
   if (state.ended) return Promise.resolve();
   if (state.closing) return state.closing;
+  state.requestedCloseReason ??= reason;
   if (state.expiresAt && Date.now() > state.expiresAt + 5000) {
     finishSession(state, "provider_expiry_after_unconfirmed_close");
     return Promise.resolve();

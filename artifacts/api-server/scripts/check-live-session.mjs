@@ -19,7 +19,7 @@ const stubSources = {
     'else queueMicrotask(() => { if (this.readyState === 3) return; this.readyState = 1; this.dispatchEvent(new Event("open")); }); }',
     'send(data) { if (this.readyState !== 1) throw new Error("socket closed"); const event = JSON.parse(data); this.sent.push(event);',
     'if (event.type === "session.close") queueMicrotask(() => this.emit({ type: "session.closed", reason: "close_requested", usage: { seconds: 0 } })); }',
-    'close() { if (this.readyState === 3) return; this.readyState = 3; queueMicrotask(() => this.dispatchEvent(new Event("close"))); }',
+    'close(code = 1000, reason = "") { if (this.readyState === 3) return; this.readyState = 3; const event = new Event("close"); Object.assign(event, { code, reason, wasClean: code === 1000 }); queueMicrotask(() => this.dispatchEvent(event)); }',
     'emit(data) { this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(data) })); }',
     '}',
   ].join("\n"),
@@ -111,6 +111,10 @@ try {
   assert.equal(fixture.calls.at(-1).systemPromptOverride, "PRIVATE_BACKEND_ONLY");
   assert.ok(fixture.calls.at(-1).conversationId < 0);
   assert.equal(await api.closeLiveSession(first.sessionId, first.closeToken), true);
+  const ownerCloseLog = fixture.logs.find(entry => entry.data.sessionId === first.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+  assert.equal(ownerCloseLog.data.reason, "client_closed");
+  assert.equal(ownerCloseLog.data.requestedCloseReason, "client_closed");
+  assert.equal(ownerCloseLog.data.providerCloseReason, "close_requested");
   assert.ok(socket.sent.some((event) => event.type === "session.close"));
   assert.ok(!fixture.requests.some(r => r.url.endsWith("/hangup")), "WebRTC must not call SIP hangup");
   assert.equal(await api.closeLiveSession(first.sessionId, first.closeToken), false);
@@ -135,6 +139,9 @@ try {
   fire(180_000); await settle();
   const finalLog = fixture.logs.find((entry) => entry.data.sessionId === publicSession.sessionId && entry.message === "GPT-Live-Sitzung beendet");
   assert.equal(finalLog.data.audioSeconds, 5);
+  assert.equal(finalLog.data.reason, "duration_limit");
+  assert.equal(finalLog.data.requestedCloseReason, "duration_limit");
+  assert.equal(finalLog.data.providerCloseReason, "close_requested");
   const usage = fixture.usage.filter(u => u.id === publicSession.sessionId);
   assert.equal(usage[0].sekunden, null, "missing measurement is not zero");
   assert.equal(usage.at(-1).sekunden, 5, "out-of-order and repeated usage is cumulative");
@@ -170,11 +177,96 @@ try {
   assert.ok(runningSignal.aborted); assert.equal(fixture.calls.length, beforeCancel + 1);
   assert.ok(!cancelSocket.sent.some((event) => event.type === "session.commentary.append")); fixture.backend = null;
 
-  const reconnectSession = await api.createLiveWebRtcSession(createOptions), reconnectSocket = socketFor(reconnectSession.sessionId);
+  const reconnectSession = await api.createLiveWebRtcSession(createOptions);
   const requestsBefore = fixture.requests.length;
-  reconnectSocket.close(); await settle(); fire(500); await settle();
-  assert.notEqual(socketFor(reconnectSession.sessionId), reconnectSocket); assert.equal(fixture.requests.length, requestsBefore);
+  const actualNow = Date.now;
+  let reconnectNow = actualNow();
+  Date.now = () => reconnectNow;
+  try {
+  for (let outage = 0; outage < 4; outage++) {
+    reconnectNow += 10_001;
+    const oldSocket = socketFor(reconnectSession.sessionId);
+    oldSocket.close(); await settle(); fire(500); await settle();
+    const recovered = socketFor(reconnectSession.sessionId);
+    assert.notEqual(recovered, oldSocket, "Each independent outage reconnects");
+    assert.equal(recovered.readyState, 1);
+    assert.equal(fixture.requests.length, requestsBefore, "Recovery must not create another paid session");
+    assert.equal(recovered.sent.some(event => event.type === "session.close"), false);
+  }
+  } finally { Date.now = actualNow; }
+  const afterRecovery = socketFor(reconnectSession.sessionId);
+  const callsBeforeRecovery = fixture.calls.length;
+  input(afterRecovery, "Prüfe den Stand nach der Wiederverbindung.");
+  delegate(afterRecovery, "after_four_recoveries"); await settle();
+  assert.equal(fixture.calls.length, callsBeforeRecovery + 1);
+  assert.ok(afterRecovery.sent.some(event => event.delegation_id === "after_four_recoveries"));
   await api.closeLiveSession(reconnectSession.sessionId, reconnectSession.closeToken);
+  const recoveredClose = fixture.logs.find(entry => entry.data.sessionId === reconnectSession.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+  assert.equal(recoveredClose.data.reconnects, 4);
+
+  const failedReconnect = await api.createLiveWebRtcSession(createOptions);
+  const requestsBeforeFailedReconnect = fixture.requests.length;
+  socketFor(failedReconnect.sessionId).close(1006, "untrusted reconnect text");
+  await settle(); fixture.failSockets = 3;
+  for (const delay of [500, 1000, 2000]) { fire(delay); await settle(); }
+  const failedReconnectLog = fixture.logs.find(entry => entry.data.sessionId === failedReconnect.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+  assert.ok(failedReconnectLog, "Consecutive failed recovery must remain bounded");
+  assert.equal(failedReconnectLog.data.reason, "sideband_reconnect_limit");
+  assert.equal(failedReconnectLog.data.requestedCloseReason, "sideband_reconnect_limit");
+  assert.equal(failedReconnectLog.data.providerCloseReason, "close_requested");
+  assert.equal(fixture.requests.length, requestsBeforeFailedReconnect);
+  assert.equal(await api.closeLiveSession(failedReconnect.sessionId, failedReconnect.closeToken), false);
+  assert.equal([...timers.values()].some(timer => timer.milliseconds === 4000), false);
+
+  for (const [providerReason, expectedReason] of [
+    ["remote_hangup", "remote_hangup"], ["connection_lost", "connection_lost"],
+    ["expired", "expired"], ["content", "content"], ["secret close words", "unknown"], [undefined, null],
+  ]) {
+    const remote = await api.createLiveWebRtcSession(createOptions);
+    socketFor(remote.sessionId).emit({ type: "session.closed", reason: providerReason, usage: { seconds: 7 } });
+    await settle();
+    const ended = fixture.logs.find(entry => entry.data.sessionId === remote.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+    assert.ok(ended); assert.equal(ended.data.reason, "provider_closed");
+    assert.equal(ended.data.requestedCloseReason, null); assert.equal(ended.data.providerCloseReason, expectedReason);
+    assert.equal(ended.data.audioSeconds, 7);
+    assert.equal(await api.closeLiveSession(remote.sessionId, remote.closeToken), false);
+    assert.equal(fixture.logs.filter(entry => entry.data.sessionId === remote.sessionId && entry.message === "GPT-Live-Sitzung beendet").length, 1);
+    assert.equal(JSON.stringify(fixture.logs.filter(entry => entry.data.sessionId === remote.sessionId)).includes("secret close words"), false);
+  }
+
+  const privateTelemetry = await api.createLiveWebRtcSession(createOptions);
+  const telemetrySocket = socketFor(privateTelemetry.sessionId);
+  const privateFragments = ["secret input words", "secret output words", "secret event words", "secret close words", "secret error words"];
+  telemetrySocket.emit({ type: "session.input_transcript.delta", event_id: privateFragments[2], delta: privateFragments[0], start_ms: 0, end_ms: 100 });
+  telemetrySocket.emit({ type: "session.output_transcript.delta", event_id: "different " + privateFragments[2], delta: privateFragments[1], start_ms: 100, end_ms: 200 });
+  telemetrySocket.close(1006, privateFragments[3]); await settle();
+  const transportClose = fixture.logs.find(entry => entry.data.sessionId === privateTelemetry.sessionId && entry.message === "GPT-Live-Steuerverbindung geschlossen");
+  assert.ok(transportClose); assert.equal(transportClose.data.code, 1006); assert.equal(transportClose.data.wasClean, false);
+  fire(500); await settle();
+  socketFor(privateTelemetry.sessionId).emit({ type: "error", event_id: "error " + privateFragments[2],
+    error: { code: privateFragments[4], type: privateFragments[4], message: privateFragments[4], param: privateFragments[4] } });
+  await settle();
+  const telemetryClose = fixture.logs.find(entry => entry.data.sessionId === privateTelemetry.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+  assert.ok(telemetryClose); assert.equal(telemetryClose.data.reason, "provider_error");
+  assert.equal(telemetryClose.data.requestedCloseReason, "provider_error");
+  const telemetryText = JSON.stringify(fixture.logs.filter(entry => entry.data.sessionId === privateTelemetry.sessionId));
+  for (const fragment of privateFragments) assert.equal(telemetryText.includes(fragment), false);
+  assert.equal(await api.closeLiveSession(privateTelemetry.sessionId, privateTelemetry.closeToken), false);
+  // A socket that opens then immediately fails has not recovered stably.
+  const flapping = await api.createLiveWebRtcSession(createOptions);
+  const beforeFlapping = fixture.requests.length;
+  socketFor(flapping.sessionId).close(1006); await settle();
+  for (const delay of [500, 1000, 2000]) {
+    fire(delay); await settle();
+    socketFor(flapping.sessionId).close(1006); await settle();
+  }
+  const flapLog = fixture.logs.find(entry => entry.data.sessionId === flapping.sessionId && entry.message === "GPT-Live-Sitzung beendet");
+  assert.ok(flapLog);
+  assert.equal(flapLog.data.reason, "sideband_reconnect_limit");
+  assert.equal(flapLog.data.reconnects, 3);
+  assert.equal(fixture.requests.length, beforeFlapping);
+  assert.equal(await api.closeLiveSession(flapping.sessionId, flapping.closeToken), false);
+
   // Closing immediately after sideband loss must attach only to close, never use SIP hangup.
   const closeLost = await api.createLiveWebRtcSession(createOptions);
   socketFor(closeLost.sessionId).close(); await settle();
@@ -279,7 +371,7 @@ try {
   assert.equal(fixture.calls.length, beforeSip);
   input(sipSocket, "Wie lautet die öffentliche Adresse?"); delegate(sipSocket, "phone_one"); await settle();
   assert.deepEqual(fixture.calls.at(-1).tools, []); assert.equal(fixture.calls.at(-1).userText, "Wie lautet die öffentliche Adresse?");
-  sipSocket.emit({ type: "session.closed", reason: "peer_disconnected", usage: { seconds: 3 } });
+  sipSocket.emit({ type: "session.closed", reason: "remote_hangup", usage: { seconds: 3 } });
   await assert.rejects(api.acceptLiveSipSession(sipOptions), (error) => error.accepted === true);
   assert.equal(fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept")).length, 1);
   // A first word arriving during sideband replay must cancel the extra greeting.

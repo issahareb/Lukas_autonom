@@ -58,6 +58,7 @@ export class TelefonAudio {
   private base: number | null = null;
   private peak = 0;
   private lastFrame = -Infinity;
+  private latestTimestamp = -Infinity;
   private gain: GainNode;
   constructor(private context: AudioContext) {
     this.gain = context.createGain();
@@ -65,7 +66,7 @@ export class TelefonAudio {
     this.gain.connect(context.destination);
   }
   format(codec: "PCMU" | "PCMA", streamId: string) {
-    if (streamId !== this.streamId) { this.clear(); this.streamId = streamId; this.base = null; this.seen.clear(); }
+    if (streamId !== this.streamId) { this.clear(); this.streamId = streamId; this.base = null; this.seen.clear(); this.latestTimestamp = -Infinity; }
     this.codec = codec;
   }
   play(frame: { streamId: string; track: string; chunk: number; timestamp: number; payload: string }) {
@@ -81,6 +82,11 @@ export class TelefonAudio {
     this.lastFrame = now;
     if (this.base === null) this.base = now + 0.18 - frame.timestamp / 1000;
     let at = this.base + frame.timestamp / 1000;
+    // Both tracks share one stream clock. A delayed older frame must never
+    // reset it and stop fresh audio already queued on either track.
+    // Older frames arriving before their playout time remain valid.
+    if (frame.timestamp < this.latestTimestamp && at < now) return false;
+    this.latestTimestamp = Math.max(this.latestTimestamp, frame.timestamp);
     // Bound latency after a paused tab, reconnect, timestamp reset or network backlog.
     if (at < now - 0.2 || at > now + 1 || this.sources.size > 100) {
       this.clear(); this.base = now + 0.18 - frame.timestamp / 1000; at = now + 0.18;

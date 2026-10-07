@@ -100,3 +100,52 @@ it("shows provider refusal without pretending that audio is playing", async () =
   expect(await screen.findByText("Zustimmung fehlt.")).toBeVisible();
   expect(screen.queryByText(/Gesprächsaudio empfangen/)).toBeNull();
 });
+
+it("drops late old frames on either track without flushing fresh audio", async () => {
+  const { Context, sources } = audioFixture(); const context = new Context(); await context.resume();
+  const player = new TelefonAudio(context as unknown as AudioContext);
+  player.format("PCMU", "stream");
+  const frame = { streamId: "stream", track: "inbound", chunk: 1, timestamp: 1000, payload: btoa("\xff".repeat(160)) };
+  expect(player.play(frame)).toBe(true);
+  context.currentTime = 10.45;
+  expect(player.play({ ...frame, chunk: 21, timestamp: 1400 })).toBe(true);
+  expect(player.play({ ...frame, chunk: 2, timestamp: 1020 })).toBe(false);
+  expect(player.play({ ...frame, track: "outbound" })).toBe(false);
+  expect(sources).toHaveLength(2);
+  expect(sources.every(source => source.stop.mock.calls.length === 0)).toBe(true);
+  context.currentTime = 10.47;
+  expect(player.play({ ...frame, chunk: 22, timestamp: 1420 })).toBe(true);
+  expect(sources[2].start.mock.calls[0][0]).toBeCloseTo(10.60);
+  player.close();
+});
+it("keeps timely out-of-order frames and interleaved tracks on the shared timeline", async () => {
+  const { Context, sources } = audioFixture(); const context = new Context(); await context.resume();
+  const player = new TelefonAudio(context as unknown as AudioContext);
+  player.format("PCMU", "stream");
+  const frame = { streamId: "stream", track: "inbound", chunk: 21, timestamp: 1400, payload: btoa("\xff".repeat(160)) };
+  expect(player.play(frame)).toBe(true);
+  expect(player.play({ ...frame, track: "outbound", chunk: 1, timestamp: 1320 })).toBe(true);
+  expect(player.play({ ...frame, chunk: 20, timestamp: 1380 })).toBe(true);
+  expect(sources[0].start.mock.calls[0][0]).toBeCloseTo(10.18);
+  expect(sources[1].start.mock.calls[0][0]).toBeCloseTo(10.10);
+  expect(sources[2].start.mock.calls[0][0]).toBeCloseTo(10.16);
+  expect(sources.every(source => source.stop.mock.calls.length === 0)).toBe(true);
+  player.close();
+});
+it("recovers forward backlog and resets timestamp history for a new stream", async () => {
+  const { Context, sources } = audioFixture(); const context = new Context(); await context.resume();
+  const player = new TelefonAudio(context as unknown as AudioContext);
+  player.format("PCMU", "first");
+  const frame = { streamId: "first", track: "inbound", chunk: 1, timestamp: 1400, payload: btoa("\xff".repeat(160)) };
+  expect(player.play(frame)).toBe(true);
+  context.currentTime = 11;
+  expect(player.play({ ...frame, chunk: 2, timestamp: 1600 })).toBe(true);
+  expect(sources[0].stop).toHaveBeenCalledOnce();
+  expect(sources[1].start.mock.calls[0][0]).toBeCloseTo(11.18);
+  player.format("PCMU", "second");
+  expect(player.play({ ...frame, streamId: "second", timestamp: 0 })).toBe(true);
+  context.currentTime = 12;
+  expect(player.play({ ...frame, streamId: "second", chunk: 2, timestamp: 200 })).toBe(true);
+  expect(sources[3].start.mock.calls[0][0]).toBeCloseTo(12.18);
+  player.close();
+});
