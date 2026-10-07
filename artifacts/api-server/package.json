@@ -15,7 +15,7 @@
     "models:check": "node --env-file-if-exists=../../.env scripts/check-model-access.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/ssh2": "^1.15.5",
     "@workspace/api-zod": "*",
     "@workspace/db": "*",
