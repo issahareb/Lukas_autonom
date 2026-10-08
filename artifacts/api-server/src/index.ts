@@ -1,3 +1,4 @@
+import { inspectRecentTelefonMedia } from "./lib/telefon-medien-diagnose";
 import { configureTelefonAudioOnce } from "./lib/telefon-audio-setup";
 import { repairTelefonWebhookOnce } from "./lib/telefon-webhook-repair";
 import { execFile } from "node:child_process";
@@ -85,6 +86,7 @@ const server = app.listen(port, (err) => {
       const report = await inspectTelefonSetup(options);
       logger.info(report, "Telefonie-Konfigurationsprüfung");
       if (istTelnyx()) logger.info(await pruefeLetzteTelefonAufnahme(), "Telefonaufnahme-Abrufprüfung");
+      if (istTelnyx()) logger.info(await inspectRecentTelefonMedia(), "Telefon-Medienprüfung");
     })().catch(() => logger.warn("Telefonie-Konfigurationsprüfung fehlgeschlagen"));
   }
 

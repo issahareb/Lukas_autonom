@@ -374,6 +374,48 @@ try {
   sipSocket.emit({ type: "session.closed", reason: "remote_hangup", usage: { seconds: 3 } });
   await assert.rejects(api.acceptLiveSipSession(sipOptions), (error) => error.accepted === true);
   assert.equal(fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept")).length, 1);
+  // Reflected audio precedes text. Reissuing instructions must not cut it off.
+  const silentPcm = Buffer.alloc(4800), audiblePcm = Buffer.from(silentPcm);
+  audiblePcm.writeInt16LE(1200, 0);
+  const audioStartupCases = [
+    { name: "silent_timed", delta: silentPcm.toString("base64"), timing: { start_ms: 0, end_ms: 100 }, audible: false },
+    { name: "audible_timed", delta: audiblePcm.toString("base64"), timing: { start_ms: 0, end_ms: 100 }, audible: true },
+    { name: "silent_untimed", delta: silentPcm.toString("base64"), timing: {}, audible: false },
+    { name: "audible_untimed", delta: audiblePcm.toString("base64"), timing: {}, audible: true },
+    { name: "empty", delta: "", timing: {}, audible: false },
+    { name: "invalid_base64", delta: "not valid PCM!", timing: {}, audible: false },
+    { name: "odd_pcm_byte", delta: "AQ==", timing: {}, audible: false },
+    { name: "noncanonical", delta: "AB==", timing: {}, audible: false },
+  ];
+  for (const test of audioStartupCases) {
+    const sessionId = "live_phone_audio_" + test.name;
+    await api.acceptLiveSipSession({ ...sipOptions, sessionId });
+    const active = socketFor(sessionId);
+    const fallback = [...timers.values()].find(timer => timer.milliseconds === 250);
+    assert.ok(fallback, "greeting fallback starts pending");
+    active.emit({ type: "session.output_audio.delta", delta: test.delta, ...test.timing });
+    assert.equal([...timers.values()].some(timer => timer.milliseconds === 250), !test.audible,
+      test.name + ": only valid nonzero PCM cancels the pending greeting");
+    if (!test.audible) fire(250);
+    else fallback.callback(); // An already queued callback must also respect observed audio.
+    await settle();
+    assert.equal(active.sent.filter(event => event.type === "session.instructions.append").length, test.audible ? 0 : 1,
+      test.name + ": do not interrupt output or suppress the greeting on digital silence");
+    if (test.audible) {
+      active.close(1006); await settle(); fire(500); await settle();
+      const recovered = socketFor(sessionId);
+      recovered.emit({ type: "session.output_audio.delta", delta: test.delta, start_ms: 9000, end_ms: 9100 });
+      assert.equal(recovered.sent.some(event => event.type === "session.instructions.append"),false);
+      recovered.emit({ type: "session.closed", reason: "remote_hangup" });
+    } else active.emit({ type: "session.closed", reason: "remote_hangup" });
+    const closeLog = fixture.logs.find(entry => entry.data.sessionId === sessionId && entry.message === "GPT-Live-Sitzung beendet");
+    assert.ok(closeLog);
+    if (test.audible) {
+      assert.equal(closeLog.data.reflectedOutput.segments,2);
+      assert.equal(closeLog.data.reflectedOutput.timelineGaps,0,"reconnect must not invent media gaps");
+    }
+    if (test.delta.length > 100) assert.equal(JSON.stringify(fixture.logs.filter(row=>row.data.sessionId===sessionId)).includes(test.delta), false, "audio payload never enters logs");
+  }
   // A first word arriving during sideband replay must cancel the extra greeting.
   for (const role of ["user", "assistant"]) {
     const sessionId = "live_phone_already_" + role;

@@ -7,6 +7,7 @@ import { verbrauchSchreiben } from "../verbrauch-quelle";
 import { sprachModell, sprachStimme } from "./sprach-sitzung";
 
 import { TelefonGespraech } from "./telefon-gespraech";
+import { LiveOutputAudio } from "./live-output-audio";
 import { TELEFON_SPRACHREGELN, telefonStartInput } from "./telefon-sprachprofil";
 
 type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -38,6 +39,7 @@ type ManagedSession = {
   reconnects: number; requestedCloseReason?: string; providerCloseReason?: string;
   phone?: TelefonGespraech;
   phoneSpeechObserved?: boolean;
+  outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
   ended: boolean; closing?: Promise<void>; expiresAt?: number;
   seenEvents: Set<string>; seenDelegations: Set<string>;
@@ -239,6 +241,7 @@ function startManaged(
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
+  if (transport === "sip") state.outputAudio = new LiveOutputAudio();
   if (transport === "sip") state.phone = new TelefonGespraech(reason => {
     void terminateSession(state, reason).then(() => options.onTelefonEnd?.(reason)).catch(() => {});
   });
@@ -361,6 +364,15 @@ function observe(state: ManagedSession, event: Json) {
       errorType: diagnostic.errorType, param: diagnostic.param }, "GPT-Live-Protokollfehler");
     void terminateSession(state, "provider_error").catch(() => {}); return;
   }
+  if (event.type === "session.output_audio.delta") {
+    // Reflected audio can arrive before its transcript and need not have event_id.
+    // Do not restart an already active greeting merely because text is delayed.
+    if (state.outputAudio?.observe(event)) {
+      state.phoneSpeechObserved = true;
+      if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
+    }
+    return;
+  }
   if (event.type === "session.input_transcript.delta" || event.type === "session.output_transcript.delta") {
     if (typeof event.delta !== "string" || event.delta.length > 16_000 ||
         typeof event.start_ms !== "number" || !Number.isFinite(event.start_ms) ||
@@ -419,6 +431,7 @@ function sidebandSocket(state: ManagedSession) {
 async function attachSideband(state: ManagedSession): Promise<void> {
   if (state.ended || state.controller.signal.aborted) throw new LiveSessionError("Die Sprachsitzung wurde beendet.", state.transport === "sip");
   const generation = ++state.socketGeneration;
+  state.outputAudio?.resetContinuity();
   const socket = sidebandSocket(state);
   state.socket = socket;
   await new Promise<void>((resolve, reject) => {
@@ -503,7 +516,8 @@ function finishSession(state: ManagedSession, reason: string) {
     delegations: state.seenDelegations.size, reason,
     requestedCloseReason: state.requestedCloseReason ?? null,
     providerCloseReason: state.providerCloseReason ?? null,
-    reconnects: state.reconnects }, "GPT-Live-Sitzung beendet");
+    reconnects: state.reconnects,
+    ...(state.outputAudio ? { reflectedOutput: state.outputAudio.summary() } : {}) }, "GPT-Live-Sitzung beendet");
 }
 /** WebRTC has no REST hangup. Wait for session.closed, attaching again if needed. */
 async function closeWebRtc(state: ManagedSession): Promise<boolean> {
