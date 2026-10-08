@@ -28,6 +28,13 @@ try {
   for(const invalid of ["","!!!!","AQ==","AB==","AQI"])assert.equal(stats.observe({delta:invalid},5300),false);
   assert.equal(stats.summary().untimedEvents,1);assert.equal(stats.summary().invalidTimingEvents,1);assert.equal(stats.summary().invalidEvents,5);
   assert.ok(!JSON.stringify(stats).includes(delta),"only metadata persists on the observer");
+  const unknownInterval=new LiveOutputAudio();unknownInterval.resetContinuity();
+  unknownInterval.observe({delta,start_ms:0,end_ms:100},0);
+  unknownInterval.observe({delta},100);
+  unknownInterval.observe({delta,start_ms:200,end_ms:300},200);
+  unknownInterval.observe({delta,start_ms:-1,end_ms:0},300);
+  unknownInterval.observe({delta,start_ms:400,end_ms:500},400);
+  assert.equal(unknownInterval.summary().timelineGaps,0,"untimed intervals must not manufacture provider gaps");
   const clock=Date.parse("2026-10-08T15:40:00Z"), requests=[];
   Object.assign(process.env,{LUKAS_TELEFON_ANBIETER:"telnyx",TELNYX_APP_ID:"private-app",TELNYX_API_KEY:"private-key"});
   let mode="ok";

@@ -43,11 +43,11 @@ export class LiveOutputAudio {
     this.lastArrivalMs = now;
     const { start_ms: start, end_ms: end } = event;
     if (start === undefined && end === undefined) {
-      this.untimedEvents++; return signal;
+      this.untimedEvents++; this.lastEndMs = undefined; return signal;
     }
     if (typeof start !== "number" || typeof end !== "number" ||
       !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > 86_400_000) {
-      this.invalidTimingEvents++; return signal;
+      this.invalidTimingEvents++; this.lastEndMs = undefined; return signal;
     }
     this.timedEvents++;
     if (this.lastEndMs !== undefined && end <= this.lastEndMs) {
