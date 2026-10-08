@@ -1,3 +1,5 @@
+import { inspectTelefonOwnerContact } from "./lib/telefon-owner";
+import { inspectTelefonCodeAccess } from "./lib/telefon-code-diagnose";
 import { inspectRecentTelefonMedia } from "./lib/telefon-medien-diagnose";
 import { configureTelefonAudioOnce } from "./lib/telefon-audio-setup";
 import { repairTelefonWebhookOnce } from "./lib/telefon-webhook-repair";
@@ -63,6 +65,12 @@ const server = app.listen(port, (err) => {
   if (!process.env.LUKAS_API_TOKEN) {
     logger.warn("LUKAS_API_TOKEN fehlt — die private API ist UNGESCHÜTZT. Vor echtem Betrieb setzen!");
   }
+
+  // Resolve the configured owner without logging phone numbers or private content.
+  // This only reads configuration, contact metadata and one repository file.
+  void inspectTelefonOwnerContact().then(async owner => {
+    if (owner.enabled) logger.info({ ...owner, code: await inspectTelefonCodeAccess() }, "Telefon-Owner-Zugang geprüft");
+  }).catch(() => logger.warn("Telefon-Owner-Zugang konnte nicht geprüft werden"));
 
   // One setup pass per startup; no calls and no autonomous work.
   void configureTelefonAudioOnce().then(report => {

@@ -32,13 +32,13 @@ export const aktualisiereAnruf = async (id, patch) => {
   if (patch.liveBereit) globalThis.telefonProtokoll.push({ ...tracked.get(id), richtung: "ausgehend", ergebnis: "angenommen", stufe: globalThis.telefonEintrag?.stufe ?? "oeffentlich" });
 };
 export const db = {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => globalThis.telefonEintrag ? [globalThis.telefonEintrag] : [] }) }) }),
+  select: () => ({ from: () => ({ where: () => ({ limit: async () => globalThis.telefonLookupTreffer ?? (globalThis.telefonEintrag ? [globalThis.telefonEintrag] : []) }) }) }),
   update: (table) => ({ set: (row) => {
     if (table === telefonNummern && Object.keys(row).some(key => key !== "zuletztGesehen")) {
       (globalThis.telefonNummernSchreibversuche ??= []).push({ operation: "update", row });
       throw new Error("Test forbids persistent phone permissions");
     }
-    return { where: () => Promise.resolve() };
+    return { where: () => globalThis.telefonLastSeenPending ? new Promise(() => {}) : Promise.resolve() };
   } }),
   insert: (table) => ({ values: (row) => {
     if (table !== telefonAnrufe) {
@@ -49,14 +49,19 @@ export const db = {
   } }),
 };
 export const telefonNummern = {}; export const telefonAnrufe = {};
-export const eq = () => ({}); export const desc = () => ({});
+export const eq = () => ({}); export const desc = () => ({}); export const sql = () => ({});
 export const logger = { warn() {}, info() {}, error() {} };
-export const buildSystemPrompt = async () => "privat";
-export const buildPublicSystemPrompt = async (channel) => { if (channel !== "telefon") throw new Error("External calls must use the phone prompt"); return "oeffentlich"; };
+export const buildSystemPrompt = async () => { globalThis.telefonPromptBuilds = (globalThis.telefonPromptBuilds ?? 0) + 1; return "privat"; };
+export const buildPublicSystemPrompt = async (channel) => { if (channel !== "telefon") throw new Error("External calls must use the phone prompt"); globalThis.telefonPromptBuilds = (globalThis.telefonPromptBuilds ?? 0) + 1; return "oeffentlich"; };
 export const SPRACH_REGEL = ""; export const sprachAudio = () => ({});
 export const sprachModell = () => "gpt-live-1";
 export const acceptLiveSipSession = async (options) => {
-  globalThis.telefonAnnahmen.push(options);
+  if (typeof options.instructions !== "function") throw new Error("Phone prompt must be lazy");
+  if (globalThis.telefonExpectedPromptBuilds !== undefined && (globalThis.telefonPromptBuilds ?? 0) !== globalThis.telefonExpectedPromptBuilds) {
+    throw new Error("Prompt was built before SIP accept");
+  }
+  // Simulate a later backend delegation; existing assertions inspect its prompt.
+  globalThis.telefonAnnahmen.push({ ...options, instructions: await options.instructions() });
   if (globalThis.telefonAnnahmeFehler) throw new Error("temporary accept failure");
 };
 export const rejectLiveSipSession = async () => {};
@@ -65,7 +70,7 @@ export const rejectLiveSipSession = async () => {};
 
 await build({
   stdin: {
-    contents: 'export * from "./src/lib/telefon.ts";\nexport { ownerCallGrantFromMessage } from "./src/lib/owner-call-grant.ts";\nexport { pruefeTelefonKontext } from "./src/lib/telnyx.ts";',
+    contents: 'export * from "./src/lib/telefon.ts";\nexport { ownerCallGrantFromMessage } from "./src/lib/owner-call-grant.ts";\nexport { pruefeTelefonKontext } from "./src/lib/telnyx.ts";\nexport { telefonOwnerContactId, inspectTelefonOwnerContact } from "./src/lib/telefon-owner.ts";',
     resolveDir: process.cwd(), sourcefile: "telefon-test-entry.ts", loader: "ts",
   },
   bundle: true,
@@ -78,14 +83,14 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant"].includes(args.path) ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner"].includes(args.path) ? { path: attrappe } : undefined,
         );
       },
     },
   ],
 });
 
-const { normalisiere, nummerAusSip, tatsaechlicheStufe, starteAnruf, nimmAn, ownerCallGrantFromMessage, pruefeTelefonKontext } = await import(out);
+const { normalisiere, nummerAusSip, tatsaechlicheStufe, starteAnruf, nimmAn, ownerCallGrantFromMessage, pruefeTelefonKontext, telefonOwnerContactId, inspectTelefonOwnerContact } = await import(out);
 
 let fehler = 0;
 const pruefe = (bedingung, text) => {
@@ -234,6 +239,92 @@ try {
   delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
 }
 
+
+
+// Owner telephone access is a pinned database contact, never a spoken/display name.
+const ownerEnvKeys = ["LUKAS_TELEFON_OWNER_CONTACT_ID", "LUKAS_TELEFON_OWNER_CONTACT_LOOKUP", "LUKAS_TELEFON_STRENG"];
+const ownerPreviousEnv = new Map(ownerEnvKeys.map(key => [key, process.env[key]]));
+try {
+  process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "17";
+  delete process.env.LUKAS_TELEFON_OWNER_CONTACT_LOOKUP;
+  process.env.LUKAS_TELEFON_STRENG = "false";
+  globalThis.telefonAnnahmen = []; globalThis.telefonProtokoll = [];
+  const owner = { id: 17, nummer: ERWARTET, name: "issa-2", stufe: "privat", darfAngerufenWerden: true };
+  const context = { id: "12345678-1234-1234-1234-123456789abc", nummer: "+" + ERWARTET,
+    richtung: "eingehend", anlass: "", exp: Date.now() + 120000 };
+  globalThis.telefonEintrag = owner;
+  globalThis.telefonExpectedPromptBuilds = globalThis.telefonPromptBuilds ?? 0;
+  globalThis.telefonLastSeenPending = true;
+  assert.equal(await nimmAn("live_owner_phone", "+" + ERWARTET, context), "privat",
+    "Pending last-seen bookkeeping must not delay SIP accept");
+  delete globalThis.telefonLastSeenPending; delete globalThis.telefonExpectedPromptBuilds;
+  const accepted = globalThis.telefonAnnahmen.at(-1);
+  assert.equal(accepted.allowTools, true); assert.equal(accepted.telefonOwnerContactId, 17);
+  assert.equal(accepted.visibility, "private");
+  assert.match(accepted.instructions, /github_read_path.*Lukas_autonom/);
+  assert.match(accepted.initialCommentary, /freigegebene private Owner-Sitzung/);
+  assert.ok(!accepted.initialCommentary.includes("Dies ist ein über den ausdrücklich"),
+    "The full backend prompt must stay out of startup context");
+  const deniedCases = [
+    ["same_name_other_id", { ...owner, id: 18 }, context],
+    ["other_private_contact", { ...owner, id: 19, name: "Other" }, context],
+    ["public", { ...owner, stufe: "oeffentlich" }, context],
+    ["unknown", undefined, context],
+    ["raw_sip", owner, undefined],
+    ["outgoing", owner, { ...context, richtung: "ausgehend", anlass: "Rückruf" }],
+    ["missing_context_id", owner, { ...context, id: "" }],
+    ["expired_context", owner, { ...context, exp: Date.now() - 1 }],
+  ];
+  for (const [name, contact, callContext] of deniedCases) {
+    globalThis.telefonEintrag = contact;
+    await nimmAn("live_owner_denied_" + name, "+" + ERWARTET, callContext);
+    const result = globalThis.telefonAnnahmen.at(-1);
+    assert.equal(result.allowTools, false, name); assert.equal(result.telefonOwnerContactId, undefined, name);
+    assert.doesNotMatch(result.initialCommentary, /freigegebene private Owner-Sitzung/, name);
+  }
+  globalThis.telefonEintrag = owner;
+  process.env.LUKAS_TELEFON_STRENG = "true";
+  await nimmAn("live_owner_strict", "+" + ERWARTET, context);
+  assert.equal(globalThis.telefonAnnahmen.at(-1).allowTools, false);
+  assert.equal(globalThis.telefonAnnahmen.at(-1).visibility, "public");
+  process.env.LUKAS_TELEFON_STRENG = "false";
+  globalThis.telefonEintrag = { ...owner, stufe: "gesperrt" };
+  const beforeBlocked = globalThis.telefonAnnahmen.length;
+  assert.equal(await nimmAn("live_owner_blocked", "+" + ERWARTET, context), "gesperrt");
+  assert.equal(globalThis.telefonAnnahmen.length, beforeBlocked);
+  assert.equal(telefonOwnerContactId({ id: 17, stufe: "privat", nummer: "493012345678", kontext: context }), undefined,
+    "Context number and caller number must agree");
+  for (const badId of ["", "17abc", "017", "-17", "1.7", "9007199254740993"]) {
+    process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = badId;
+    assert.equal(telefonOwnerContactId({ id: 17, stufe: "privat", nummer: ERWARTET, kontext: context }), undefined, badId);
+  }
+  process.env.LUKAS_TELEFON_OWNER_CONTACT_LOOKUP = " issa-2 ";
+  process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "17";
+  globalThis.telefonLookupTreffer = [owner];
+  const report = await inspectTelefonOwnerContact();
+  assert.deepEqual(report, { enabled: true, status: "unique", contactId: 17, stufe: "privat", configured: true });
+  assert.doesNotMatch(JSON.stringify(report), /issa-2|4915112345678/);
+  process.env.LUKAS_TELEFON_STRENG = "true";
+  assert.equal((await inspectTelefonOwnerContact()).configured, false);
+  process.env.LUKAS_TELEFON_STRENG = "false";
+  globalThis.telefonLookupTreffer = [owner, { ...owner, id: 18 }];
+  assert.deepEqual(await inspectTelefonOwnerContact(), { enabled: true, status: "ambiguous", configured: false });
+  globalThis.telefonLookupTreffer = [];
+  assert.deepEqual(await inspectTelefonOwnerContact(), { enabled: true, status: "missing", configured: false });
+  globalThis.telefonLookupTreffer = [{ ...owner, stufe: "oeffentlich" }];
+  assert.equal((await inspectTelefonOwnerContact()).configured, false);
+  delete process.env.LUKAS_TELEFON_OWNER_CONTACT_LOOKUP;
+  globalThis.telefonLookupTreffer = [owner];
+  assert.equal((await inspectTelefonOwnerContact()).configured, true, "Pinned-ID diagnostics work without name lookup");
+  delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;
+  assert.deepEqual(await inspectTelefonOwnerContact(), { enabled: false, status: "missing", configured: false });
+  console.log("OK — Owner phone: exact contact ID, signed incoming context, strict/blocked isolation, lazy prompt and private diagnostics.");
+} finally {
+  for (const [key, value] of ownerPreviousEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll;
+  delete globalThis.telefonLookupTreffer; delete globalThis.telefonLastSeenPending;
+  delete globalThis.telefonExpectedPromptBuilds; delete globalThis.telefonPromptBuilds;
+}
 
 // An explicit private owner message authorizes one call to an unknown number.
 for (const request of [

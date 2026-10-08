@@ -16,10 +16,12 @@ type Socket = InstanceType<typeof WebSocket>;
 type Json = Record<string, unknown>;
 export type LiveSessionOptions = {
   /** Backend only. Never put this prompt in the browser-visible Live config. */
-  instructions: string;
+  instructions: string | (() => Promise<string>);
   visibility: Visibility;
   allowTools?: boolean;
   telefonKontextId?: string;
+  /** Server-only grant from nimmAn after the signed incoming context/contact check. */
+  telefonOwnerContactId?: number;
   onTelefonEnd?: (reason: "mailbox" | "verabschiedet") => Promise<void>;
 };
 export type LiveWebRtcSession = {
@@ -41,6 +43,13 @@ type ManagedSession = {
   phoneSpeechObserved?: boolean;
   outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
+  backendInstructions?: Promise<string>;
+  phoneGreetingEventId?: string;
+  phoneStartup?: {
+    greetingSentMs: number | null; greetingAcceptedMs: number | null;
+    firstInputAudioEventMs: number | null; firstOutputAudioEventMs: number | null;
+    firstOutputSignalMs: number | null; firstInputTranscriptMs: number | null; firstOutputTranscriptMs: number | null;
+  };
   ended: boolean; closing?: Promise<void>; expiresAt?: number;
   seenEvents: Set<string>; seenDelegations: Set<string>;
   transcript: Transcript[]; history: Message[]; queue: Work[]; working: boolean;
@@ -233,7 +242,13 @@ function startManaged(
   const state: ManagedSession = {
     id, token: randomBytes(32).toString("hex"),
     options: { ...options,
-      allowTools: transport === "webrtc" && options.visibility === "private" && options.allowTools === true,
+      allowTools: options.visibility === "private" && options.allowTools === true &&
+        (transport === "webrtc" || (
+          Number.isSafeInteger(options.telefonOwnerContactId) && options.telefonOwnerContactId! > 0 &&
+          String(options.telefonOwnerContactId) === process.env.LUKAS_TELEFON_OWNER_CONTACT_ID?.trim() &&
+          Boolean(options.telefonKontextId) &&
+          (process.env.LUKAS_TELEFON_STRENG ?? "false").trim().toLowerCase() !== "true"
+        )),
     },
     connection, ...config, transport, controller: new AbortController(),
     conversationId: -randomInt(1, 2_147_483_648), socketGeneration: 0,
@@ -241,7 +256,12 @@ function startManaged(
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
-  if (transport === "sip") state.outputAudio = new LiveOutputAudio();
+  if (transport === "sip") {
+    state.outputAudio = new LiveOutputAudio();
+    state.phoneStartup = { greetingSentMs: null, greetingAcceptedMs: null,
+      firstInputAudioEventMs: null, firstOutputAudioEventMs: null, firstOutputSignalMs: null,
+      firstInputTranscriptMs: null, firstOutputTranscriptMs: null };
+  }
   if (transport === "sip") state.phone = new TelefonGespraech(reason => {
     void terminateSession(state, reason).then(() => options.onTelefonEnd?.(reason)).catch(() => {});
   });
@@ -290,6 +310,17 @@ function retainHistory(messages: Message[]): Message[] {
   }
   return messages.slice(first);
 }
+/** Resolve backend context only when delegated work needs it, once per session. */
+function backendInstructions(state: ManagedSession): Promise<string> {
+  return state.backendInstructions ??= Promise.resolve().then(() => {
+    state.controller.signal.throwIfAborted();
+    return typeof state.options.instructions === "function" ? state.options.instructions() : state.options.instructions;
+  });
+}
+function markPhoneStartup(state: ManagedSession, key: keyof NonNullable<ManagedSession["phoneStartup"]>): void {
+  if (!state.phoneStartup || state.phoneStartup[key] !== null) return;
+  state.phoneStartup[key] = Math.max(0, Date.now() - state.createdAt);
+}
 async function drainWork(state: ManagedSession) {
   if (state.working || state.ended || state.closing) return;
   state.working = true;
@@ -298,12 +329,14 @@ async function drainWork(state: ManagedSession) {
       const work = state.queue.shift()!;
       state.history = retainHistory([...state.history, ...work.messages]);
       try {
-        const { runLukasTurn } = await import("../lukas-brain");
+        state.controller.signal.throwIfAborted();
+        const [{ runLukasTurn }, instructions] = await Promise.all([import("../lukas-brain"), backendInstructions(state)]);
+        // A caller can hang up while the backend-only context is still loading.
         state.controller.signal.throwIfAborted();
         const answer = await runLukasTurn({
           quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
           history: [...state.history], userText: work.userText,
-          systemPromptOverride: state.options.instructions + (state.options.allowTools ? "" :
+          systemPromptOverride: instructions + (state.options.allowTools ? "" :
             "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung."),
           conversationId: state.conversationId,
           ...(state.options.allowTools ? {} : { tools: [] }),
@@ -364,10 +397,30 @@ function observe(state: ManagedSession, event: Json) {
       errorType: diagnostic.errorType, param: diagnostic.param }, "GPT-Live-Protokollfehler");
     void terminateSession(state, "provider_error").catch(() => {}); return;
   }
+  if (event.type === "session.instructions.appended") {
+    // Sideband attachment belongs to an already started session; a new
+    // session.started is not guaranteed. The matched ACK confirms injection,
+    // not speech or playback. Do not retry an unacknowledged instruction.
+    if (state.phoneStartup && state.phoneGreetingEventId &&
+      event.client_event_id === state.phoneGreetingEventId && state.phoneStartup.greetingAcceptedMs === null) {
+      markPhoneStartup(state, "greetingAcceptedMs");
+      logger.info({ sessionId: state.id, phase: "phone_greeting_accepted",
+        acceptedAfterMs: state.phoneStartup.greetingAcceptedMs,
+        acknowledgmentDelayMs: state.phoneStartup.greetingSentMs === null ? null :
+          Math.max(0, state.phoneStartup.greetingAcceptedMs! - state.phoneStartup.greetingSentMs) }, "Telefon-Sprachstart");
+    }
+    return;
+  }
+  if (event.type === "session.input_audio.append") {
+    if (typeof event.audio === "string" && event.audio.length > 0) markPhoneStartup(state, "firstInputAudioEventMs");
+    return;
+  }
   if (event.type === "session.output_audio.delta") {
+    if (typeof event.delta === "string" && event.delta.length > 0) markPhoneStartup(state, "firstOutputAudioEventMs");
     // Reflected audio can arrive before its transcript and need not have event_id.
     // Do not restart an already active greeting merely because text is delayed.
     if (state.outputAudio?.observe(event)) {
+      markPhoneStartup(state, "firstOutputSignalMs");
       state.phoneSpeechObserved = true;
       if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
     }
@@ -381,6 +434,7 @@ function observe(state: ManagedSession, event: Json) {
     // Keep each timestamped fragment intact: a later fragment must never move
     // earlier speech past the delegation cutoff or authorize earlier work.
     if (state.transport === "sip" && event.delta.trim()) {
+      markPhoneStartup(state, role === "user" ? "firstInputTranscriptMs" : "firstOutputTranscriptMs");
       state.phoneSpeechObserved = true;
       if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
     }
@@ -517,7 +571,8 @@ function finishSession(state: ManagedSession, reason: string) {
     requestedCloseReason: state.requestedCloseReason ?? null,
     providerCloseReason: state.providerCloseReason ?? null,
     reconnects: state.reconnects,
-    ...(state.outputAudio ? { reflectedOutput: state.outputAudio.summary() } : {}) }, "GPT-Live-Sitzung beendet");
+    ...(state.outputAudio ? { reflectedOutput: state.outputAudio.summary() } : {}),
+    ...(state.phoneStartup ? { phoneStartup: state.phoneStartup } : {}) }, "GPT-Live-Sitzung beendet");
 }
 /** WebRTC has no REST hangup. Wait for session.closed, attaching again if needed. */
 async function closeWebRtc(state: ManagedSession): Promise<boolean> {
@@ -648,7 +703,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
         session: sessionConfig(config, false, telefonStartInput(options.initialCommentary)),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
-      state = startManaged(options.sessionId, { ...options, allowTools: false }, connection, config, "sip");
+      state = startManaged(options.sessionId, options, connection, config, "sip");
       reservations.delete(reservation);
       if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.", true);
       await attachSideband(state);
@@ -660,10 +715,13 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
         phoneState.phoneGreetingTimer = setTimeout(() => {
           phoneState.phoneGreetingTimer = undefined;
           if (phoneState.ended || phoneState.closing || phoneState.phoneSpeechObserved) return;
+          phoneState.phoneGreetingEventId = "phone_greeting_" + randomBytes(8).toString("hex");
           const delivered = send(phoneState, { type: "session.instructions.append",
-            event_id: "phone_greeting_" + randomBytes(8).toString("hex"), delegation_id: null,
-            content: "Begrüße den Gesprächspartner jetzt genau einmal in einem kurzen Satz gemäß dem aktuellen Gesprächsauftrag. Danach höre zu." });
-          logger.info({ sessionId: phoneState.id, phase: "phone_greeting", delivered }, "Telefon-Sprachstart");
+            event_id: phoneState.phoneGreetingEventId, delegation_id: null,
+            content: "Beginne jetzt sofort auf Deutsch. Warte nicht darauf, dass der Anrufer zuerst spricht. Begrüße den Gesprächspartner genau einmal in einem kurzen Satz gemäß dem aktuellen Gesprächsauftrag. Danach mache eine Pause und höre zu. Falls der Gesprächspartner bereits spricht, höre ihm zu und antworte anschließend, ohne die Begrüßung zu wiederholen." });
+          if (delivered) markPhoneStartup(phoneState, "greetingSentMs");
+          logger.info({ sessionId: phoneState.id, phase: "phone_greeting", delivered,
+            sentAfterMs: phoneState.phoneStartup?.greetingSentMs ?? null }, "Telefon-Sprachstart");
         }, 250);
         phoneState.phoneGreetingTimer.unref();
       }

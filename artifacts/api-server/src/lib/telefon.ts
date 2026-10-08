@@ -26,6 +26,7 @@ import type { OwnerCallGrant } from "./owner-call-grant";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 import { neuerVerfolgterAnruf, aktualisiereAnruf } from "./telefon-status";
 import { findeTelefonKontakte, telefonKontakte } from "./telefon-kontakte";
+import { telefonOwnerContactId } from "./telefon-owner";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
 
@@ -79,7 +80,7 @@ function holeAnlass(nummer: string): string | null {
 }
 
 /** Welchen Lukas bekommt diese Nummer? Unbekannt = oeffentlich. */
-export async function stufeFuer(nummer: string): Promise<{ stufe: Stufe; name: string }> {
+export async function stufeFuer(nummer: string): Promise<{ stufe: Stufe; name: string; id?: number }> {
   const key = normalisiere(nummer);
   if (!key) return { stufe: "oeffentlich", name: "" };
 
@@ -91,7 +92,8 @@ export async function stufeFuer(nummer: string): Promise<{ stufe: Stufe; name: s
 
   if (!treffer) return { stufe: "oeffentlich", name: "" };
 
-  await db
+  // Last-seen bookkeeping must never keep an accepted caller waiting.
+  void db
     .update(telefonNummern)
     .set({ zuletztGesehen: new Date() })
     .where(eq(telefonNummern.id, treffer.id))
@@ -100,7 +102,7 @@ export async function stufeFuer(nummer: string): Promise<{ stufe: Stufe; name: s
   const stufe = (["privat", "oeffentlich", "gesperrt"] as const).includes(treffer.stufe as Stufe)
     ? (treffer.stufe as Stufe)
     : "oeffentlich";
-  return { stufe, name: treffer.name };
+  return { stufe, name: treffer.name, id: treffer.id };
 }
 
 export async function protokolliere(eintrag: {
@@ -125,7 +127,7 @@ export async function protokolliere(eintrag: {
 }
 
 /** Die Anweisungen fuer genau diesen Anrufer. */
-async function anweisungen(stufe: Stufe, name: string, anlass: string | null, aufnahme = false, mithoeren = false): Promise<string> {
+async function anweisungen(stufe: Stufe, name: string, anlass: string | null, aufnahme = false, mithoeren = false, owner = false): Promise<string> {
   const basis =
     stufe === "privat" ? await buildSystemPrompt() : await buildPublicSystemPrompt("telefon");
 
@@ -148,7 +150,10 @@ async function anweisungen(stufe: Stufe, name: string, anlass: string | null, au
   const aufnahmeHinweis = aufnahme
     ? "\nDie Zustimmung zur Gesprächsaufzeichnung liegt bereits vor. Keine erneute Einwilligungsfrage oder Aufnahmeansage; beginne direkt mit dem Gespräch. Auf ausdrückliche Nachfrage wahrheitsgemäß antworten, dass dieses Gespräch aufgezeichnet wird."
     : "";
-  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}${aufnahmeHinweis}${mithoeren ? "\nDie vorherige schriftliche Zustimmung zum Live-Mithören durch Issa ist hinterlegt. Keine erneute Zustimmungsfrage oder Ansage; auf Nachfrage wahrheitsgemäß antworten." : ""}\n\n${basis}`;
+  const ownerAuftrag = owner
+    ? "\nDies ist ein über den ausdrücklich konfigurierten Owner-Kontakt freigegebenes privates Telefonat mit Issa. Du hast dieselben Backend-Werkzeuge für konkrete Aufgaben wie im privaten Chat; führe den Auftrag aus, statt pauschal fehlenden Zugriff zu behaupten. Zum Lesen deines eigenen Codes verwende github_read_path mit repo Lukas_autonom und den passenden Pfaden. Prüfe Ergebnisse und bestätige nur tatsächlich ausgeführte Aktionen. Bestehende Werkzeugrichtlinien gelten weiter."
+    : "";
+  return `${SPRACH_REGEL}\n\n${amTelefon}${grund}${aufnahmeHinweis}${mithoeren ? "\nDie vorherige schriftliche Zustimmung zum Live-Mithören durch Issa ist hinterlegt. Keine erneute Zustimmungsfrage oder Ansage; auf Nachfrage wahrheitsgemäß antworten." : ""}\n\n${basis}${ownerAuftrag}`;
 }
 
 /*
@@ -165,13 +170,14 @@ async function anweisungen(stufe: Stufe, name: string, anlass: string | null, au
  * diesem oeffentlichen Repository — und Lukas' Nummer kennt, kann sich
  * ansagen lassen, was Lukas ueber Issa weiss.
  *
- * Was das NICHT ist: ein Weg, etwas auszuloesen. Die Sprachsitzung bekommt
- * keine Werkzeuge. Auch der Live-Backend-Durchlauf bekommt explizit tools: [].
- * Es geht um Preisgabe, nicht um Handlungen.
+ * Private Kontakte erhalten dadurch allein keine Werkzeuge. Eine getrennte,
+ * ausdrueckliche Konfiguration LUKAS_TELEFON_OWNER_CONTACT_ID erlaubt Werkzeuge
+ * fuer genau diesen privaten Datenbank-Kontakt und nur bei eingehenden Anrufen
+ * mit verifiziertem Provider-Kontext. Anzeigenamen und Gespraechsbehauptungen
+ * reichen nie. LUKAS_TELEFON_STRENG sperrt auch diese Werkzeugfreigabe.
  *
- * Eine zusaetzliche Authentifizierung ist technisch moeglich. Die bestehende
- * Caller-ID-Abwaegung bleibt eine bewusste Owner-Entscheidung; die Migration
- * auf Live erweitert sie nicht um Werkzeugrechte.
+ * Diese Owner-Freigabe ist eine bewusste Erweiterung der Caller-ID-Abwaegung:
+ * Provider-Signaturen verhindern gefaelschte Webhooks, nicht Rufnummern-Spoofing.
  *
  * Bleiben drei Moeglichkeiten, und die Wahl gehoert Issa:
  *
@@ -233,7 +239,7 @@ export function tatsaechlicheStufe(
  */
 export async function nimmAn(callId: string, vonNummer: string, kontext?: TelefonKontext): Promise<Stufe> {
   vonNummer = kontext?.nummer ?? vonNummer;
-  const { stufe: eingetragen, name } = await stufeFuer(vonNummer);
+  const { stufe: eingetragen, name, id } = await stufeFuer(vonNummer);
   const offenerAnlass = !kontext ? offeneAusgehende.get(normalisiere(vonNummer)) : undefined;
   const anlass = kontext ? (kontext.richtung === "ausgehend" ? kontext.anlass : null) : holeAnlass(vonNummer);
   const ausgehend = kontext ? kontext.richtung === "ausgehend" : anlass !== null;
@@ -245,19 +251,24 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     return stufe;
   }
 
+  const ownerContactId = telefonOwnerContactId({ id, stufe, nummer: vonNummer, kontext });
   await acceptLiveSipSession({
     sessionId: callId,
     telefonKontextId: kontext?.id,
     onTelefonEnd: kontext?.id ? async reason => {
       await aktualisiereAnruf(kontext.id, { detail: reason === "mailbox" ? "Mailbox erkannt; Anruf beendet." : "Nach Verabschiedung ohne weitere Antwort beendet.", sipStatus: "completed" });
     } : undefined,
-    instructions: await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true),
+    // Build the private backend prompt only when the first task needs it.
+    instructions: () => anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined),
     visibility: stufe === "privat" ? "private" : "public",
-    initialCommentary: ausgehend
+    initialCommentary: (ausgehend
       ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 1000)}`
-      : `Ein Anrufer hat dich erreicht. Begrüße ${name || "den Gesprächspartner"} kurz.`,
-    // Rufnummernanzeige berechtigt wie bisher nicht zu Werkzeugaktionen.
-    allowTools: false,
+      : `Ein Anrufer hat dich erreicht. Begrüße ${name || "den Gesprächspartner"} kurz.`) +
+      (ownerContactId !== undefined
+        ? " Dies ist die serverseitig freigegebene private Owner-Sitzung. Das Backend darf konkrete Aufgaben und Codezugriff mit seinen Werkzeugen bearbeiten. Delegiere solche Aufträge; dein eigener Code liegt im Repository Lukas_autonom. Behaupte keine Ausführung ohne bestätigtes Backend-Ergebnis."
+        : ""),
+    allowTools: ownerContactId !== undefined,
+    ...(ownerContactId !== undefined ? { telefonOwnerContactId: ownerContactId } : {}),
   });
   if (offenerAnlass && offeneAusgehende.get(normalisiere(vonNummer)) === offenerAnlass) {
     offeneAusgehende.delete(normalisiere(vonNummer));

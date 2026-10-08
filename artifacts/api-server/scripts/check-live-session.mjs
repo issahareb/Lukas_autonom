@@ -38,7 +38,7 @@ await build({
   } }],
 });
 const previous = { fetch: globalThis.fetch, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
-const envKeys = ["OPENAI_PROJECT_ID", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS"];
+const envKeys = ["OPENAI_PROJECT_ID", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS", "LUKAS_TELEFON_OWNER_CONTACT_ID", "LUKAS_TELEFON_STRENG"];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 for (const key of envKeys) delete process.env[key];
 const timers = new Map();
@@ -345,6 +345,45 @@ try {
   input(mailbox, "Bitte hinterlassen Sie nach dem Signal"); input(mailbox, "ton eine Nachricht."); await settle();
   assert.ok(endings.includes("mailbox")); assert.equal(mailbox.readyState, 3);
 
+  // Only a server-selected, configured owner contact can use tools over SIP.
+  process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "7";
+  const ownerPhoneCases = [
+    { name: "owner", contactId: 7, contextId: "signed_owner_context", visibility: "private", allowTools: true, enabled: true },
+    { name: "other_private_contact", contactId: 8, contextId: "signed_other_context", visibility: "private", allowTools: true, enabled: false },
+    { name: "no_owner_grant", contextId: "signed_context", visibility: "private", allowTools: true, enabled: false },
+    { name: "unsigned", contactId: 7, visibility: "private", allowTools: true, enabled: false },
+    { name: "public", contactId: 7, contextId: "signed_context", visibility: "public", allowTools: true, enabled: false },
+    { name: "tools_denied", contactId: 7, contextId: "signed_context", visibility: "private", allowTools: false, enabled: false },
+    { name: "strict", contactId: 7, contextId: "signed_context", visibility: "private", allowTools: true, strict: true, enabled: false },
+    { name: "invalid_config", contactId: 7, contextId: "signed_context", visibility: "private", allowTools: true, configured: "7junk", enabled: false },
+    { name: "missing_config", contactId: 7, contextId: "signed_context", visibility: "private", allowTools: true, configured: "", enabled: false },
+  ];
+  for (const test of ownerPhoneCases) {
+    process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = test.configured ?? "7";
+    process.env.LUKAS_TELEFON_STRENG = test.strict ? "true" : "false";
+    const sessionId = "live_owner_phone_" + test.name;
+    await api.acceptLiveSipSession({
+      sessionId, instructions: "OWNER_PRIVATE_BACKEND", visibility: test.visibility,
+      allowTools: test.allowTools, telefonKontextId: test.contextId, telefonOwnerContactId: test.contactId,
+    });
+    const active = socketFor(sessionId);
+    input(active, "Lies deinen Code im Repository Lukas_autonom.");
+    delegate(active, "read_code_" + test.name);
+    await settle();
+    const call = fixture.calls.at(-1);
+    assert.equal(call.userText, "Lies deinen Code im Repository Lukas_autonom.");
+    assert.equal(call.quelle, "telefon");
+    if (test.enabled) {
+      assert.equal(call.tools, undefined, "owner can delegate to the real backend toolset");
+      assert.equal(call.systemPromptOverride, "OWNER_PRIVATE_BACKEND");
+    } else assert.deepEqual(call.tools, [], test.name + " must not grant owner tools");
+    const accept = fixture.requests.find(r => r.url.endsWith("/" + sessionId + "/accept"));
+    assert.ok(!JSON.stringify(accept.body).includes("OWNER_PRIVATE_BACKEND"));
+    active.emit({ type: "session.closed", reason: "remote_hangup" });
+  }
+  delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;
+  delete process.env.LUKAS_TELEFON_STRENG;
+
   const sipOptions = { sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
     initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };
   const beforeSip = fixture.calls.length;
@@ -364,6 +403,22 @@ try {
   const greeting = sipSocket.sent.filter((e) => e.type === "session.instructions.append" && e.delegation_id === null);
   assert.equal(greeting.length, 1, "phone startup must trigger exactly one greeting instruction");
   assert.match(greeting[0].content, /genau einmal/);
+  assert.match(greeting[0].content, /jetzt sofort auf Deutsch/);
+  assert.match(greeting[0].content, /Warte nicht/);
+  // A sideband may never replay session.started. Acceptance and attachment
+  // already initialized this SIP session, so its greeting must not wait for it.
+  sipSocket.emit({ type: "session.started", session: { id: sipOptions.sessionId } });
+  assert.equal(sipSocket.sent.filter(event => event.type === "session.instructions.append").length, 1);
+  sipSocket.emit({ type: "session.instructions.appended", client_event_id: "not_the_greeting" });
+  assert.equal(fixture.logs.filter(row => row.data.sessionId === sipOptions.sessionId && row.data.phase === "phone_greeting_accepted").length, 0);
+  sipSocket.emit({ type: "session.instructions.appended", client_event_id: greeting[0].event_id });
+  sipSocket.emit({ type: "session.instructions.appended", client_event_id: greeting[0].event_id });
+  const ackLogs = fixture.logs.filter(row => row.data.sessionId === sipOptions.sessionId && row.data.phase === "phone_greeting_accepted");
+  assert.equal(ackLogs.length, 1, "matched acknowledgment is recorded once, separately from local send");
+  assert.ok(ackLogs[0].data.acknowledgmentDelayMs >= 0);
+  sipSocket.emit({ type: "session.input_audio.append", audio: "AAA=" });
+  sipSocket.emit({ type: "session.output_audio.delta", delta: "AAA=", start_ms: 0, end_ms: 1 });
+  say(sipSocket, "Hallo, hier ist Lukas.");
   const quietBrief = sipSocket.sent.filter((e) => e.type === "session.thinking.append" && e.delegation_id === null);
   assert.equal(quietBrief.length, 0, "startup context must not be streamed after speech can already begin");
   assert.equal(sipSocket.sent.some((e) => e.type === "session.commentary.append" && e.delegation_id === null), false,
@@ -372,8 +427,56 @@ try {
   input(sipSocket, "Wie lautet die öffentliche Adresse?"); delegate(sipSocket, "phone_one"); await settle();
   assert.deepEqual(fixture.calls.at(-1).tools, []); assert.equal(fixture.calls.at(-1).userText, "Wie lautet die öffentliche Adresse?");
   sipSocket.emit({ type: "session.closed", reason: "remote_hangup", usage: { seconds: 3 } });
+  const startupLog = fixture.logs.find(row => row.data.sessionId === sipOptions.sessionId && row.message === "GPT-Live-Sitzung beendet");
+  for (const key of ["greetingSentMs", "greetingAcceptedMs", "firstInputAudioEventMs", "firstOutputAudioEventMs", "firstInputTranscriptMs", "firstOutputTranscriptMs"]) {
+    assert.equal(typeof startupLog.data.phoneStartup[key], "number", key + " is content-free timing");
+  }
+  assert.equal(startupLog.data.phoneStartup.firstOutputSignalMs, null, "digital silence is not evidence of speech");
+  assert.ok(!JSON.stringify(startupLog.data.phoneStartup).includes("Hallo"));
   await assert.rejects(api.acceptLiveSipSession(sipOptions), (error) => error.accepted === true);
   assert.equal(fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept")).length, 1);
+  // Backend-only prompt construction must not delay SIP acceptance/greeting.
+  let lazyLoads = 0, releaseLazy;
+  const lazyPrompt = new Promise(resolve => { releaseLazy = resolve; });
+  await api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_lazy_context", instructions: () => {
+    lazyLoads++; return lazyPrompt;
+  } });
+  const lazySocket = socketFor("live_lazy_context");
+  assert.equal(lazyLoads, 0, "backend instructions stay lazy during acceptance");
+  fire(250);
+  assert.ok(lazySocket.sent.some(event => event.type === "session.instructions.append"));
+  const beforeLazy = fixture.calls.length;
+  input(lazySocket, "Lies deinen Code."); delegate(lazySocket, "lazy_one"); await settle();
+  assert.equal(lazyLoads, 1); assert.equal(fixture.calls.length, beforeLazy, "backend waits for its private context");
+  releaseLazy("LAZY_BACKEND_CONTEXT"); await settle();
+  assert.equal(fixture.calls.length, beforeLazy + 1);
+  assert.ok(fixture.calls.at(-1).systemPromptOverride.startsWith("LAZY_BACKEND_CONTEXT"));
+  input(lazySocket, "Prüfe die nächste Datei."); delegate(lazySocket, "lazy_two"); await settle();
+  assert.equal(lazyLoads, 1, "resolved context is shared across delegated turns");
+  lazySocket.emit({ type: "session.closed" });
+
+  let rejectedLoads = 0;
+  await api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_lazy_reject", instructions: async () => {
+    rejectedLoads++; throw new Error("PRIVATE_PROMPT_FAILURE");
+  } });
+  const rejectSocket = socketFor("live_lazy_reject"), beforeRejected = fixture.calls.length;
+  input(rejectSocket, "Erster Auftrag."); delegate(rejectSocket, "reject_one"); await settle();
+  input(rejectSocket, "Zweiter Auftrag."); delegate(rejectSocket, "reject_two"); await settle();
+  assert.equal(rejectedLoads, 1, "rejected lazy context is cached too");
+  assert.equal(fixture.calls.length, beforeRejected);
+  assert.ok(!JSON.stringify(fixture.logs).includes("PRIVATE_PROMPT_FAILURE"));
+  rejectSocket.emit({ type: "session.closed" });
+
+  let releaseCancelledPrompt;
+  await api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_lazy_cancel", instructions: () =>
+    new Promise(resolve => { releaseCancelledPrompt = resolve; }) });
+  const cancelledPromptSocket = socketFor("live_lazy_cancel"), beforeLatePrompt = fixture.calls.length;
+  input(cancelledPromptSocket, "Arbeite."); delegate(cancelledPromptSocket, "lazy_cancel"); await settle();
+  cancelledPromptSocket.emit({ type: "session.closed", reason: "remote_hangup" });
+  releaseCancelledPrompt("LATE_CONTEXT"); await settle();
+  assert.equal(fixture.calls.length, beforeLatePrompt, "late context after hangup cannot start work");
+  assert.equal(cancelledPromptSocket.sent.some(event => event.delegation_id === "lazy_cancel"), false);
+
   // Reflected audio precedes text. Reissuing instructions must not cut it off.
   const silentPcm = Buffer.alloc(4800), audiblePcm = Buffer.from(silentPcm);
   audiblePcm.writeInt16LE(1200, 0);
