@@ -93,6 +93,14 @@ export function telnyxStatusUrl(): string {
   return new URL("/api/telefon/telnyx/status", url).href;
 }
 
+export function telnyxSipRegion(): string {
+  const region = process.env.TELNYX_SIP_REGION?.trim() || "Europe";
+  if (!["US", "Europe", "Canada", "Australia", "Middle East"].includes(region)) {
+    throw new Error("Ungültige Telnyx-SIP-Region.");
+  }
+  return region;
+}
+
 export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], anlass = "", id?: string, aufnahme = false, mithoeren = false): string {
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
   if (!projekt || !/^proj_[A-Za-z0-9_-]+$/.test(projekt)) throw new Error("OPENAI_PROJECT_ID fehlt oder ist ungültig.");
@@ -118,7 +126,7 @@ export function telnyxXml(nummer: string, richtung: TelefonKontext["richtung"], 
   const ringback = richtung === "ausgehend"
     ? ` audioUrl="${xml(new URL("/audio/telnyx-ringback-silence.wav", telnyxStatusUrl()).href)}"`
     : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><Response>${stream}<Dial answerOnBridge="true" timeout="30"${ringback}${recording}><Sip${callback}>${xml(target)}</Sip></Dial></Response>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><Response>${stream}<Dial answerOnBridge="true" timeout="30"${ringback}${recording}><Sip sipRegion="${xml(telnyxSipRegion())}"${callback}>${xml(target)}</Sip></Dial></Response>`;
 }
 
 export type TelnyxStand = {

@@ -1,3 +1,4 @@
+import { configureTelefonAudioOnce } from "./lib/telefon-audio-setup";
 import { repairTelefonWebhookOnce } from "./lib/telefon-webhook-repair";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
@@ -61,6 +62,11 @@ const server = app.listen(port, (err) => {
   if (!process.env.LUKAS_API_TOKEN) {
     logger.warn("LUKAS_API_TOKEN fehlt — die private API ist UNGESCHÜTZT. Vor echtem Betrieb setzen!");
   }
+
+  // One setup pass per startup; no calls and no autonomous work.
+  void configureTelefonAudioOnce().then(report => {
+    if (report.enabled) logger.info(report, "Telefon-Audioqualität: Einrichtung geprüft");
+  }).catch(() => logger.warn("Telefon-Audioqualität konnte nicht eingerichtet werden"));
 
   // One read-only provider check per startup; never log keys or the signed XML.
   if (istTelnyx()) {

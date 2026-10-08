@@ -33,6 +33,13 @@ try {
   assert.throws(() => t.telnyxXml('"/><Say>bad', 'eingehend'));
   assert.match(t.telnyxXml('', 'eingehend'), /transport=tls;secure=srtp\?X-Lukas-Context=/);
   assert.doesNotMatch(t.telnyxXml('', 'eingehend'), /audioUrl=/, 'incoming callers retain normal ringback until the SIP leg answers');
+  for (const region of ['US','Europe','Canada','Australia','Middle East']) {
+    process.env.TELNYX_SIP_REGION = region;
+    assert.ok(t.telnyxXml('', 'eingehend').includes('<Sip sipRegion="' + region + '">'));
+  }
+  process.env.TELNYX_SIP_REGION = 'Europe"><Bad />';
+  assert.throws(()=>t.telnyxXml('', 'eingehend'), /SIP-Region/);
+  delete process.env.TELNYX_SIP_REGION;
   process.env.LUKAS_PUBLIC_URL = 'https://lukas.example.test';
   let calls = [], numberStatus = 'requirement-info-pending';
   globalThis.fetch = async (url, options) => {
@@ -45,7 +52,7 @@ try {
   const dial = calls.find(c => c.options.method === 'POST');
   assert.equal(dial.url, 'https://api.telnyx.com/v2/texml/calls/test-app');
   const payload = JSON.parse(dial.options.body);
-  assert.match(payload.Texml, /<Sip>sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "outbound bridge requires TLS signaling and SRTP audio");
+  assert.match(payload.Texml, /<Sip sipRegion="Europe">sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "outbound bridge requires TLS signaling and SRTP audio");
   const ringbackUrl = payload.Texml.match(/audioUrl="([^"]+)"/)[1];
   assert.equal(ringbackUrl, 'https://lukas.example.test/audio/telnyx-ringback-silence.wav');
   assert.equal(payload.From, process.env.TELNYX_NUMMER); assert.equal(payload.To, '+4915112345678');
@@ -196,7 +203,7 @@ export const sendeSms = async () => ({}), letzteSms = async () => [], zugangVorh
   assert.deepEqual(globalThis.telefonLogs.at(-1)[0], { route: 'telnyx/texml', outcome: 'xml_returned', httpStatus: 200 });
   assert.doesNotMatch(JSON.stringify(globalThis.telefonLogs), /4915112345678|49201123456|test-app|test-only|X-Lukas-Context|local-webhook-regression-secret/);
   const incomingXml = await incoming.text();
-  assert.match(incomingXml, /<Sip>sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "incoming bridge requires TLS signaling and SRTP audio");
+  assert.match(incomingXml, /<Sip sipRegion="Europe">sip:[^<]+;transport=tls;secure=srtp\?X-Lukas-Context=/, "incoming bridge requires TLS signaling and SRTP audio");
   const incomingToken = incomingXml.match(/X-Lukas-Context=([^<]+)/)[1];
   assert.equal(t.pruefeTelefonKontext(incomingToken).richtung, 'eingehend');
   const event = { type: 'live.transport.incoming', data: { type: 'sip', session_id: 'live_one', sip_headers: [{ name: 'X-Lukas-Context', value: token }] } };
