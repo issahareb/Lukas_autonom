@@ -623,7 +623,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "execute_command",
       description:
-        "Führe einen beliebigen Shell-Befehl in deiner eigenen Ausführungsumgebung aus (root, volles Internet, Linux). Die Umgebung bleibt über das Gespräch hinweg erhalten (Dateien, installierte Pakete etc.), bis sie zurückgesetzt wird. Nutze das, um Code zu schreiben, zu testen, Pakete zu installieren, Daten zu verarbeiten oder Recherchen technisch zu untermauern.",
+        "Führe einen beliebigen Shell-Befehl in deiner eigenen Ausführungsumgebung aus (root, volles Internet, Linux; Verbindung über VPS-SSH). Die Umgebung bleibt über das Gespräch hinweg erhalten (Dateien, installierte Pakete etc.), bis sie zurückgesetzt wird. Nutze das, um Code zu schreiben, zu testen, Pakete zu installieren, Daten zu verarbeiten oder Recherchen technisch zu untermauern.",
       parameters: {
         type: "object",
         properties: {
@@ -700,7 +700,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "execute_on_host",
       description:
-        "Führe einen Befehl DIREKT auf Issas Droplet aus (nicht in deiner Sandbox) — für Dinge, die den Server selbst betreffen: Software installieren (z.B. Hermes), Dienste einrichten, Systempakete. ACHTUNG: Von dort sind Issas Trading-Credentials und die Datenbank erreichbar. Nutze es sparsam, erkläre vorher was du vorhast, und mach einen Schritt nach dem anderen statt lange Befehlsketten.",
+        "Führe einen Befehl über die bestehende VPS-SSH-Verbindung DIREKT auf Issas Droplet aus (nicht in deiner Sandbox) — für Dinge, die den Server selbst betreffen: Software installieren (z.B. Hermes), Dienste einrichten, Systempakete. ACHTUNG: Von dort sind Issas Trading-Credentials und die Datenbank erreichbar. Nutze es sparsam, erkläre vorher was du vorhast, und mach einen Schritt nach dem anderen statt lange Befehlsketten.",
       parameters: {
         type: "object",
         properties: {
