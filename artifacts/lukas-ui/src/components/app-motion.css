@@ -17,7 +17,7 @@
 .chat-conversation-item:active { transform: scale(.987); }
 .app-sheet-overlay { animation: app-dim 180ms ease-out; }
 .app-sheet[data-state="open"] { animation: sheet-arrive 280ms cubic-bezier(.2,.75,.2,1); }
-.app-sheet { border-radius: 26px 26px 0 0; box-shadow: 0 -12px 60px #0004; }
+.app-sheet { box-shadow: 0 -12px 60px #0004; }
 .app-menu-search { border-radius: 15px; }
 .app-sheet-grid a { border-radius: 16px; min-height: 62px; transition: background-color 160ms,transform 160ms; }
 .app-sheet-grid a:active { transform: scale(.98); }
@@ -25,7 +25,7 @@
 @keyframes chat-open { from { opacity: .4; transform: translateX(9px); } to { opacity: 1; transform: none; } }
 @keyframes message-arrive { from { opacity: .3; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes app-dim { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sheet-arrive { from { opacity: .5; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes sheet-arrive { from { opacity: .5; transform: translate(-50%,24px); } to { opacity: 1; transform: translate(-50%,0); } }
 @media (max-width:767px) {
   .app-tabbar { padding: 8px 7px max(9px, env(safe-area-inset-bottom)); }
   .app-tabbar > a > span, .app-tabbar > button > span { border-radius: 15px; }
