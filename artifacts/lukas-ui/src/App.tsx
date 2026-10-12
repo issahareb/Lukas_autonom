@@ -8,7 +8,7 @@ import { AuthGate } from "@/components/auth-gate";
 import NotFound from "@/pages/not-found";
 
 import Dashboard from "@/pages/dashboard";
-import Chat from "@/pages/chat";
+const Chat = lazy(() => import("@/pages/chat"));
 import Memory from "@/pages/memory";
 import Goals from "@/pages/goals";
 import Diary from "@/pages/diary";

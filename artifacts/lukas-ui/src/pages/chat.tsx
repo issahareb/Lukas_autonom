@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import {
   useListAnthropicConversations,
   useCreateAnthropicConversation,
@@ -10,13 +10,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Plus, Trash2, ArrowUp, MessageSquare, Loader2, ArrowLeft, Search,
+  Check, Copy, Plus, Trash2, ArrowUp, MessageSquare, Loader2, ArrowLeft, Search,
   Paperclip, X, FileText, Film, ImageIcon, File as FileIcon, ArrowDown, Square,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { takeCompleteLines, parseSseData } from "@/lib/sse";
 import { warteSchritt, GEDULD_MS } from "@/lib/geduld";
 import { ToolSteps, type ToolStep } from "@/components/tool-steps";
+import { ChatContent } from "@/components/chat-content";
 import { VoicePanel } from "@/components/voice-panel";
 import "./chat.css";
 
@@ -55,7 +56,9 @@ function chatTime(iso: string) {
 function relativeDay(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const days = Math.floor((now.getTime() - d.getTime()) / 86400000);
+  d.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  const days = Math.round((now.getTime() - d.getTime()) / 86400000);
   if (days === 0) return "Heute";
   if (days === 1) return "Gestern";
   if (days < 7) return `vor ${days} Tagen`;
@@ -77,19 +80,33 @@ function Bubble({
   own,
   zeit,
   wartet,
+  copyText,
   children,
 }: {
   own: boolean;
   zeit?: string;
   wartet?: boolean;
+  copyText?: string;
   children: React.ReactNode;
 }) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+  useEffect(() => {
+    if (!copied && !copyError) return;
+    const timer = setTimeout(() => { setCopied(false); setCopyError(false); }, 2500);
+    return () => clearTimeout(timer);
+  }, [copied, copyError]);
+  async function copy() {
+    try { await navigator.clipboard.writeText(copyText ?? ""); setCopied(true); }
+    catch { setCopyError(true); }
+  }
   return (
     <div
       className={`chat-message flex flex-col min-w-0 ${
         own ? "chat-message--own items-end" : "chat-message--assistant items-start"
       }`}
     >
+      {!own && <div className="chat-author"><span aria-hidden="true">L</span><strong>Lukas</strong></div>}
       <div
         className={`chat-bubble min-w-0 ${
           own
@@ -103,6 +120,8 @@ function Bubble({
         <div className="chat-message-meta">
           {wartet && <Loader2 className="w-3 h-3 animate-spin" />}
           <span>{own ? "Du" : "Lukas"}</span><span aria-hidden="true">·</span>{zeit}
+          {copyText && <button type="button" className="chat-copy" onClick={copy} aria-label={copied ? "Kopiert" : "Nachricht kopieren"}>{copied ? <Check size={13} /> : <Copy size={13} />}<span>{copied ? "Kopiert" : "Kopieren"}</span></button>}
+          <span role="status">{copyError ? "Kopieren fehlgeschlagen" : ""}</span>
         </div>
       )}
     </div>
@@ -535,10 +554,10 @@ export default function Chat() {
   const isMobile = useIsMobile();
   const showList = !isMobile || activeId === null;
   const showChat = !isMobile || activeId !== null;
-  const visibleConvos = convos.filter((c) => c.title.toLocaleLowerCase("de-DE").includes(conversationSearch.trim().toLocaleLowerCase("de-DE")));
+  const visibleConvos = convos.filter((c) => c.title.toLocaleLowerCase("de-DE").includes(conversationSearch.trim().toLocaleLowerCase("de-DE"))).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
-    <div className="chat-page">
+    <div className="chat-page" data-chat-view={activeId ? "thread" : "list"}>
       <div className="chat-voice-bar">
         <div className="chat-voice-brand"><span aria-hidden="true">L</span><div>Lukas<small>Dein Gesprächsraum</small></div></div>
         <VoicePanel autoStart={autoVoice} />
@@ -547,7 +566,7 @@ export default function Chat() {
         {showList && (
           <aside className="chat-sidebar" aria-label="Gespräche">
             <div className="chat-sidebar-heading">
-              <div><h1>Gespräche</h1><span>{convos.length}</span></div>
+              <p className="chat-kicker">Dein Gesprächsraum</p><div><h1>Gespräche</h1><span>{convos.length}</span></div>
               <Button onClick={handleNew} className="chat-new-button" disabled={createConvo.isPending}>
                 <Plus className="w-4 h-4" aria-hidden="true" /> Neuer Chat
               </Button>
@@ -558,16 +577,19 @@ export default function Chat() {
             </div>
             <div className="chat-conversation-list">
               {loadingConvos && <p className="chat-list-status" role="status">Gespräche werden geladen …</p>}
-              {visibleConvos.map((c) => (
-                <div key={c.id} className={"chat-conversation-item " + (activeId === c.id ? "is-selected" : "")}>
+              {visibleConvos.map((c, index) => (
+                <Fragment key={c.id}>
+                {(index === 0 || relativeDay(c.createdAt) !== relativeDay(visibleConvos[index - 1].createdAt)) && <h2 className="chat-list-day">{relativeDay(c.createdAt)}</h2>}
+                <div className={"chat-conversation-item " + (activeId === c.id ? "is-selected" : "")}>
                   <button type="button" onClick={() => setActiveId(c.id)} className="chat-conversation-select" aria-current={activeId === c.id ? "true" : undefined}>
                     <MessageSquare size={17} aria-hidden="true" />
-                    <span><span>{c.title}</span><small>{relativeDay(c.createdAt)}</small></span>
+                    <span><span>{c.title}</span><small>Begonnen {chatTime(c.createdAt)}</small></span>
                   </button>
                   <button type="button" onClick={(e) => handleDelete(c.id, e)} className="chat-conversation-delete" aria-label={c.title + " löschen"}>
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
+                </Fragment>
               ))}
               {!loadingConvos && convos.length === 0 && <p className="chat-list-status">Hier entsteht dein Gesprächsverlauf.</p>}
               {!loadingConvos && convos.length > 0 && visibleConvos.length === 0 && <p className="chat-list-status">Keine Gespräche zu „{conversationSearch}“.</p>}
@@ -577,7 +599,7 @@ export default function Chat() {
         )}
 
         {showChat && (
-          <div className="chat-main">
+          <div className="chat-main" key={activeId ?? "welcome"}>
             {activeId ? (
               <>
                 <div className="chat-thread-heading">
@@ -586,6 +608,7 @@ export default function Chat() {
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
+                  <span className="chat-thread-avatar" aria-hidden="true">L</span>
                   <div className="chat-thread-title"><span>{activeConv?.title ?? "Gespräch wird geladen …"}</span><small>{streaming ? "Lukas arbeitet an deiner Antwort" : wartetAufNachzuegler ? "Antwort wird nachgeladen" : "Mit Lukas weiterdenken"}</small></div>
                 </div>
 
@@ -603,15 +626,15 @@ export default function Chat() {
                         </div>
                       </div>
                     )}
-                    {allMessages.map((m) => {
+                    {allMessages.map((m, index) => {
                       const own = m.role === "user";
                       const files = sentAttachments.filter((a) => a.messageId === m.id);
                       const steps = (m as { steps?: ToolStep[] | null }).steps ?? [];
                       return (
-                        <Bubble key={m.id} own={own} zeit={chatTime(m.createdAt)}>
-                          <div className="text-[15px] leading-7 whitespace-pre-wrap break-words">
-                            {renderWithLinks(m.content)}
-                          </div>
+                        <Fragment key={m.id}>
+                        {(index === 0 || new Date(m.createdAt).toDateString() !== new Date(allMessages[index - 1].createdAt).toDateString()) && <div className="chat-date-divider"><span>{relativeDay(m.createdAt)}</span></div>}
+                        <Bubble own={own} zeit={chatTime(m.createdAt)} copyText={m.content}>
+                          {own ? <div className="text-[15px] leading-7 whitespace-pre-wrap break-words">{renderWithLinks(m.content)}</div> : <ChatContent text={m.content} />}
                           {files.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
                               {files.map((a) => {
@@ -642,6 +665,7 @@ export default function Chat() {
                           )}
                           {!own && steps.length > 0 && <ToolSteps steps={steps} />}
                         </Bubble>
+                        </Fragment>
                       );
                     })}
 
@@ -656,8 +680,8 @@ export default function Chat() {
                     {streaming && (
                       <Bubble own={false}>
                         {streamContent ? (
-                          <div className="text-[15px] leading-7 whitespace-pre-wrap break-words">
-                            {streamContent}
+                          <div className="chat-streaming-content">
+                            <ChatContent text={streamContent} />
                             <span className="inline-block w-[3px] h-[1.1em] align-[-0.15em] ml-0.5 bg-primary animate-pulse rounded-full" />
                           </div>
                         ) : (

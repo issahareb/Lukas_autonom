@@ -1,0 +1,37 @@
+/* Short, composited transitions. No continuous blur or layout animations. */
+.app-route { min-height: 100%; height: 100%; animation: app-arrive 240ms cubic-bezier(.2,.7,.2,1) both; }
+.app-shell { -webkit-tap-highlight-color: transparent; }
+.app-shell :is(button,a) { touch-action: manipulation; }
+.app-sidebar-link, .app-tabbar > a, .app-tabbar > button, .app-jump {
+  transition: color 180ms, background-color 180ms, box-shadow 180ms;
+}
+.app-tabbar > a > span, .app-tabbar > button > span { transition: background-color 200ms, transform 200ms; }
+.app-tabbar :is(a,button):active > span { transform: scale(.92); }
+.app-shell :is(.home-shortcuts button,.home-metrics button,.workspace-filters button,.chat-send-button,.chat-new-button,.home-speak) {
+  transition: transform 180ms cubic-bezier(.2,.7,.2,1), background-color 180ms, border-color 180ms;
+}
+.app-shell :is(.home-shortcuts button,.home-metrics button,.workspace-filters button,.chat-send-button,.chat-new-button,.home-speak):active { transform: scale(.975); }
+.chat-main { animation: chat-open 260ms cubic-bezier(.2,.7,.2,1) both; }
+.chat-message { animation: message-arrive 220ms ease-out both; }
+.chat-conversation-item { transition: background-color 180ms, border-color 180ms, transform 180ms; }
+.chat-conversation-item:active { transform: scale(.987); }
+.app-sheet-overlay { animation: app-dim 180ms ease-out; }
+.app-sheet[data-state="open"] { animation: sheet-arrive 280ms cubic-bezier(.2,.75,.2,1); }
+.app-sheet { border-radius: 26px 26px 0 0; box-shadow: 0 -12px 60px #0004; }
+.app-menu-search { border-radius: 15px; }
+.app-sheet-grid a { border-radius: 16px; min-height: 62px; transition: background-color 160ms,transform 160ms; }
+.app-sheet-grid a:active { transform: scale(.98); }
+@keyframes app-arrive { from { opacity: .35; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes chat-open { from { opacity: .4; transform: translateX(9px); } to { opacity: 1; transform: none; } }
+@keyframes message-arrive { from { opacity: .3; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes app-dim { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-arrive { from { opacity: .5; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (max-width:767px) {
+  .app-tabbar { padding: 8px 7px max(9px, env(safe-area-inset-bottom)); }
+  .app-tabbar > a > span, .app-tabbar > button > span { border-radius: 15px; }
+  .app-tabbar [aria-current="page"] > span, .app-tabbar .is-current > span { box-shadow: inset 0 1px #ffffff09; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .app-route, .app-shell *, .app-shell *::before, .app-shell *::after, .app-sheet, .app-sheet *, .app-sheet-overlay,
+  [role="dialog"], [role="dialog"] *, [data-lukas-overlay] { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

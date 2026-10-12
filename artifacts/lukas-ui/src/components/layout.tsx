@@ -7,6 +7,7 @@ import { LogOut, X, Grid2X2, ArrowUpRight, Search, ChevronRight } from "lucide-r
 import { navigation, navigationGroups, mobileNavigation } from "@/lib/navigation";
 import "./app-shell.css";
 import "./workspace.css";
+import "./app-motion.css";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -109,7 +110,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <button type="button" className="app-jump" onClick={() => setMehr(true)}><Search size={15} /> Bereich wechseln <Grid2X2 size={14} /></button>
         </div>
         <div className="app-scroll" ref={scroll}>
-          <Fehlergrenze schluessel={location}>{children}</Fehlergrenze>
+          <div className="app-route" key={location}><Fehlergrenze schluessel={location}>{children}</Fehlergrenze></div>
         </div>
       </main>
       <Dialog.Root open={mehr} onOpenChange={setMehr}>
