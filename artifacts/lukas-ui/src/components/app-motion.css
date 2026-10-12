@@ -22,7 +22,7 @@
 .app-sheet-grid a { border-radius: 16px; min-height: 62px; transition: background-color 160ms,transform 160ms; }
 .app-sheet-grid a:active { transform: scale(.98); }
 @keyframes app-arrive { from { opacity: .35; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-@keyframes chat-open { from { opacity: .4; transform: translateX(9px); } to { opacity: 1; transform: none; } }
+@keyframes chat-open { from { opacity: .4; transform: scale(.994); } to { opacity: 1; transform: none; } }
 @keyframes message-arrive { from { opacity: .3; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes app-dim { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sheet-arrive { from { opacity: .5; transform: translate(-50%,24px); } to { opacity: 1; transform: translate(-50%,0); } }
