@@ -229,8 +229,7 @@ export async function runLukasTurn(opts: {
         tools = werkzeugeNachFehler(tools, tc.name, err);
         if (zugangsFehler(tc.name, err)) {
           auftragsStatus("blockiert");
-          hinweise.push({ role: "system", content: "Zugang blockiert: Ursache knapp melden, keine Wiederholung oder sachfremde Reparaturversuche. Andere unabhängige Aufträge weiterführen." });
-          if (/^email_/.test(tc.name) && !/reparier|debug|beheb|konfigurier/i.test(opts.userText)) tools = [];
+          hinweise.push({ role: "system", content: "Ein Werkzeug wurde aufgerufen, sein Zugang ist jedoch blockiert. Nenne die konkrete Ursache aus dem Werkzeugergebnis und die fehlende Voraussetzung. Behaupte nicht, das Werkzeug sei grundsätzlich nicht vorhanden oder der Versuch sei nicht erfolgt. Keine Wiederholung oder sachfremde Reparaturversuche; andere unabhängige Teilaufträge mit ihren verfügbaren Werkzeugen weiterführen." });
         }
         /*
          * Auch ins Fehlerprotokoll, nicht nur ins Log.

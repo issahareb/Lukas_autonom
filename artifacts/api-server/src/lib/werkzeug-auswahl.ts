@@ -14,7 +14,7 @@ const GRUPPEN: Array<[RegExp, string[]]> = [
   [/moltbook/i, ["get_moltbook_activity"]],
   [/sms|nachricht.*schick/i, ["send_sms"]],
   [/gefühl|fühl|fuehl/i, ["feel"]],
-  [/host|vps|droplet|sandbox/i, ["execute_command", "execute_on_host", "reset_sandbox"]],
+  [/host|vps|droplet|sandbox|\bssh\b/i, ["execute_command", "execute_on_host", "reset_sandbox"]],
   [/team|agent|mitarbeiter|analyst|texter/i, ["ask_subagent", "list_subagents", "create_subagent"]],
 ];
 
@@ -36,6 +36,8 @@ export function werkzeugeNachFehler(tools: OpenAI.Chat.Completions.ChatCompletio
   if (!zugangsFehler(name, error)) return tools;
   const blocked = /VPS_SSH_KEY|authentication methods failed/.test(text)
     ? new Set(["execute_command", "execute_on_host", "reset_sandbox", "browse_page", "browser_do"])
+    : /EMAIL_USER|EMAIL_APP_PASSWORD/.test(text)
+    ? new Set(["email_search", "email_read", "email_send"])
     : new Set([name]);
   return tools.filter(t => t.type !== "function" || !blocked.has(t.function.name));
 }

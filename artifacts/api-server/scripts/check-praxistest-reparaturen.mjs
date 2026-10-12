@@ -41,7 +41,7 @@ try {
   assert.ok(m.boundedMemory(Array.from({ length: 20 }, () => ({ text: "a".repeat(5000) }))).length <= 6000);
   assert.match(m.boundedMemory([{ text: "a".repeat(5000) }]), /Auszug/);
 
-  const names = ["query_memory", "mcp_find_tool", "mcp_call", "web_search", "fetch_url", "browse_page", "browser_do", "execute_command", "email_search", "github_read_path", "mcp__higgsfield__get_workflow_instructions"];
+  const names = ["query_memory", "mcp_find_tool", "mcp_call", "web_search", "fetch_url", "browse_page", "browser_do", "execute_command", "execute_on_host", "email_search", "email_read", "email_send", "github_read_path", "mcp__higgsfield__get_workflow_instructions"];
   const tools = names.map(name => ({ type: "function", function: { name, parameters: { type: "object", properties: {} } } }));
   const selected = task => m.waehleWerkzeuge(tools, task).map(t => t.function.name);
   assert.ok(selected("Was kostet die Jahreskarte im Grugapark 2026? Quelle bitte").includes("web_search"));
@@ -52,6 +52,10 @@ try {
   assert.ok(!filtered.includes("browser_do") && !filtered.includes("execute_command"));
   assert.ok(filtered.includes("fetch_url"));
   assert.ok(m.zugangsFehler("email_search", new Error("E-Mail-Zugang fehlt: EMAIL_USER")));
+  assert.ok(selected("Prüfe die SSH-Verbindung einmal").includes("execute_on_host"));
+  const afterMailFailure = m.werkzeugeNachFehler(tools, "email_search", new Error("EMAIL_USER fehlt")).map(t => t.function.name);
+  assert.ok(afterMailFailure.includes("execute_on_host"), "a blocked mailbox does not prevent the independent SSH check");
+  assert.ok(!afterMailFailure.some(n => n.startsWith("email_")), "same mailbox cannot be retried through a sibling tool");
 
   process.env.LUKAS_CONTEXT_MAX_CHARS = "12000";
   const history = [{ role: "system", content: "S".repeat(16000) },
