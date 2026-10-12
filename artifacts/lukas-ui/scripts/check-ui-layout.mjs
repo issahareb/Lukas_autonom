@@ -60,7 +60,7 @@ try {
   }
   browser = await chromium.launch();
   for (const [name, width, height] of [["mobil", 390, 844], ["desktop", 1440, 1000], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
-    const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height }, reducedMotion: name === "desktop" ? "no-preference" : "reduce" });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -127,7 +127,12 @@ try {
     assert.ok(box && box.y >= 0 && box.y + box.height < height, "Composer remains in the viewport");
     await input.fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-" + name);
+    assert.equal(await page.getByRole("button", { name: "Nachricht kopieren", exact: true }).count(), messages.length);
+    const reduced = await page.locator(".chat-main").evaluate(el => getComputedStyle(el).animationName);
+    if (name !== "desktop") assert.equal(reduced, "none", "Reduced motion must disable chat transitions");
     if (width < 768) await page.getByRole("button", { name: "Zurück zur Liste" }).click();
+    await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("");
+    if (name === "desktop" || name === "mobil") await screenshot(page, "chat-liste-" + name);
     await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
     await page.getByRole("heading", { name: "Was hast du vor?" }).waitFor();
     await page.getByRole("button", { name: "Was ist heute wichtig?", exact: false }).click();
