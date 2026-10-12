@@ -235,3 +235,6 @@
   .chat-suggestions { grid-template-columns: 1fr; }
   .chat-copy { min-height: 40px; padding-inline: 10px; }
 }
+/* The composer carries the focus ring as one control surface. */
+.chat-page .chat-input:focus-visible { outline: none; }
+.app-shell[data-page="/chat"] .chat-composer:focus-within { border-color: #c5acef; box-shadow: 0 0 0 3px #c5acef18,0 9px 35px #0003; }

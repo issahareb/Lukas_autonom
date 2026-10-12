@@ -131,6 +131,7 @@ try {
     const reduced = await page.locator(".chat-main").evaluate(el => getComputedStyle(el).animationName);
     if (name !== "desktop") assert.equal(reduced, "none", "Reduced motion must disable chat transitions");
     if (width < 768) await page.getByRole("button", { name: "Zurück zur Liste" }).click();
+    await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-liste-" + name);
     await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
     await page.getByRole("heading", { name: "Was hast du vor?" }).waitFor();
