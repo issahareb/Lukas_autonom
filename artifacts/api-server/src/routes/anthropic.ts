@@ -477,8 +477,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
           angeboteneTools = werkzeugeNachFehler(angeboteneTools, toolCall.name, err);
           if (zugangsFehler(toolCall.name, err)) {
             auftragsStatus("blockiert");
-            hinweise.push({ role: "system", content: "Ein Zugang fehlt oder wird abgelehnt. Beschreibe die konkrete Blockade. Wiederhole diesen Zugang nicht, lies deswegen keine Implementierungsdateien und weiche nicht auf sachfremde Dienste aus. Andere unabhängige, beauftragte Arbeiten dürfen weitergehen." });
-            if (/^email_/.test(toolCall.name) && !/reparier|debug|beheb|konfigurier/i.test(String(content))) angeboteneTools = [];
+            hinweise.push({ role: "system", content: "Ein Werkzeug wurde aufgerufen, sein Zugang ist jedoch blockiert. Nenne die konkrete Ursache aus dem Werkzeugergebnis und die fehlende Voraussetzung. Behaupte nicht, das Werkzeug sei grundsätzlich nicht vorhanden oder der Versuch sei nicht erfolgt. Keine Wiederholung oder sachfremde Reparaturversuche; andere unabhängige Teilaufträge mit ihren verfügbaren Werkzeugen weiterführen." });
           }
           /*
            * Auch ins Fehlerprotokoll, nicht nur ins Log.
