@@ -319,3 +319,81 @@
   .home-shortcuts button > svg { display: none; }
   .home-focus { min-height: 208px; padding: 22px; }
 }
+
+/* Conversation first. The workspace starts on the following screen. */
+.home-page { max-width: none; padding: 0; }
+.home-page .home-conversation {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  min-height: calc(100svh - 62px); padding: 38px 28px 24px;
+  border: 0; border-radius: 0; text-align: center;
+  background: radial-gradient(ellipse at 50% 37%, #8261c418, transparent 48%);
+  overflow: hidden;
+}
+.home-conversation-top { margin: 0 0 8px; justify-content: center; }
+.home-conversation-top .home-eyebrow { color: #ac9dbb; letter-spacing: .2em; font-size: 10px; }
+.home-page .home-orb { height: clamp(220px, 30svh, 320px); width: 100%; flex: 0 0 auto; }
+.home-page .home-orb .orb { width: clamp(280px, 33vw, 390px); max-width: none; }
+.home-page .home-voice-state { margin: 0 0 16px; color: #b6a6cc; font-size: 12px; }
+.home-conversation h1 { font-size: clamp(48px, 5.4vw, 78px); letter-spacing: -.065em; line-height: 1.02; font-weight: 400; margin: 0 0 20px; text-wrap: balance; }
+.home-conversation h1 span { color: #c8b3f5; }
+.home-page .home-conversation-description { color: #9ba7a9; font-size: 14px; margin: 0 0 28px; max-width: 34ch; line-height: 1.65; }
+.home-page .home-composer { width: min(100%, 600px); margin: 0; border-radius: 23px; padding: 18px 16px 12px; background: linear-gradient(140deg,#20252d,#151c22); border: 1px solid #d4c4f52b; box-shadow: 0 18px 65px #0003, inset 0 1px #ffffff08; }
+.home-composer textarea { min-height: 55px; padding: 0 4px 14px; }
+.home-page .home-composer-actions > span { display: block; color: #87959c; }
+.home-page .home-speak, .home-page .home-send { background: #ddcef9; color: #292038; border-radius: 14px; box-shadow: 0 3px 16px #b193ed18; }
+.home-page .home-speak.is-active { background: #edb6c5; }
+.home-page .home-workspace-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 22px; color: #8f9b9e; font-size: 11px; letter-spacing: .035em; background: none; border: 0; }
+.home-workspace-link svg { transform: rotate(90deg); }
+.home-workspace-link:hover { color: #e7ddf7; }
+.home-transcript, .home-voice-error { width: min(100%,600px); }
+.home-workspace { max-width: 1360px; margin: auto; padding: 54px clamp(20px,4vw,60px) 56px; border-top: 1px solid #ffffff0d; scroll-margin-top: 0; }
+.home-heading { align-items: flex-end; margin-bottom: 30px; }
+.home-heading h2 { font-size: clamp(32px,3.8vw,48px); font-weight: 400; letter-spacing: -.055em; line-height: 1.12; margin: 12px 0; }
+.home-heading .home-intro { max-width: none; color: #9caaa8; }
+.home-shortcuts { gap: 14px; margin-bottom: 42px; }
+.home-shortcuts button { position: relative; flex-wrap: wrap; padding: 22px; border-radius: 22px; background: linear-gradient(145deg,#1b2528,#131b1e); min-height: 156px; border-color: #ffffff0e; }
+.home-shortcut-icon { width: 45px; height: 45px; border-radius: 15px; }
+.home-shortcuts button > span:nth-child(2) { flex-basis: 100%; }
+.home-shortcuts strong { font-size: 15px; }
+.home-shortcuts small { font-size: 11px; line-height: 1.5; }
+.home-shortcuts button > svg { display: block; position: absolute; top: 24px; right: 20px; }
+.home-columns { display: block; }
+.home-context { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+.home-context > .home-section-heading { grid-column: 1 / -1; }
+.home-focus { min-height: 270px; border-radius: 24px; padding: 30px; background: linear-gradient(140deg,#c5f1d9,#95d9b8); }
+.home-focus h3 { font-size: clamp(26px,2.8vw,38px); }
+.home-goals { margin: 0; padding: 24px; border: 1px solid #ffffff10; background: #141c1e; border-radius: 24px; }
+.home-metrics { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; margin-top: 20px; }
+.home-metrics button { min-height: 98px; }
+.home-status-note { grid-column: 1 / -1; }
+.home-recent-section { margin-top: 38px; }
+.home-recent button { border-radius: 22px; padding: 24px; }
+@media (max-width: 767px) {
+  .home-page .home-conversation { min-height: calc(100svh - 142px - env(safe-area-inset-bottom)); padding: 26px 22px 18px; }
+  .home-page .home-orb { height: clamp(190px,27svh,260px); }
+  .home-page .home-orb .orb { width: clamp(265px,78vw,330px); }
+  .home-conversation h1 { font-size: clamp(42px,12vw,58px); margin-bottom: 16px; }
+  .home-page .home-voice-state { font-size: 11px; margin-bottom: 12px; }
+  .home-page .home-conversation-description { font-size: 13px; max-width: 30ch; margin-bottom: 23px; }
+  .home-page .home-composer { border-radius: 20px; padding: 16px 12px 10px; }
+  .home-page .home-composer-actions > span { font-size: 10px; }
+  .home-page .home-workspace-link { margin-top: 14px; }
+  .home-workspace { padding: 36px 20px 32px; }
+  .home-heading { align-items: flex-start; gap: 14px; }
+  .home-heading .home-header-action { margin-top: 22px; }
+  .home-heading .home-intro { font-size: 12px; max-width: 26ch; }
+  .home-shortcuts { gap: 12px; margin-bottom: 32px; }
+  .home-shortcuts button { padding: 18px; min-height: 145px; }
+  .home-shortcuts strong { font-size: 14px; }
+  .home-shortcuts small { font-size: 10px; }
+  .home-context { display: block; }
+  .home-focus { padding: 24px; min-height: 240px; }
+  .home-goals { margin-top: 20px; padding: 20px; }
+  .home-metrics { gap: 12px; }
+  .home-recent button { padding: 20px; }
+}
+@media (max-width: 360px) {
+  .home-page .home-conversation { padding-inline: 16px; }
+  .home-page .home-composer-actions > span { display: none; }
+  .home-workspace { padding-inline: 16px; }
+}

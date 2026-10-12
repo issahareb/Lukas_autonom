@@ -102,6 +102,13 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
+    const hero = await page.locator(".home-conversation").boundingBox();
+    const shortcuts = await page.locator(".home-shortcuts").boundingBox();
+    const orb = await page.locator(".home-orb .orb").boundingBox();
+    assert.ok(orb.width >= 265, "The hero orb must remain prominent on narrow phones");
+    assert.ok(shortcuts.y >= hero.y + hero.height, "Tools belong after the conversation hero");
+    await page.getByRole("button", { name: "Deinen Arbeitsraum entdecken" }).click();
+    if (name === "desktop" || name === "mobil") await screenshot(page, "arbeitsraum-" + name);
     const question = page.getByRole("textbox", { name: "Frage an Lukas" });
     await question.fill("Ein Gedanke vom Dashboard");
     await page.getByRole("button", { name: "Senden", exact: true }).click();

@@ -180,3 +180,28 @@
   .phone-header-action { width: 44px; padding: 0; }
   .phone-header-action > span { display: none; }
 }
+
+/* Shared rhythm and surfaces across all workspace sections. */
+.app-sidebar { background: linear-gradient(180deg,#141d20,#0f1619); }
+.app-monogram { background: linear-gradient(145deg,#d4f6e2,#93d9ba); }
+.app-sidebar-link { border-radius: 10px; }
+.app-topbar { background: #10171ab3; }
+.app-scroll { background: radial-gradient(ellipse at 90% 0,#b8c1f006,transparent 55%); }
+.workspace-heading { padding: 12px 0 22px; border-bottom: 1px solid #ffffff0b; }
+.workspace-title h1 { font-weight: 400; font-size: clamp(32px,3.8vw,46px); }
+.workspace-description { font-size: 14px; line-height: 1.75; }
+.workspace-title-icon { width: 50px; height: 50px; border-radius: 17px; }
+.workspace-page .card-soft, .workspace-stat { background: linear-gradient(145deg,#1b2427,#141c1f); border-color: #ffffff10; border-radius: 22px; box-shadow: 0 8px 30px #00000012; }
+.workspace-stat { min-height: 100px; padding: 22px; }
+.workspace-stat strong { font-size: 29px; }
+.workspace-section-nav { gap: 26px; }
+.workspace-section-nav a { min-height: 48px; }
+.workspace-content { margin-top: 30px; }
+.app-shell :is(button,a,textarea,input):focus-visible { outline: 2px solid #cab6f3; outline-offset: 4px; }
+@media (max-width:767px) {
+  .app-mobile-header { background: #10171af2; }
+  .app-tabbar { background: #11191cf2; border-top-color: #ffffff10; }
+  .workspace-heading { padding-top: 5px; padding-bottom: 18px; }
+  .workspace-description { font-size: 13px; }
+  .workspace-stat { padding: 16px; min-height: 88px; }
+}
