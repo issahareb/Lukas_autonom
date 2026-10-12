@@ -200,8 +200,11 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
    * zwischen zwei Dingen. Das ist die staerkere Aussage.
    */
   for (const t of graph.treffer) {
-    if (!relevantEnough(q, t.text)) continue;
-    hits.push({ kind: "graph", id: t.claimId, text: t.text, score: 1 + t.score });
+    // A neighbour's classification need not repeat the project name. Keep
+    // its explicit connecting claim, without importing unrelated projects.
+    const text = t.kontext ? `${t.text}\n[Verbindung, keine Gleichsetzung] ${t.kontext}` : t.text;
+    if (!relevantEnough(q, text)) continue;
+    hits.push({ kind: "graph", id: t.claimId, text, score: 1 + t.score });
   }
 
   // Erinnerungen und Episoden am Einstieg: auch sie müssen zur Frage passen.

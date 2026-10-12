@@ -53,7 +53,7 @@ await build({
   ],
 });
 
-const { entitaetskandidaten, laufeGraph, normEntitaet } = await import(out);
+const { entitaetskandidaten, laufeGraph, normEntitaet, graphKontext } = await import(out);
 
 let fehler = 0;
 const pruefe = (bedingung, text) => {
@@ -114,6 +114,16 @@ pruefe(tiefe1.episodenIds.includes(7), "Die Episode der gefundenen Aussage muss 
 
 const tiefe2 = laufeGraph(["hareb_digital"], claims, 2, 24);
 const ids2 = tiefe2.kanten.map((k) => k.claim.id).sort();
+pruefe(graphKontext(tiefe2.kanten.find(k => k.claim.id === 3), tiefe2) === undefined,
+  "Andere Projekte desselben Eigentümers bekommen keinen künstlichen Projektbezug");
+const beschreibung = laufeGraph(["taxibb"], [
+  claim(301, "taxibb", "gehoert", "kunde_essen"),
+  claim(302, "kunde_essen", "ist", "taxiunternehmen"),
+]);
+pruefe(graphKontext(beschreibung.kanten.find(k => k.claim.id === 302), beschreibung)?.includes('taxibb → gehoert: "kunde_essen"'),
+  "Klassifikation des Nachbarn behält die echte Verbindung zum Projekt");
+pruefe(graphKontext(beschreibung.kanten[0], beschreibung) === undefined,
+  "Direkte Treffer brauchen keinen indirekten Kontext");
 pruefe(
   JSON.stringify(ids2) === JSON.stringify([1, 2, 3]),
   `Schritt 2 muss ueber issa auch dessen Aussage holen, aber nicht weiter, war: ${JSON.stringify(ids2)}`,

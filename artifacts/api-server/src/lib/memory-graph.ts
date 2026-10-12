@@ -205,7 +205,19 @@ export async function einstiegsknoten(frage: string): Promise<string[]> {
   return kandidaten.filter((k) => vorhanden.has(k)).slice(0, 4);
 }
 
-export type GraphTreffer = { text: string; score: number; claimId: number };
+export type GraphTreffer = { text: string; score: number; claimId: number; kontext?: string };
+
+/** Keep a neighbour's descriptive attributes with their actual connecting
+ * claim. Following an owner's other projects is not descriptive context. */
+export function graphKontext(kante: GraphKante, nachbarschaft: Nachbarschaft): string | undefined {
+  if (kante.schritt !== 2 || !["ist", "branche", "typ", "kategorie"].includes(kante.praedikat)) return;
+  const verbindung = nachbarschaft.kanten.find(k => k.schritt === 1 &&
+    (k.von === kante.von || k.nach === kante.von));
+  if (!verbindung) return;
+  const c = verbindung.claim;
+  return `${c.subject.replace(/_/g, " ")} → ${c.predicate.replace(/_/g, " ")}: "${c.value}" ` +
+    `(Status ${c.status}, Vertrauen ${(c.confidence * 100).toFixed(0)}%)`;
+}
 
 /**
  * Nachbarschaft einer Frage als fertige Treffer.
@@ -243,6 +255,7 @@ export async function graphTreffer(
         : "unbelegt";
       return {
         claimId: c.id,
+        kontext: graphKontext(k, nachbarschaft),
         text:
           `[Graph${richtung}] ${c.subject.replace(/_/g, " ")} → ` +
           `${c.predicate.replace(/_/g, " ")}: "${c.value}" ` +
