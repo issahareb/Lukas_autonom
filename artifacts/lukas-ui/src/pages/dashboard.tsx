@@ -84,19 +84,64 @@ export default function Dashboard() {
 
   return (
     <div className="home-page">
-      <header className="home-heading">
-        <div>
-          <p className="home-eyebrow">Lukas · Dein Arbeitsraum</p>
-          <h1>Hey Issa<span>.</span></h1>
-          <p className="home-intro">Was ansteht. Was läuft. Was als Nächstes kommt.</p>
-        </div>
-        <button type="button" className="home-header-action" onClick={() => navigate("/chat")}>
-          <MessageSquare size={18} aria-hidden="true" />
-          Zum Chat
-          <ArrowUpRight size={16} aria-hidden="true" />
-        </button>
-      </header>
+        <section className={"home-conversation " + (sprache.aktiv ? "is-active" : "")} aria-label="Mit Lukas sprechen oder schreiben">
+          <div className="home-conversation-top">
+            <span className="home-eyebrow">Ein Gedanke. Neue Möglichkeiten.</span>
 
+          </div>
+          <div className="home-orb"><Orb zustand={zustand} pegel={pegel} groesse="gross" /></div>
+          <p className="home-voice-state" aria-live="polite">{sprachText}</p>
+          <h1>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute<span>?</span></>}</h1>
+          <p className="home-conversation-description">Ein Ziel, eine Frage, eine neue Idee. Fang einfach an.</p>
+          {sprache.aktiv && letzteZeile && (
+            <p className="home-transcript">
+              <span>{letzteZeile.role === "user" ? "Du" : "Lukas"}</span>
+              {letzteZeile.text}
+            </p>
+          )}
+          {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
+          <div className="home-composer">
+            <textarea
+              ref={eingabe}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  absenden();
+                }
+              }}
+              rows={1}
+              placeholder={sprache.aktiv ? "Oder schreib mir …" : "Was geht dir durch den Kopf?"}
+              aria-label="Frage an Lukas"
+            />
+            <div className="home-composer-actions">
+              <button type="button" className="home-attach" onClick={() => navigate("/chat")} aria-label="Datei anhängen (im Chat)">
+                <Paperclip size={19} aria-hidden="true" />
+              </button>
+              <span>Mit Lukas weiterdenken</span>
+              {tippt ? (
+                <button type="button" className="home-send" onClick={absenden} aria-label="Senden"><ArrowUp size={21} aria-hidden="true" /></button>
+              ) : (
+                <button
+                  type="button"
+                  className={"home-speak " + (sprache.aktiv ? "is-active" : "")}
+                  onClick={sprache.aktiv || sprache.status === "verbindet" ? sprache.beenden : sprache.starten}
+
+                  aria-label={sprache.status === "verbindet" ? "Verbindungsaufbau abbrechen" : sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
+                >
+                  {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
+                  <span>{sprache.status === "verbindet" ? "Abbrechen" : sprache.aktiv ? "Beenden" : "Sprechen"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+          <button type="button" className="home-workspace-link" onClick={() => document.getElementById("home-workspace")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" })}>
+            Deinen Arbeitsraum entdecken <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </section>
+      <section className="home-workspace" id="home-workspace" aria-labelledby="workspace-heading">
+      <header className="home-heading"><div><p className="home-eyebrow">02 / Dein Arbeitsraum</p><h2 id="workspace-heading">Alles im Blick.</h2><p className="home-intro">Deine Werkzeuge. Dein Fokus. Deine nächsten Schritte.</p></div><button type="button" className="home-header-action" onClick={() => navigate("/chat")}><MessageSquare size={18} aria-hidden="true" />Zum Chat<ArrowUpRight size={16} aria-hidden="true" /></button></header>
       {isError && (
         <div className="home-fetch-error" role="alert">
           <span>Der aktuelle Stand ist gerade nicht erreichbar.</span>
@@ -186,62 +231,7 @@ export default function Dashboard() {
           {status?.note && <p className="home-status-note">{status.note}</p>}
         </section>
 
-        <section className={"home-conversation " + (sprache.aktiv ? "is-active" : "")} aria-label="Mit Lukas sprechen oder schreiben">
-          <div className="home-conversation-top">
-            <span className="home-eyebrow">Direkt mit Lukas</span>
-            <span className="home-conversation-mark" aria-hidden="true">L</span>
-          </div>
-          <div className="home-orb"><Orb zustand={zustand} pegel={pegel} groesse="mittel" /></div>
-          <p className="home-voice-state" aria-live="polite">{sprachText}</p>
-          <h2>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute?</>}</h2>
-          <p className="home-conversation-description">Ein Ziel, eine Frage oder eine neue Idee.<br />Lass uns anfangen.</p>
-          {sprache.aktiv && letzteZeile && (
-            <p className="home-transcript">
-              <span>{letzteZeile.role === "user" ? "Du" : "Lukas"}</span>
-              {letzteZeile.text}
-            </p>
-          )}
-          {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
-          <div className="home-composer">
-            <textarea
-              ref={eingabe}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  absenden();
-                }
-              }}
-              rows={1}
-              placeholder={sprache.aktiv ? "Oder schreib mir …" : "Was geht dir durch den Kopf?"}
-              aria-label="Frage an Lukas"
-            />
-            <div className="home-composer-actions">
-              <button type="button" className="home-attach" onClick={() => navigate("/chat")} aria-label="Datei anhängen (im Chat)">
-                <Paperclip size={19} aria-hidden="true" />
-              </button>
-              <span>Mit Lukas weiterdenken</span>
-              {tippt ? (
-                <button type="button" className="home-send" onClick={absenden} aria-label="Senden"><ArrowUp size={21} aria-hidden="true" /></button>
-              ) : (
-                <button
-                  type="button"
-                  className={"home-speak " + (sprache.aktiv ? "is-active" : "")}
-                  onClick={sprache.aktiv || sprache.status === "verbindet" ? sprache.beenden : sprache.starten}
-                  
-                  aria-label={sprache.status === "verbindet" ? "Verbindungsaufbau abbrechen" : sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
-                >
-                  {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
-                  <span>{sprache.status === "verbindet" ? "Abbrechen" : sprache.aktiv ? "Beenden" : "Sprechen"}</span>
-                </button>
-              )}
-            </div>
-          </div>
-          <button type="button" className="home-brain-link" onClick={() => navigate("/gehirn")}>
-            <Network size={17} aria-hidden="true" /> Ein Blick in Lukas’ Gehirn <ArrowUpRight size={15} aria-hidden="true" />
-          </button>
-        </section>
+
       </div>
 
       <section className="home-recent-section" aria-labelledby="home-recent-heading">
@@ -267,6 +257,7 @@ export default function Dashboard() {
             <ArrowUpRight size={18} aria-hidden="true" />
           </button>
         </div>
+      </section>
       </section>
     </div>
   );
