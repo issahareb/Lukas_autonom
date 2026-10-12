@@ -104,3 +104,18 @@ export const insertTelefonNummerSchema = createInsertSchema(telefonNummern).omit
 export type TelefonNummer = typeof telefonNummern.$inferSelect;
 export type InsertTelefonNummer = z.infer<typeof insertTelefonNummerSchema>;
 export type TelefonAnruf = typeof telefonAnrufe.$inferSelect;
+
+/** Durable, consent-scoped speech history; removing the contact removes its history. */
+export const telefonGedaechtnis = pgTable("lukas_telefon_gedaechtnis", {
+  sessionId: text("session_id").primaryKey(),
+  kontaktId: integer("kontakt_id").notNull().references(() => telefonNummern.id, { onDelete: "cascade" }),
+  nummer: text("nummer").notNull(),
+  sichtbarkeit: text("sichtbarkeit").notNull(),
+  richtung: text("richtung").notNull(),
+  transkript: text("transkript").notNull().default(""),
+  revision: integer("revision").notNull().default(0),
+  vollstaendig: boolean("vollstaendig").notNull().default(false),
+  zustimmungAm: timestamp("zustimmung_am", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("lukas_telefon_gedaechtnis_kontakt_idx").on(t.kontaktId, t.updatedAt)]);

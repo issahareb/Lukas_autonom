@@ -29,7 +29,7 @@ export const eq = () => ({});
 export const logger = { warn() {}, info() {}, error() {} };
 
 // Das Policy-Gate laesst hier alles durch; geprueft wird das Lesen, nicht die Freigabe.
-export const checkPolicy = async () => ({ allow: true });
+export const checkPolicy = async (name, input, conversationId, rawUserMessage) => { globalThis.__policyCalls ??= []; globalThis.__policyCalls.push({name, input, conversationId, rawUserMessage}); return globalThis.__deny === name ? {allow: false, message: "test denied"} : {allow: true}; };
 // policyHinweis haengt jedem Werkzeug an, was die Policy dazu sagt — hier ohne
 // Belang, muss es aber geben, sonst laesst sich lukas-tools nicht buendeln.
 export const policyHinweis = () => "";
@@ -92,7 +92,7 @@ await build({
       setup(b) {
         // Alles Lokale ausser der Einstiegsdatei durch die Attrappe ersetzen.
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("lukas-tools.ts") ? { path: attrappe } : undefined,
+          args.importer.endsWith("lukas-tools.ts") && args.path !== "./werkzeug-auswahl" ? { path: attrappe } : undefined,
         );
       },
     },
@@ -156,6 +156,17 @@ await executeLukasTool("github_read_path", {
   paths: Array.from({ length: 20 }, (_, i) => `src/f${i}.ts`),
 });
 pruefe(abrufe.length <= 6, `Hoechstens 6 Pfade je Aufruf, waren: ${abrufe.length}`);
+
+// Discovered built-ins must pass their own gate, not just the dispatcher's.
+globalThis.__deny = "github_read_path";
+const beforeDeny = abrufe.length;
+let denied = false;
+try { denied = (await executeLukasTool("mcp_call", { tool: "github_read_path", args: {repo: "lukas", path: "src/a.ts"} }, {rawUserMessage: "Lies die Datei", conversationId: 7})) === "test denied"; }
+catch { denied = true; }
+pruefe(denied && abrufe.length === beforeDeny, "mcp_call cannot bypass the target policy");
+pruefe(globalThis.__policyCalls.at(-1).name === "github_read_path", "canonical target is checked");
+pruefe(globalThis.__policyCalls.at(-1).rawUserMessage === "Lies die Datei", "original owner context survives discovery");
+delete globalThis.__deny;
 
 // Model-generated tool fields cannot mint the server-only call capability.
 await executeLukasTool("ruf_an", { nummer: "+4915112345678", anlass: "Test", ownerCallGrant: true, ownerApproved: true },

@@ -208,12 +208,13 @@ try {
     { role: "tool", tool_call_id: "a", content: "A".repeat(2000) },
     { role: "tool", tool_call_id: "b", content: "B".repeat(2000) },
   ];
-  const context = [{ role: "system", content: "S".repeat(4000) }, { role: "user", content: "OLD".repeat(5000) }, { role: "assistant", content: "old answer" }, ...transaction];
+  const context = [{ role: "system", content: "S".repeat(4000) }, { role: "user", content: "OLD".repeat(5000) }, { role: "assistant", content: "old answer" }, { role: "user", content: "PREVIOUS" }, { role: "assistant", content: "previous answer" }, ...transaction];
   const packed = fitLukasContext(context);
   ok("Alter Dialog entfernt", !packed.some((m) => String(m.content).startsWith("OLD")));
+  ok("Vorherige Antwort bleibt fuer Folgefragen", packed.some(m => m.content === "previous answer"));
   equal("Aktuelle Frage samt Werkzeugpaaren", packed.slice(-transaction.length), transaction);
   ok("Kein versteckter 20k-Mindestrest", JSON.stringify(packed).length < 12000);
-  equal("Originalarchiv vollstaendig", context.length, 7);
+  equal("Originalarchiv vollstaendig", context.length, 9);
   const screenshot = { role: "user", content: [{ type: "text", text: "Browser \u2009[Werkzeugbild]" }, { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } }] };
   const withScreenshot = fitLukasContext([...context, screenshot]);
   ok("Werkzeugbild behaelt urspruengliche Nutzerfrage", withScreenshot.some((m) => m.content === "CURRENT_QUESTION"));

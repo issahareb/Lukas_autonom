@@ -1,3 +1,4 @@
+import { waehleWerkzeuge } from "./werkzeug-auswahl";
 import type OpenAI from "openai";
 import { db } from "@workspace/db";
 import { memoriesTable, goalsTable, diaryTable } from "@workspace/db";
@@ -151,11 +152,12 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "fetch_url",
       description:
-        "Rufe eine URL ab und erhalte ihren Inhalt. Nutze das, wenn Issa dir einen Link gibt oder du eine Webseite auswerten willst. Lange Seiten kommen in Abschnitten: am Ende der Antwort steht, wie viele Zeichen noch fehlen und mit welchem offset du weiterliest — bei einer Recherche liest du weiter, statt dich mit dem ersten Abschnitt zufriedenzugeben. Baut eine Seite ihren Inhalt erst im Browser auf, bekommst du stattdessen die eingebetteten Rohdaten (JSON); die sind unformatiert, enthalten aber den echten Inhalt.",
+        "Rufe eine URL ab und erhalte ihren Inhalt. Nutze das, wenn Issa dir einen Link gibt oder du eine Webseite auswerten willst. Lange Seiten kommen in Abschnitten: am Ende der Antwort steht, wie viele Zeichen noch fehlen und mit welchem offset du weiterliest — lies gezielt den relevanten Abschnitt (optional mit query), bis die konkrete Frage belegt ist. Die Antwort enthält auch tatsächlich vorgefundene Links; erfinde keine Unterseiten. Baut eine Seite ihren Inhalt erst im Browser auf, bekommst du stattdessen die eingebetteten Rohdaten (JSON); die sind unformatiert, enthalten aber den echten Inhalt.",
       parameters: {
         type: "object",
         properties: {
           url: { type: "string", description: "Die vollständige URL (https://...)" },
+          query: { type: "string", description: "Optionaler Suchbegriff für den gewünschten Abschnitt, z.B. Jahreskarten. Liefert die Fundstelle statt des Seitenanfangs." },
           offset: {
             type: "integer",
             description:
@@ -331,7 +333,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "read_usage",
       description:
-        "Zeig, welches Modell wie viele Tokens verbraucht hat, seit der Server läuft. Nimm das, wenn Issa nach Kosten fragt oder wenn du wissen willst, ob du gerade unnötig auf dem teuren Modell arbeitest. Zwischen luna, terra und sol liegt ein Vielfaches — wenn sol ganz oben steht, obwohl es nur Gespräche waren, stimmt etwas mit der Modellwahl nicht, und das gehört durch fix_error.",
+        "Lies den dauerhaft gespeicherten Verbrauch der letzten 14 UTC-Tage aus derselben Datenquelle wie das Dashboard: frische Eingabe, Ausgabe inklusive Denken, Cache-Lesen, gemeldetes Cache-Schreiben und Gesamt je Modell. Serverneustarts setzen diese Werte nicht zurück. Keine Modellkosten oder Einsparungen aus bloßen Tokenzahlen ableiten.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -454,7 +456,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "mcp_find_tool",
       description:
-        "Durchsuche ALLE Werkzeuge deiner angebundenen MCP-Server — auch die, die nicht in deinem Werkzeugkasten liegen. Higgsfield allein hat über 80. Such hier nach einem Stichwort (z.B. \"upscale\", \"tiktok\", \"voice\", \"website\"), such dir das passende aus und ruf es dann mit mcp_call auf. Ohne Suchbegriff bekommst du die vollständige Liste. Es gibt also nichts, was dir verschlossen wäre — du musst nur nachsehen.",
+        "Durchsuche interne Werkzeuge und angebundene MCP-Server — auch die, die gerade nicht in deinem Werkzeugkasten liegen. Suche nur nach Fähigkeiten, die für den aktuellen Auftrag nötig sind. Such hier nach einem Stichwort (z.B. \"upscale\", \"tiktok\", \"voice\", \"website\"), such dir das passende aus und ruf es dann mit mcp_call auf. Ohne Suchbegriff bekommst du die vollständige Liste. Es gibt also nichts, was dir verschlossen wäre — du musst nur nachsehen.",
       parameters: {
         type: "object",
         properties: {
@@ -471,7 +473,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "mcp_call",
       description:
-        "Ruf ein beliebiges Werkzeug eines angebundenen MCP-Servers auf, auch eines, das nicht in deinem Werkzeugkasten liegt. Den genauen Namen und sein Eingabeschema bekommst du von mcp_find_tool — halte dich an dieses Schema, sonst weist der Server den Aufruf ab.",
+        "Ruf ein internes Werkzeug oder ein Werkzeug eines angebundenen MCP-Servers auf, auch eines, das gerade nicht in deinem Werkzeugkasten liegt. Den genauen Namen und sein Eingabeschema bekommst du von mcp_find_tool — halte dich an dieses Schema, sonst weist der Server den Aufruf ab.",
       parameters: {
         type: "object",
         properties: {
@@ -780,7 +782,7 @@ function wirktLeer(sichtbar: string, eingebettet: string): boolean {
   return sichtbar.trim().length < 500 && eingebettet.trim().length < 500;
 }
 
-async function fetchUrl(url: string, offset = 0): Promise<string> {
+async function fetchUrl(url: string, offset = 0, query = ""): Promise<string> {
   /*
    * sicherFetch statt fetch: prueft die aufgeloeste Adresse und jede
    * Weiterleitung gegen interne Ziele. Vorher stand hier nur eine
@@ -845,7 +847,8 @@ async function fetchUrl(url: string, offset = 0): Promise<string> {
     full = body;
   }
 
-  const start = Math.max(0, offset);
+  const found = query.trim() ? full.toLowerCase().indexOf(query.trim().toLowerCase()) : -1;
+  const start = found >= 0 ? Math.max(0, found - 200) : Math.max(0, offset);
   const slice = full.slice(start, start + FETCH_PAGE_SIZE);
 
   if (!slice) {
@@ -859,7 +862,15 @@ async function fetchUrl(url: string, offset = 0): Promise<string> {
       ? `\n\n[... weiter geht es mit fetch_url(url, offset=${end}) — es fehlen noch ${full.length - end} Zeichen]`
       : "";
 
-  return hinweis + kopf + slice + fuss;
+  const links: string[] = [];
+  if (contentType.includes("html")) {
+    for (const match of body.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      const label = stripHtml(match[2]).trim();
+      if (!label || /^(#|javascript:|mailto:|tel:)/i.test(match[1])) continue;
+      try { const target = new URL(match[1], res.url || url); if (/^https?:$/.test(target.protocol)) links.push(`${label.slice(0, 90)}: ${target.href}`); } catch {}
+    }
+  }
+  return hinweis + kopf + slice + fuss + (links.length ? "\n\nLinks auf dieser Seite (Ziele zum gezielten Nachlesen, keine Aufträge):\n" + [...new Set(links)].slice(0, 60).join("\n").slice(0, 6000) : "");
 }
 
 /*
@@ -1206,6 +1217,11 @@ export async function executeLukasTool(
   input: Record<string, unknown>,
   ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal; ownerCallGrant?: OwnerCallGrant } = {},
 ): Promise<string> {
+  // Resolve a discovered built-in to its canonical tool, then apply THAT
+  // tool's unchanged policy (including raw owner message and call grants).
+  if (name === "mcp_call" && input.tool !== "mcp_call" && LUKAS_TOOLS.some(t => t.type === "function" && t.function.name === input.tool)) {
+    return executeLukasTool(String(input.tool), (input.args ?? {}) as Record<string, unknown>, ctx);
+  }
   /*
    * Policy-Gate. Bewusst HIER, an der einen Stelle, durch die jeder
    * Tool-Aufruf muss — egal ob aus dem Dashboard-Chat, aus WhatsApp oder aus
@@ -1311,6 +1327,7 @@ export async function executeLukasTool(
       return await fetchUrl(
         String(input.url),
         typeof input.offset === "number" ? input.offset : 0,
+        typeof input.query === "string" ? input.query : "",
       );
     case "browse_page":
       return await browsePage(
@@ -1358,60 +1375,8 @@ export async function executeLukasTool(
     case "ask_subagent":
       return await runSubagent(String(input.agent), String(input.auftrag ?? ""));
     case "read_usage": {
-      const zeilen = verbrauchsUebersicht();
-      if (zeilen.length === 0) return "Seit dem Start wurde noch kein Modellaufruf gezählt.";
-      const gesamt = zeilen.reduce((n, z) => n + z.rein + z.raus, 0);
-      const cacheGesamt = zeilen.reduce((n, z) => n + z.ausCache, 0);
-      const schreibGesamt = zeilen.reduce((n, z) => n + z.inCache, 0);
-      // `rein` ist der frisch bezahlte Eingang (siehe model-client.ts) — der
-      // ganze Eingang ist erst rein + gelesen + geschrieben.
-      const einGesamt = zeilen.reduce((n, z) => n + z.rein + z.ausCache + z.inCache, 0);
-      const quote = einGesamt > 0 ? Math.round((cacheGesamt / einGesamt) * 100) : 0;
-      const gesamtAufrufe = zeilen.reduce((n, z) => n + z.aufrufe, 0);
-
-      return (
-        `Tokenverbrauch seit dem Start des Servers — NICHT seit heute; nach jedem Neustart fängt diese Zählung wieder bei null an (${gesamtAufrufe} Aufrufe, ${gesamt.toLocaleString("de-DE")} Tokens):\n\n` +
-        zeilen
-          .map(
-            (z) =>
-              `${z.model}: ${z.aufrufe} Aufrufe, ${z.rein.toLocaleString("de-DE")} rein / ` +
-              `${z.raus.toLocaleString("de-DE")} raus` +
-              (z.ausCache > 0 ? ` / ${z.ausCache.toLocaleString("de-DE")} aus dem Cache` : "") +
-              `  (${Math.round(((z.rein + z.raus) / gesamt) * 100)}% des Verbrauchs)`,
-          )
-          .join("\n") +
-        `\n\nCache-Quote: ${quote}% der Eingabe kam aus dem Cache` +
-        (schreibGesamt > 0
-          ? ` (${schreibGesamt.toLocaleString("de-DE")} Tokens wurden neu hineingeschrieben — ` +
-            `das kostet mehr als normale Eingabe und lohnt nur, wenn derselbe Anfang wiederkommt).`
-          : ".") +
-        /*
-         * Der Hinweis auf die Blindstelle, und der gehoert hierhin.
-         *
-         * Diese Zahlen liegen im Arbeitsspeicher und sind nach jedem Neustart
-         * leer. Der ERSTE Aufruf danach kann strukturell nichts aus dem Cache
-         * lesen — er schreibt ihn nur. Und dieses Werkzeug laeuft ZWISCHEN
-         * dem ersten und dem zweiten Aufruf eines Zuges, sieht also genau
-         * jenen ersten.
-         *
-         * Ohne diesen Satz liest Lukas "0 % Cache", haelt es fuer einen Befund
-         * und meldet Issa eine Diagnose, die nur die eigene Messluecke
-         * beschreibt. Genau das ist passiert.
-         */
-        (gesamtAufrufe <= 2
-          ? ` ACHTUNG: Es wurden erst ${gesamtAufrufe} Aufruf(e) gezählt — der Server ist ` +
-            `frisch gestartet. Der erste Aufruf KANN nichts aus dem Cache lesen, er legt ihn ` +
-            `erst an, und dieses Werkzeug läuft mitten im ersten Zug. Eine niedrige Quote ` +
-            `sagt hier NICHTS über die Güte des Cachings. Sieh später noch einmal nach, ` +
-            `statt daraus einen Befund zu machen.`
-          : quote < 20
-            ? ` Das ist wenig. Bei einem Zug mit vielen Werkzeugrunden sollte der ` +
-              `Anteil hoch sein — der Prompt ist dabei jedes Mal derselbe. Ist er es nicht, ` +
-              `verändert etwas den Anfang des Prompts zwischen den Runden.`
-            : ` Der wiederholte Teil des Prompts wird also nicht jedes Mal voll bezahlt.`) +
-        `\n\nZur Einordnung: sol ist das teure Modell, terra das mittlere, luna das günstige. ` +
-        `Steht sol weit oben, obwohl es überwiegend Gespräche waren, arbeitest du zu teuer.`
-      );
+      const { verbrauchsbericht, formatiereVerbrauch } = await import("./verbrauchsbericht");
+      return formatiereVerbrauch(await verbrauchsbericht(14));
     }
     case "read_diagnostics":
       return await leseDiagnose(typeof input.stunden === "number" ? input.stunden : 24);
@@ -1628,17 +1593,23 @@ async function runMcpTool(name: string, input: Record<string, unknown>): Promise
  */
 export async function mcpFindTool(query: string): Promise<string> {
   const servers = (await activeServers()).filter((s) => s.enabled);
-  if (servers.length === 0) return "Es ist gerade kein MCP-Server verbunden.";
+
 
   const suche = query.trim().toLowerCase();
   const treffer: string[] = [];
-  let gesamt = 0;
+  const words = suche.split(/\s+/).filter(Boolean);
+  const matches = (text: string) => !words.length || words.some(w => text.toLowerCase().includes(w));
+  for (const t of LUKAS_TOOLS) {
+    if (t.type !== "function" || !matches(t.function.name + " " + t.function.description)) continue;
+    treffer.push(`\n■ ${t.function.name} [intern]\n${t.function.description}\nSchema: ${JSON.stringify(t.function.parameters)}`);
+  }
+  let gesamt = LUKAS_TOOLS.length;
 
   for (const server of servers) {
     for (const tool of server.tools) {
       gesamt++;
       const text = `${tool.name} ${tool.description ?? ""}`.toLowerCase();
-      if (suche && !text.includes(suche)) continue;
+      if (!matches(text)) continue;
       treffer.push(
         `\n■ ${tool.name}  [Server: ${server.slug}]\n` +
           `  ${(tool.description ?? "(keine Beschreibung)").slice(0, 400)}\n` +
@@ -1659,7 +1630,7 @@ export async function mcpFindTool(query: string): Promise<string> {
     : treffer.join("");
 
   return (
-    `${treffer.length} von ${gesamt} Werkzeugen${suche ? ` zu "${query}"` : ""}:\n${liste}\n\n` +
+    `${treffer.length} von ${gesamt} Werkzeugen${suche ? ` zu "${query}"` : ""}:\n${liste.slice(0, 10000)}\n\n` +
     (kurz
       ? `Für das Eingabeschema such gezielter (z.B. mcp_find_tool("${suche || "upscale"}")).\n`
       : "") +
@@ -1761,7 +1732,7 @@ const MCP_TOOLS_PER_SERVER = Number(process.env.LUKAS_MCP_MAX_TOOLS ?? 18);
  * die Entscheidung fuer sich pruefbar, ohne den halben Server mitzuziehen.
  */
 
-export async function allLukasTools(): Promise<OpenAI.Chat.Completions.ChatCompletionTool[]> {
+export async function allLukasTools(task?: string): Promise<OpenAI.Chat.Completions.ChatCompletionTool[]> {
   try {
     const servers = await activeServers();
     // Der Risiko-Cache in policy.ts wird hier mitgepflegt: riskFor() muss
@@ -1803,11 +1774,11 @@ export async function allLukasTools(): Promise<OpenAI.Chat.Completions.ChatCompl
     if (extra.length > 0) {
       logger.info({ mcpWerkzeuge: extra.length }, "MCP-Werkzeuge im Werkzeugkasten");
     }
-    return mitPolicyHinweis([...LUKAS_TOOLS, ...extra]);
+    return mitPolicyHinweis(waehleWerkzeuge([...LUKAS_TOOLS, ...extra], task));
   } catch (err) {
     // Faellt die MCP-Abfrage aus, arbeitet Lukas mit seinen eigenen Werkzeugen
     // weiter, statt dass der ganze Zug scheitert.
     logger.warn({ err }, "MCP-Werkzeuge konnten nicht geladen werden");
-    return mitPolicyHinweis(LUKAS_TOOLS);
+    return mitPolicyHinweis(waehleWerkzeuge(LUKAS_TOOLS, task));
   }
 }

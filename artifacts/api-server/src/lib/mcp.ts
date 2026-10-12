@@ -183,16 +183,17 @@ async function getRow(id: number): Promise<McpServer> {
 async function connect(row: McpServer, authorizationCode?: string): Promise<Client> {
   const provider = new DbOAuthProvider(row.id, row.name);
   const url = new URL(row.url);
-  const client = new Client({ name: "lukas", version: "1.0.0" });
-
   const attempt = async (kind: "http" | "sse") => {
+    const client = new Client({ name: "lukas", version: "1.0.0" });
     const transport =
       kind === "http"
         ? new StreamableHTTPClientTransport(url, { authProvider: provider })
         : new SSEClientTransport(url, { authProvider: provider });
-    if (authorizationCode) await transport.finishAuth(authorizationCode);
-    await client.connect(transport);
-    return client;
+    try {
+      if (authorizationCode) await transport.finishAuth(authorizationCode);
+      await client.connect(transport, { timeout: 15000 });
+      return client;
+    } catch (err) { await client.close().catch(() => {}); throw err; }
   };
 
   try {
@@ -201,8 +202,15 @@ async function connect(row: McpServer, authorizationCode?: string): Promise<Clie
     // Anmeldung noetig: nicht als Transportproblem missdeuten, sondern
     // unveraendert nach oben geben.
     if (err instanceof AuthorizationRequired || err instanceof UnauthorizedError) throw err;
-    logger.info({ err, server: row.name }, "Streamable HTTP fehlgeschlagen — versuche SSE");
-    return await attempt("sse");
+    // Only a transport mismatch warrants legacy SSE. Authentication, rate
+    // limits and timeouts do not become valid requests on another transport.
+    if (!/\b40[45]\b/.test(String(err))) throw err;
+    logger.info({ err, server: row.name }, "Streamable HTTP nicht unterstützt — versuche SSE");
+    try { return await attempt("sse"); }
+    catch (legacy) {
+      if (legacy instanceof AuthorizationRequired || legacy instanceof UnauthorizedError) throw legacy;
+      throw new Error(`MCP-Verbindung zu ${row.name} fehlgeschlagen: HTTP: ${String(err)}; SSE: ${String(legacy)}`);
+    }
   }
 }
 
@@ -293,8 +301,8 @@ export async function callMcpTool(
       c?.type === "text" && typeof c.text === "string" ? c.text : `[${c?.type ?? "unbekannt"}]`,
     );
     const text = parts.join("\n").trim() || "(leere Antwort)";
-    const prefix = result.isError ? "FEHLER vom MCP-Server:\n" : "";
-    return (prefix + text).slice(0, 12000);
+    if (result.isError) throw new Error("FEHLER vom MCP-Server: " + text.slice(0, 12000));
+    return text.slice(0, 12000);
   } finally {
     await client.close().catch(() => {});
   }

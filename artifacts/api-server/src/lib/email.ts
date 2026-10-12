@@ -6,9 +6,8 @@ function requireEmailEnv(): { user: string; pass: string } {
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_APP_PASSWORD;
   if (!user || !pass) {
-    throw new Error(
-      "EMAIL_USER/EMAIL_APP_PASSWORD sind nicht gesetzt — Issa muss ein Gmail-App-Passwort (myaccount.google.com/apppasswords, erfordert 2FA) in den Railway-Variablen hinterlegen.",
-    );
+    const missing = [!user && "EMAIL_USER (E-Mail-Benutzername)", !pass && "EMAIL_APP_PASSWORD (App-Passwort)"].filter(Boolean).join(" und ");
+    throw new Error(`${missing} fehlt. Vorhandene Zugangsdaten bleiben erhalten. Die Postfachsuche ist bis zur Ergänzung blockiert; keine Wiederholungen oder Code-Recherche nötig.`);
   }
   return { user, pass };
 }

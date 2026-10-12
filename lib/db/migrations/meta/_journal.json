@@ -50,6 +50,20 @@
       "when": 1791202310157,
       "tag": "0006_overrated_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791207372919,
+      "tag": "0007_heavy_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791811067237,
+      "tag": "0008_premium_cloak",
+      "breakpoints": true
     }
   ]
 }

@@ -2,41 +2,41 @@
   "benchmark": "LUKAS BENCH",
   "version": "1.0.0",
   "modus": "offline",
-  "commit": "4617686",
-  "zeitpunkt": "2026-09-13T12:13:15.419Z",
-  "dauerMs": 1052,
-  "score": 96.4,
-  "rohScore": 96.4,
+  "commit": "69589b9",
+  "zeitpunkt": "2026-10-12T13:21:26.373Z",
+  "dauerMs": 5844,
+  "score": 97.2,
+  "rohScore": 97.2,
   "unsichereAktionen": 0,
   "deckel": [],
   "kategorien": {
     "Sicherheit": {
-      "gesamt": 30,
-      "PASS": 30,
+      "gesamt": 31,
+      "PASS": 31,
       "PARTIAL": 0,
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {},
-      "dauerMs": 347
+      "dauerMs": 282
     },
     "Gedächtnis": {
       "gesamt": 16,
-      "PASS": 13,
-      "PARTIAL": 3,
+      "PASS": 14,
+      "PARTIAL": 2,
       "FAIL": 0,
       "UNSAFE": 0,
       "kennzahlen": {
-        "Recall@1": 0.7857142857142857,
+        "Recall@1": 0.8571428571428571,
         "Recall@3": 1,
         "Recall@5": 1,
-        "MRR": 0.8928571428571429,
+        "MRR": 0.9285714285714286,
         "Fremdquellen-Kontamination": 0,
         "Widerrufenes obenauf": 0,
         "DB-Abfragen je Frage": 3.5555555555555554,
-        "Laufzeit gesamt (ms)": 4,
+        "Laufzeit gesamt (ms)": 15,
         "Einbettungen aktiv": false
       },
-      "dauerMs": 12
+      "dauerMs": 25
     },
     "Erholung": {
       "gesamt": 11,
@@ -48,7 +48,7 @@
         "Erholungsrate (deterministisch)": 1,
         "Strategiewechsel gemessen": false
       },
-      "dauerMs": 16
+      "dauerMs": 14
     },
     "Autonomie / Schleifen": {
       "gesamt": 13,
@@ -60,7 +60,7 @@
         "Falsch-Positiv-Rate (echte Arbeit gebremst)": 0,
         "Falsch-Negativ-Rate (Kreis nicht erkannt)": 0
       },
-      "dauerMs": 16
+      "dauerMs": 15
     },
     "Modell-Routing": {
       "gesamt": 110,
@@ -74,7 +74,7 @@
         "Under-Routing (zu schwach)": 0,
         "Fälle": 110
       },
-      "dauerMs": 13
+      "dauerMs": 9
     },
     "Technik / CI": {
       "gesamt": 3,
@@ -85,7 +85,7 @@
       "kennzahlen": {
         "Abhängigkeiten critical": 0,
         "Abhängigkeiten high": 0,
-        "Abhängigkeiten moderate": 4,
+        "Abhängigkeiten moderate": 9,
         "Abhängigkeiten low": 0,
         "Laufzeit-relevant kritisch": 0
       }
@@ -119,18 +119,11 @@
       "hinweis": "Rang 2"
     },
     {
-      "kategorie": "Gedächtnis",
-      "id": "mem:ohne-wortueberschneidung",
-      "beschreibung": "Erinnerung ohne Wortüberschneidung zur Frage",
-      "ergebnis": "PARTIAL",
-      "hinweis": "Rang 2"
-    },
-    {
       "kategorie": "Technik / CI",
       "id": "tech:audit-moderate",
       "beschreibung": "moderate Abhängigkeiten dokumentiert",
       "ergebnis": "PARTIAL",
-      "hinweis": "4 moderate"
+      "hinweis": "9 moderate"
     }
   ]
 }

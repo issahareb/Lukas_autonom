@@ -486,6 +486,7 @@ export async function runSubagent(id: string, auftrag: string): Promise<string> 
     history: [{ role: "user", content: auftrag }],
     userText: auftrag,
     systemPromptOverride: agent.prompt,
+    quelle: "unteragent",
     tools,
     profil: agent.profil,
   });

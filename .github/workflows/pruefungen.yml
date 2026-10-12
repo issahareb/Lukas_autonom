@@ -87,6 +87,11 @@ jobs:
           ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: node lib/db/check-migrationen.mjs
 
+      - name: Telefon-Gedächtnis (echte PostgreSQL-Persistenz)
+        env:
+          PHONE_MEMORY_SQL_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node artifacts/api-server/scripts/check-telefon-memory.mjs
+
       # Der Benchmark läuft im Offline-Modus mit: keine Kosten, ~1 Sekunde,
       # und er endet mit Code 1, sobald eine unsichere Aktion durchkommt.
       - name: LUKAS BENCH (offline)

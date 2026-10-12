@@ -174,8 +174,8 @@ pruefe(
   quelle.includes("memoryContextOhne"),
 );
 pruefe(
-  "und übergibt die IDs, die schon drinstehen",
-  /new Set\(memories\.map\(\(m\) => m\.id\)\)/.test(quelle),
+  "keine zweite pauschale Quelle für wichtige/neue Erinnerungen",
+  !/importantMemories|recentMemories|from\(memoriesTable\)/.test(quelle),
 );
 pruefe(
   "die alte, doppelnde Fassung wird dort nicht mehr aufgerufen",

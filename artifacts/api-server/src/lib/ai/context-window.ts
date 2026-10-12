@@ -81,7 +81,9 @@ export function fitLukasContext(
   let used = 0;
   for (let i = groups.length - 1; i >= 0; i--) {
     const cost = groups[i].reduce((sum, m) => sum + messageCost(m), 0);
-    if (keptGroups.length > 0 && used + cost > budget) break;
+    // Protect the immediately preceding exchange as well as the current one.
+    // Optional memory must not displace the answer a follow-up refers to.
+    if (keptGroups.length >= 2 && used + cost > budget) break;
     keptGroups.unshift(groups[i]);
     used += cost;
   }

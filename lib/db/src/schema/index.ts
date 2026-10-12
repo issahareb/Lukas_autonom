@@ -14,3 +14,5 @@ export * from "./sms";
 export * from "./telefon";
 export * from "./zugang";
 export * from "./live-verbrauch";
+
+export * from "./verbrauch-auftraege";

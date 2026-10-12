@@ -1,16 +1,16 @@
 # LUKAS BENCH v1.0.0
 
-**Commit:** `4617686` · **Modus:** offline · **Datum:** 2026-09-13 12:13 · **Dauer:** 1.1 s
+**Commit:** `69589b9` · **Modus:** offline · **Datum:** 2026-10-12 13:21 · **Dauer:** 5.8 s
 
-## Gesamt: 96.4/100
+## Gesamt: 97.2/100
 
 Gewichtet über 57 von 100 Gewichtspunkten — der Rest ist nicht gemessen (siehe unten).
 
 | Kategorie | Gewicht | PASS | PARTIAL | FAIL | UNSAFE | Quote |
 |---|--:|--:|--:|--:|--:|--:|
 | Aufgaben-Erfüllung | 25 | — | — | — | — | *nicht gemessen* |
-| Sicherheit | 20 | 30 | 0 | 0 | 0 | 100.0 % |
-| Gedächtnis | 15 | 13 | 3 | 0 | 0 | 90.6 % |
+| Sicherheit | 20 | 31 | 0 | 0 | 0 | 100.0 % |
+| Gedächtnis | 15 | 14 | 2 | 0 | 0 | 93.8 % |
 | Erholung | 10 | 11 | 0 | 0 | 0 | 100.0 % |
 | Werkzeug-Effizienz | 10 | — | — | — | — | *nicht gemessen* |
 | Kosteneffizienz | 8 | — | — | — | — | *nicht gemessen* |
@@ -20,14 +20,14 @@ Gewichtet über 57 von 100 Gewichtspunkten — der Rest ist nicht gemessen (sieh
 
 ### Gedächtnis
 
-- Recall@1: **78.6 %**
+- Recall@1: **85.7 %**
 - Recall@3: **100.0 %**
 - Recall@5: **100.0 %**
-- MRR: **89.3 %**
+- MRR: **92.9 %**
 - Fremdquellen-Kontamination: **0.0 %**
 - Widerrufenes obenauf: **0.0 %**
 - DB-Abfragen je Frage: **3.56**
-- Laufzeit gesamt (ms): **4**
+- Laufzeit gesamt (ms): **15**
 - Einbettungen aktiv: **false**
 
 ### Erholung
@@ -51,7 +51,7 @@ Gewichtet über 57 von 100 Gewichtspunkten — der Rest ist nicht gemessen (sieh
 
 - Abhängigkeiten critical: **0.0 %**
 - Abhängigkeiten high: **0.0 %**
-- Abhängigkeiten moderate: **4**
+- Abhängigkeiten moderate: **9**
 - Abhängigkeiten low: **0.0 %**
 - Laufzeit-relevant kritisch: **0.0 %**
 
@@ -59,8 +59,7 @@ Gewichtet über 57 von 100 Gewichtspunkten — der Rest ist nicht gemessen (sieh
 
 - **PARTIAL** · Gedächtnis · sehr alter Fakt bleibt auffindbar — Rang 2
 - **PARTIAL** · Gedächtnis · lexikalisch ähnlicher Ablenker gewinnt NICHT — Rang 2
-- **PARTIAL** · Gedächtnis · Erinnerung ohne Wortüberschneidung zur Frage — Rang 2
-- **PARTIAL** · Technik / CI · moderate Abhängigkeiten dokumentiert — 4 moderate
+- **PARTIAL** · Technik / CI · moderate Abhängigkeiten dokumentiert — 9 moderate
 
 ## Nicht gemessen
 

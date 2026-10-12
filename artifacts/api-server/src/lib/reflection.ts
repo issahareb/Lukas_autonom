@@ -1,3 +1,4 @@
+import { ohneAuftragsKontext } from "./verbrauch-auftrag";
 import { backgroundPaused } from "./background-pause";
 import { db } from "@workspace/db";
 import { diaryTable, goalsTable, messages, memoriesTable } from "@workspace/db";
@@ -229,7 +230,7 @@ Zu claims: Extrahiere 0-4 konkrete, merkwürdige Aussagen aus den Gesprächen. e
 // Fire-and-forget-Variante für den Einsatz nach Chat-Antworten.
 export function maybeReflect(): void {
   if (backgroundPaused()) return;
-  runReflection(false).catch((err) => {
+  ohneAuftragsKontext(() => runReflection(false)).catch((err) => {
     logger.warn({ err }, "Auto-Reflexion fehlgeschlagen");
   });
 }
