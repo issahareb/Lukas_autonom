@@ -309,7 +309,7 @@
 @media (max-width: 767px) {
   .home-page { padding: 26px 18px 32px; }
   .home-heading h1 { font-size: 40px; }
-  .home-heading { margin-bottom: 23px; }
+  .home-heading { margin-bottom: 18px; }
   .home-intro { max-width: 27ch; font-size: 12px; }
   .home-shortcuts { gap: 9px; margin-bottom: 25px; }
   .home-shortcuts button { padding: 14px 12px; gap: 10px; }
@@ -369,15 +369,15 @@
 .home-recent-section { margin-top: 38px; }
 .home-recent button { border-radius: 22px; padding: 24px; }
 @media (max-width: 767px) {
-  .home-page .home-conversation { min-height: calc(100svh - 142px - env(safe-area-inset-bottom)); padding: 26px 22px 18px; }
-  .home-page .home-orb { height: clamp(190px,27svh,260px); }
+  .home-page .home-conversation { min-height: calc(100svh - 142px - env(safe-area-inset-bottom)); padding: 20px 22px 14px; }
+  .home-page .home-orb { height: clamp(175px,24svh,220px); }
   .home-page .home-orb .orb { width: clamp(265px,78vw,330px); }
   .home-conversation h1 { font-size: clamp(42px,12vw,58px); margin-bottom: 16px; }
   .home-page .home-voice-state { font-size: 11px; margin-bottom: 12px; }
-  .home-page .home-conversation-description { font-size: 13px; max-width: 30ch; margin-bottom: 23px; }
+  .home-page .home-conversation-description { font-size: 13px; max-width: 30ch; margin-bottom: 18px; }
   .home-page .home-composer { border-radius: 20px; padding: 16px 12px 10px; }
   .home-page .home-composer-actions > span { font-size: 10px; }
-  .home-page .home-workspace-link { margin-top: 14px; }
+  .home-page .home-workspace-link { margin-top: 8px; }
   .home-workspace { padding: 36px 20px 32px; }
   .home-heading { align-items: flex-start; gap: 14px; }
   .home-heading .home-header-action { margin-top: 22px; }

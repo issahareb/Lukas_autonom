@@ -205,3 +205,11 @@
   .workspace-description { font-size: 13px; }
   .workspace-stat { padding: 16px; min-height: 88px; }
 }
+/* Keep contact actions above the fold on short laptop and phone screens. */
+.app-shell[data-page="/telefon"] .workspace-heading { padding: 4px 0 0; border-bottom: 0; }
+.app-shell[data-page="/telefon"] .workspace-content { margin-top: 20px; }
+@media (min-width: 768px) and (max-width: 1100px) {
+  .app-shell[data-page="/telefon"] .workspace-title h1 { font-size: 36px; }
+  .app-shell[data-page="/telefon"] .workspace-description { font-size: 13px; margin-top: 10px; }
+  .app-shell[data-page="/telefon"] .workspace-section-nav { margin-top: 18px; }
+}
