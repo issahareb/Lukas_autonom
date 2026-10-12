@@ -10,6 +10,8 @@ try {
   await writeFile(stub, `
 export const db = {};
 export const tageskostenTable = {}, liveVerbrauchTable = {}, openaiGuthabenTable = {};
+export const verbrauchAuftraege = {}, verbrauchAufrufe = {};
+export const and = () => {}, isNull = () => {}, desc = () => {};
 export const meldungen = {id: 'id'};
 export const gte = () => {};
 export const asc = x => x;

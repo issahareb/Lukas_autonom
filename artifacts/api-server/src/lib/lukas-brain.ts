@@ -1,3 +1,5 @@
+import { mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
+import { zugangsFehler, werkzeugeNachFehler } from "./werkzeug-auswahl";
 import { randomInt } from "node:crypto";
 import type OpenAI from "openai";
 import { allLukasTools, executeLukasTool } from "./lukas-tools";
@@ -77,6 +79,7 @@ export async function runLukasTurn(opts: {
    */
   ohneZieleUndTagebuch?: boolean;
 }): Promise<string> {
+  return mitVerbrauchsAuftrag(opts.quelle ?? "sonstige", opts.conversationId, async () => {
   opts.signal?.throwIfAborted();
   /*
    * Dashboard-Chats haben eine dauerhafte positive Konversations-ID. Autonome
@@ -98,7 +101,7 @@ export async function runLukasTurn(opts: {
       ohneZieleUndTagebuch: opts.ohneZieleUndTagebuch,
     }));
   opts.signal?.throwIfAborted();
-  const tools = opts.tools ?? (await allLukasTools());
+  let tools = opts.tools ?? (await allLukasTools(opts.userText + " " + (previousRoutingTask(opts.history, opts.userText) ?? "")));
   opts.signal?.throwIfAborted();
   const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -223,6 +226,12 @@ export async function runLukasTurn(opts: {
         opts.signal?.throwIfAborted();
         if (err instanceof Error && err.name === "AbortError") throw err;
         logger.warn({ err, tool: tc.name }, "Lukas tool failed (brain)");
+        tools = werkzeugeNachFehler(tools, tc.name, err);
+        if (zugangsFehler(tc.name, err)) {
+          auftragsStatus("blockiert");
+          hinweise.push({ role: "system", content: "Zugang blockiert: Ursache knapp melden, keine Wiederholung oder sachfremde Reparaturversuche. Andere unabhängige Aufträge weiterführen." });
+          if (/^email_/.test(tc.name) && !/reparier|debug|beheb|konfigurier/i.test(opts.userText)) tools = [];
+        }
         /*
          * Auch ins Fehlerprotokoll, nicht nur ins Log.
          *
@@ -434,4 +443,5 @@ export async function runLukasTurn(opts: {
 
   opts.signal?.throwIfAborted();
   return renderLukasVoice({ systemPrompt, conversation: convo, draft, signal: opts.signal });
+  });
 }

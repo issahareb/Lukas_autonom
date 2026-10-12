@@ -1,3 +1,4 @@
+import type { PhoneMemory, PhonePeer } from "./telefon-memory";
 /** GPT Live: server-owned delegation over the authenticated sideband. */
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { WebSocket } from "undici";
@@ -20,6 +21,7 @@ export type LiveSessionOptions = {
   visibility: Visibility;
   allowTools?: boolean;
   telefonKontextId?: string;
+  telefonPeer?: PhonePeer;
   /** Server-only grant from nimmAn after the signed incoming context/contact check. */
   telefonOwnerContactId?: number;
   onTelefonEnd?: (reason: "mailbox" | "verabschiedet") => Promise<void>;
@@ -40,6 +42,7 @@ type ManagedSession = {
   reconnectTimer?: ReturnType<typeof setTimeout>; reconnectAttempts: number;
   reconnects: number; requestedCloseReason?: string; providerCloseReason?: string;
   phone?: TelefonGespraech;
+  phoneMemory?: PhoneMemory;
   phoneSpeechObserved?: boolean;
   outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
@@ -56,6 +59,7 @@ type ManagedSession = {
   userCharacters: number; delegatedCharacters: number; usageSeconds: number; usageReported?: boolean; createdAt: number;
 };
 const setups = new Set<Promise<unknown>>();
+const phoneMemoryWrites = new Set<Promise<void>>();
 function trackSetup<T>(job: Promise<T>): Promise<T> {
   setups.add(job);
   return job.then((value) => { setups.delete(job); return value; }, (error) => { setups.delete(job); throw error; });
@@ -333,10 +337,12 @@ async function drainWork(state: ManagedSession) {
         const [{ runLukasTurn }, instructions] = await Promise.all([import("../lukas-brain"), backendInstructions(state)]);
         // A caller can hang up while the backend-only context is still loading.
         state.controller.signal.throwIfAborted();
+        const recall = await state.phoneMemory?.recall(work.userText).catch(() => "\nKontaktarchiv nicht verfügbar; erfinde keine früheren Absprachen.") ?? "";
+        state.controller.signal.throwIfAborted();
         const answer = await runLukasTurn({
           quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
           history: [...state.history], userText: work.userText,
-          systemPromptOverride: instructions + (state.options.allowTools ? "" :
+          systemPromptOverride: instructions + recall + (state.options.allowTools ? "" :
             "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung."),
           conversationId: state.conversationId,
           ...(state.options.allowTools ? {} : { tools: [] }),
@@ -439,6 +445,7 @@ function observe(state: ManagedSession, event: Json) {
       if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
     }
     state.phone?.observe(role, event.delta);
+    state.phoneMemory?.observe({ role, text: event.delta, startMs: event.start_ms, endMs: event.end_ms });
     state.transcript.push({ role, text: event.delta, endMs: event.end_ms });
     if (role === "user") state.userCharacters += event.delta.length;
     while (state.transcript.length > 1024 || state.transcript.reduce((n, row) => n + row.text.length, 0) > 40_000) {
@@ -561,6 +568,12 @@ function finishSession(state: ManagedSession, reason: string) {
   clearTimeout(state.lifetime);
   if (state.phoneGreetingTimer) { clearTimeout(state.phoneGreetingTimer); state.phoneGreetingTimer = undefined; }
   if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+  if (state.phoneMemory) {
+    const write = state.phoneMemory.close(reason !== "provider_expiry_after_unconfirmed_close" && !reason.includes("failed"));
+    phoneMemoryWrites.add(write);
+    void write.catch(() => logger.error({ phase: "final_write_failed" }, "Telefon-Gedächtnis nicht gespeichert"))
+      .finally(() => phoneMemoryWrites.delete(write));
+  }
   state.queue = []; state.transcript = []; state.history = [];
   if (sessions.get(state.id) === state) sessions.delete(state.id);
   try { state.socket?.close(1000); } catch {}
@@ -695,15 +708,23 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
   const job = (async () => {
     const reservation = reserve(options.visibility);
     let state: ManagedSession | undefined, accepted = false;
+    let phoneMemory: PhoneMemory | undefined;
     try {
       const connection = connectionConfig(), config = liveConfig();
+      if (options.telefonPeer) {
+        try {
+          const { preparePhoneMemory } = await import("./telefon-memory");
+          phoneMemory = await preparePhoneMemory(options.sessionId, options.telefonPeer, options.visibility);
+        } catch { logger.warn({ phase: "lookup_failed" }, "Telefon-Gedächtnis nicht geladen"); }
+      }
       await apiRequest(connection, "/live/sessions/" + encodeURIComponent(options.sessionId) + "/accept", {
         // Startup context is available before the first generated phoneme.
         // Runtime thinking appends arrive gradually and must not carry the initial brief.
-        session: sessionConfig(config, false, telefonStartInput(options.initialCommentary)),
+        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])]),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
       state = startManaged(options.sessionId, options, connection, config, "sip");
+      state.phoneMemory = phoneMemory;
       reservations.delete(reservation);
       if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.", true);
       await attachSideband(state);
@@ -734,6 +755,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       }
     } catch (error) {
       if (state) await terminateSession(state, "sip_setup_failed").catch(() => {});
+      else await phoneMemory?.close(false).catch(() => {});
       if (accepted) throw new LiveSessionError(error instanceof Error ? error.message : "SIP-Aufbau fehlgeschlagen.", true);
       throw error;
     } finally { reservations.delete(reservation); }
@@ -771,4 +793,5 @@ export async function closeLiveSession(sessionId: string, closeToken: string): P
 export async function shutdownLiveSessions(): Promise<void> {
   shuttingDown = true;
   await Promise.allSettled([...setups, ...[...sessions.values()].map((state) => terminateSession(state, "server_shutdown"))]);
+  await Promise.allSettled([...phoneMemoryWrites]);
 }

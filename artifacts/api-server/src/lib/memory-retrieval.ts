@@ -1,3 +1,4 @@
+import { queryWords, lexicalRelevance, relevantEnough, boundedMemory } from "./memory-relevance";
 import { projekteImText, projektKontext } from "./projekt-aliasse";
 /*
  * Memory-Retrieval — bewertete Suche ueber Memories, Claims, Episoden UND den
@@ -68,27 +69,6 @@ function cosine(a: number[], b: number[]): number {
     nb += b[i] * b[i];
   }
   return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
-}
-
-function queryWords(query: string): string[] {
-  return Array.from(
-    new Set(
-      query
-        .toLowerCase()
-        .split(/[^\p{L}\p{N}_-]+/u)
-        .map((w) => w.trim())
-        .filter((w) => w.length > 2),
-    ),
-  ).slice(0, 10);
-}
-
-function lexicalRelevance(query: string, text: string): number {
-  const words = queryWords(query);
-  if (words.length === 0) return 0;
-  const t = text.toLowerCase();
-  const hits = words.filter((w) => t.includes(w)).length;
-  const projektTreffer = projekteImText(query).some(p => projekteImText(text).some(t => t.id === p.id));
-  return Math.max(hits / words.length, projektTreffer ? 0.9 : 0);
 }
 
 export async function embedNewRows(): Promise<number> {
@@ -197,7 +177,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
     db.select().from(claimsTable).orderBy(desc(claimsTable.observedAt)).limit(budget.claims),
     db.select().from(episodesTable).orderBy(desc(episodesTable.startedAt)).limit(budget.episodes),
     archiveCandidates(q),
-    gezielt ? erinnerungenZuKnoten(graph.knoten, 5) : Promise.resolve([]),
+    gezielt ? erinnerungenZuKnoten(graph.einstieg, 8) : Promise.resolve([]),
     gezielt ? episodenZuIds(graph.episodenIds, 3) : Promise.resolve([]),
   ]);
 
@@ -207,7 +187,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
     const lex = lexicalRelevance(q, text);
     if (queryVec && vec) {
       const sem = Math.max(0, cosine(queryVec, vec));
-      return Math.max(lex, sem);
+      return Math.max(lex, sem >= 0.72 && (!projekteImText(q).length || lex > 0) ? sem : 0);
     }
     return lex;
   };
@@ -220,12 +200,13 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
    * zwischen zwei Dingen. Das ist die staerkere Aussage.
    */
   for (const t of graph.treffer) {
+    if (!relevantEnough(q, t.text)) continue;
     hits.push({ kind: "graph", id: t.claimId, text: t.text, score: 1 + t.score });
   }
 
-  // Erinnerungen und Episoden, die am gefundenen Knoten haengen — ohne dass
-  // ihr Wortlaut zur Frage passen muss.
+  // Erinnerungen und Episoden am Einstieg: auch sie müssen zur Frage passen.
   for (const m of graphMemories) {
+    if (!relevantEnough(q, m.content)) continue;
     hits.push({
       kind: "memory",
       id: m.id,
@@ -234,7 +215,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
     });
   }
   for (const e of graphEpisoden) {
-    if (!e.summary) continue;
+    if (!e.summary || !relevantEnough(q, e.summary)) continue;
     hits.push({
       kind: "episode",
       id: e.id,
@@ -245,7 +226,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
   for (const m of memories) {
     const rel = relevance(m.content, m.embedding);
-    if (rel <= 0.05) continue;
+    if (rel < 0.18) continue;
     hits.push({
       kind: "memory",
       id: m.id,
@@ -256,7 +237,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
   for (const c of claims) {
     const rel = relevance(`${c.subject} ${c.predicate} ${c.value}`, c.embedding);
-    if (rel <= 0.05) continue;
+    if (rel < 0.18) continue;
     hits.push({
       kind: "claim",
       id: c.id,
@@ -272,7 +253,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
   for (const e of episodes) {
     const text = `${e.kind}: ${e.summary}`;
     const rel = relevance(text, null);
-    if (rel <= 0.05 || !e.summary) continue;
+    if (rel < 0.18 || !e.summary) continue;
     hits.push({
       kind: "episode",
       id: e.id,
@@ -283,7 +264,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
   for (const m of archive) {
     const rel = lexicalRelevance(q, m.content);
-    if (rel <= 0.05) continue;
+    if (rel < 0.18) continue;
     const speaker = m.role === "assistant" ? "Lukas" : "Issa";
     hits.push({
       kind: "conversation",
@@ -310,7 +291,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
 export async function memoryContextFor(query: string, limit = 6): Promise<string> {
   const hits = await searchMemory(query, limit);
-  return [projektKontext(query), ...hits.map((h) => `- ${h.text}`)].filter(Boolean).join("\n");
+  return [projektKontext(query), boundedMemory(hits)].filter(Boolean).join("\n");
 }
 
 /*
@@ -359,5 +340,5 @@ export async function memoryContextOhne(
    */
   const hits = await searchMemory(query, limit + ausser.size);
   const uebrig = waehleOhneDoppel(hits, limit, ausser);
-  return [projektKontext(query), ...uebrig.map((h) => `- ${h.text}`)].filter(Boolean).join("\n");
+  return [projektKontext(query), boundedMemory(uebrig)].filter(Boolean).join("\n");
 }

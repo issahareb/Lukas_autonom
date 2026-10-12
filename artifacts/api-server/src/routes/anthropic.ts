@@ -1,3 +1,5 @@
+import { mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
+import { zugangsFehler, werkzeugeNachFehler } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
 import type OpenAI from "openai";
 import { db } from "@workspace/db";
@@ -247,7 +249,7 @@ async function buildAttachmentParts(
 // Der alte /anthropic-Pfad bleibt aus Kompatibilitaetsgruenden bestehen. Intern
 // ist er providerunabhaengig. Spezialmodell-Ausgaben werden NICHT direkt an die
 // UI gestreamt; sichtbar ist nur die einheitliche Lukas-Ausgabeschicht.
-router.post("/anthropic/conversations/:id/messages", async (req, res) => {
+router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerbrauchsAuftrag("chat", Number(req.params.id), async () => {
   /*
    * Lebenszeichen auf der Leitung.
    *
@@ -388,6 +390,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     // angehaengt hat.
     let bilderGesehen = false;
     const schleife = new Arbeitsschleife();
+    let angeboteneTools = await allLukasTools(String(content) + " " + (previousUserText ?? ""));
     while (schleife.darfWeiter() && !gestoppt()) {
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
@@ -405,7 +408,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
       quelle: "chat",
         cacheKey: `lukas-${convId}`,
         route,
-        tools: await allLukasTools(),
+        tools: angeboteneTools,
         messages: convo,
       });
 
@@ -471,6 +474,12 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         } catch (err) {
           logger.warn({ err, tool: toolCall.name }, "Lukas tool failed");
           const grund = `Fehler: ${err instanceof Error ? err.message : String(err)}`;
+          angeboteneTools = werkzeugeNachFehler(angeboteneTools, toolCall.name, err);
+          if (zugangsFehler(toolCall.name, err)) {
+            auftragsStatus("blockiert");
+            hinweise.push({ role: "system", content: "Ein Zugang fehlt oder wird abgelehnt. Beschreibe die konkrete Blockade. Wiederhole diesen Zugang nicht, lies deswegen keine Implementierungsdateien und weiche nicht auf sachfremde Dienste aus. Andere unabhängige, beauftragte Arbeiten dürfen weitergehen." });
+            if (/^email_/.test(toolCall.name) && !/reparier|debug|beheb|konfigurier/i.test(String(content))) angeboteneTools = [];
+          }
           /*
            * Auch ins Fehlerprotokoll, nicht nur ins Log.
            *
@@ -545,6 +554,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
      * der naechste Turn ohne jede Spur an.
      */
     if (gestoppt()) {
+      auftragsStatus("abgebrochen");
       stoppWuensche.delete(convId);
       if (draft) {
         await db.insert(messages).values({
@@ -643,6 +653,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
         "was dort steht.";
 
     if (!fullResponse) {
+      auftragsStatus("fehler");
       logger.warn({ conversationId: convId, usedTools }, "Chat ohne Antwort beendet");
       recordDebugEvent("chat", `Leere Antwort nach Werkzeugen: ${usedTools.join(", ") || "keine"}`);
     }
@@ -662,6 +673,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     if (!res.writableEnded) res.end();
     maybeReflect();
   } catch (err: unknown) {
+    auftragsStatus("fehler");
     logger.error({ err }, "Chat error");
     recordDebugEvent("chat", err);
     /*
@@ -686,6 +698,6 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => {
     // Unterhaltung fuer immer als beschaeftigt und der Client fragt ewig nach.
     if (laufendeId !== null) laufendeZuege.delete(laufendeId);
   }
-});
+}));
 
 export default router;

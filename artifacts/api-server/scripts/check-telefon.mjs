@@ -32,7 +32,10 @@ export const aktualisiereAnruf = async (id, patch) => {
   if (patch.liveBereit) globalThis.telefonProtokoll.push({ ...tracked.get(id), richtung: "ausgehend", ergebnis: "angenommen", stufe: globalThis.telefonEintrag?.stufe ?? "oeffentlich" });
 };
 export const db = {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => globalThis.telefonLookupTreffer ?? (globalThis.telefonEintrag ? [globalThis.telefonEintrag] : []) }) }) }),
+  select: () => ({ from: table => ({ where: () => {
+    const rows = table === telefonAnrufe ? (globalThis.telefonHistorie ?? []) : (globalThis.telefonLookupTreffer ?? (globalThis.telefonEintrag ? [globalThis.telefonEintrag] : []));
+    return {limit: async n => rows.slice(0,n), orderBy: () => ({limit: async n => rows.slice(0,n)})};
+  } }) }),
   update: (table) => ({ set: (row) => {
     if (table === telefonNummern && Object.keys(row).some(key => key !== "zuletztGesehen")) {
       (globalThis.telefonNummernSchreibversuche ??= []).push({ operation: "update", row });
@@ -49,7 +52,7 @@ export const db = {
   } }),
 };
 export const telefonNummern = {}; export const telefonAnrufe = {};
-export const eq = () => ({}); export const desc = () => ({}); export const sql = () => ({});
+export const and = (...args) => args; export const gte = () => ({}); export const eq = () => ({}); export const desc = () => ({}); export const sql = () => ({});
 export const logger = { warn() {}, info() {}, error() {} };
 export const buildSystemPrompt = async () => { globalThis.telefonPromptBuilds = (globalThis.telefonPromptBuilds ?? 0) + 1; return "privat"; };
 export const buildPublicSystemPrompt = async (channel) => { if (channel !== "telefon") throw new Error("External calls must use the phone prompt"); globalThis.telefonPromptBuilds = (globalThis.telefonPromptBuilds ?? 0) + 1; return "oeffentlich"; };
@@ -232,11 +235,31 @@ try {
   assert.equal(danach.visibility, "public"); assert.equal(danach.allowTools, false);
   assert.ok(!danach.instructions.includes(anlass)); assert.doesNotMatch(danach.instructions, /DU HAST ANGERUFEN/);
   assert.equal(globalThis.telefonProtokoll.at(-1).richtung, "eingehend");
+  // A known inbound caller gets the last relevant contact reason before speech.
+  globalThis.telefonHistorie = [{
+    anlass: "Wegen des Garteninserats angerufen", detail: "Fouad wollte später zurückrufen",
+    richtung: "ausgehend", ergebnis: "beendet", createdAt: new Date("2026-10-04T12:00:00Z"),
+  }];
+  globalThis.telefonEintrag = { id: 9, nummer: ERWARTET, name: "Fouad", createdAt: new Date("2026-01-01"), stufe: "oeffentlich", darfAngerufenWerden: true };
+  assert.equal(await nimmAn("live_known_inbound", "+" + ERWARTET), "oeffentlich");
+  const inbound = globalThis.telefonAnnahmen.at(-1);
+  assert.match(inbound.instructions, /Garteninserat/);
+  assert.match(inbound.instructions, /Fouad wollte später zurückrufen/);
+  assert.match(inbound.initialCommentary, /Kontakt Fouad/);
+  assert.match(inbound.initialCommentary, /frühere Telefonhistorie/);
+  assert.equal(inbound.allowTools, false, "caller ID history must not grant tools");
+  // Unknown callers never inherit another contact's history.
+  globalThis.telefonEintrag = undefined;
+  assert.equal(await nimmAn("live_unknown_inbound", "+4930999999"), "oeffentlich");
+  const unknownInbound = globalThis.telefonAnnahmen.at(-1);
+  assert.doesNotMatch(unknownInbound.instructions, /Garteninserat/);
+  assert.doesNotMatch(unknownInbound.initialCommentary, /Fouad/);
+  globalThis.telefonHistorie = [];
   assert.equal(gewaehlt.length, 1, "Retry must not dial again");
 } finally {
   globalThis.fetch = vorigesFetch;
   for (const [key, value] of vorigeEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
-  delete globalThis.telefonEintrag; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
+  delete globalThis.telefonEintrag; delete globalThis.telefonHistorie; delete globalThis.telefonAnnahmen; delete globalThis.telefonProtokoll; delete globalThis.telefonAnnahmeFehler;
 }
 
 
@@ -548,7 +571,7 @@ try {
 const promptFixture = join(dir, "phone-prompt-fixture.mjs");
 writeFileSync(promptFixture, [
   'export const db = { select() { throw new Error("Phone prompt must not query memories"); } };',
-  'export const memoriesTable = {}; export const eq = () => ({}); export const desc = () => ({});',
+  'export const memoriesTable = {}; export const and = (...args) => args; export const gte = () => ({}); export const eq = () => ({}); export const desc = () => ({});',
   'export const LUKAS_SOUL = "PRIVATE_OWNER_BIOGRAPHY_SENTINEL";',
   'export async function getLukasStatus() { throw new Error("Phone prompt must not query mood"); }',
 ].join("\n"));

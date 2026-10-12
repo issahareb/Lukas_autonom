@@ -96,9 +96,9 @@ function requireSshConfig(): { host: string; user: string; key: string; port: nu
     );
   }
   return {
-    host,
-    user: process.env.VPS_SSH_USER ?? "root",
-    key,
+    host: host.trim(),
+    user: process.env.VPS_SSH_USER?.trim() || "root",
+    key: key.trim().replace(/\\n/g, "\n") + "\n",
     port: Number(process.env.VPS_SSH_PORT ?? 22),
   };
 }

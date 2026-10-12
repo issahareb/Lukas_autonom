@@ -106,7 +106,8 @@ export function routeLukasModel(input: RouteInput): ModelRoute {
   const continuation = CONTINUATION.test(text.trim()) && input.previousUserText;
   let profile = profileFor(continuation ? input.previousUserText! : text);
   let reason = continuation ? "Fortsetzung des bisherigen Auftrags" : "Aufwand der aktuellen Aufgabe";
-  if (tools.has("execute_command") || tools.has("github_read_path") || tools.has("github_search_code")) {
+  if (tools.has("execute_command") || tools.has("github_search_code") ||
+      (tools.has("github_read_path") && (profile === "code" || CONTINUATION.test(text.trim())))) {
     if (profile !== "long_context") profile = "code";
     reason = "laufende Code-/Repo-Arbeit";
   }

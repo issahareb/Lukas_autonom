@@ -1,3 +1,4 @@
+import { merkeAufrufUsage, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
 import type OpenAI from "openai";
 import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../logger";
@@ -357,6 +358,9 @@ export function merkeVerbrauch(model: string, usage: any, provider = "unbekannt"
   const eintrag = verbrauch.get(model) ?? { aufrufe: 0, rein: 0, raus: 0, ausCache: 0, inCache: 0 };
   const cache = cacheTreffer(usage);
   const gemeldet = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0);
+  merkeAufrufUsage({ eingabe: cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet,
+    ausgabe: Number(usage.output_tokens ?? usage.completion_tokens ?? 0), cacheLesen: cache.gelesen,
+    cacheSchreiben: cache.imEingang ? null : cache.geschrieben });
   eintrag.aufrufe++;
   /*
    * `rein` heisst ab hier ueberall dasselbe: frisch bezahlter Eingang, ohne
@@ -748,6 +752,7 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
 
 /** Kontext, Profilgrenzen, Provider und Buchhaltung fuer alle Kanaele. */
 export async function callLukasModel(input: CallInput): Promise<LukasModelResult> {
+  if (!hatAktivenAuftrag()) return mitVerbrauchsAuftrag(input.quelle ?? "sonstige", undefined, () => callLukasModel(input));
   input.signal?.throwIfAborted();
   const messages = fitLukasContext(verdichteWerkzeugErgebnisse(input.messages));
   const clean = messages.map((m: any) =>
@@ -761,10 +766,10 @@ export async function callLukasModel(input: CallInput): Promise<LukasModelResult
     if (!providerAvailable(route.provider) || isModelBroken(route.model, route.provider)) continue;
     const prepared = { ...input, route, messages: route.provider === "anthropic" ? messages : clean };
     try {
-      const result = route.provider === "anthropic" ? await callAnthropic(prepared)
+      const result = await messeModellAufruf(prepared, route !== input.route ? "fallback" : !input.tools?.length ? "antwort" : input.messages.some(m => m.role === "tool") ? "werkzeugfortsetzung" : "start", async () => route.provider === "anthropic" ? await callAnthropic(prepared)
         : route.provider === "google" ? await callGoogle(prepared)
         : route.provider === "local" ? await callLocal(prepared)
-        : await callOpenAI(prepared);
+        : await callOpenAI(prepared));
       input.signal?.throwIfAborted();
       return result;
     } catch (err) {

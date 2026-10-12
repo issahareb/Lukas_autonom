@@ -1,5 +1,6 @@
-import { db, tageskostenTable, liveVerbrauchTable, openaiGuthabenTable } from "@workspace/db";
-import { gte } from "drizzle-orm";
+import { db, tageskostenTable, liveVerbrauchTable, openaiGuthabenTable, verbrauchAuftraege, verbrauchAufrufe } from "@workspace/db";
+import { gte, and, isNull, desc, inArray } from "drizzle-orm";
+import { verbrauchLeeren } from "./verbrauch-quelle";
 
 type Kosten = {
   tag: string; provider: string; model: string; quelle?: string; aufrufe: number;
@@ -44,14 +45,31 @@ export function fasseVerbrauchZusammen(kosten: Kosten[], live: Live[], tage = 14
 }
 
 export async function verbrauchsbericht(tage = 14) {
+  await verbrauchLeeren();
   const jetzt = new Date();
   const seitTag = new Date(jetzt.getTime() - (tage - 1) * TAG).toISOString().slice(0, 10);
-  const [kosten, live, guthaben] = await Promise.all([
+  const [kosten, live, guthaben, auftraege] = await Promise.all([
     db.select().from(tageskostenTable).where(gte(tageskostenTable.tag, seitTag)),
     db.select().from(liveVerbrauchTable).where(gte(liveVerbrauchTable.gestartetAt, new Date(seitTag + "T00:00:00Z"))),
     db.select().from(openaiGuthabenTable).limit(1),
+    db.select().from(verbrauchAuftraege).where(and(isNull(verbrauchAuftraege.parentId), gte(verbrauchAuftraege.gestartetAt, new Date(seitTag + "T00:00:00Z")))).orderBy(desc(verbrauchAuftraege.gestartetAt)).limit(30),
   ]);
-  return { ...fasseVerbrauchZusammen(kosten, live, tage, jetzt), guthaben: guthaben[0] ?? null };
+  const aufrufe = auftraege.length ? await db.select().from(verbrauchAufrufe).where(inArray(verbrauchAufrufe.rootId, auftraege.map(a => a.id))).orderBy(verbrauchAufrufe.gestartetAt) : [];
+  return { ...fasseVerbrauchZusammen(kosten, live, tage, jetzt), guthaben: guthaben[0] ?? null,
+    cacheHinweis: "OpenAI meldet keine separate Cache-Schreibzahl. Dort ist 0 in älteren Summen kein separat gemessener Wert. Die Eingabe enthält bereits alle nicht aus dem Cache gelesenen Tokens.",
+    auftraege: auftraege.map(a => {
+      const calls = aufrufe.filter(c => c.rootId === a.id);
+      return { ...a, aufrufe: calls, gesamt: calls.reduce((s,c) => s + (c.eingabe ?? 0) + (c.ausgabe ?? 0) + (c.cacheLesen ?? 0) + (c.cacheSchreiben ?? 0), 0),
+        ohneMesswert: calls.filter(c => c.eingabe === null).length };
+    }),
+  };
+}
+
+export function formatiereVerbrauch(bericht: ReturnType<typeof fasseVerbrauchZusammen>) {
+  const rows = bericht.modelle;
+  return `Dauerhaft erfasster Verbrauch: ${bericht.tageswerte[0]?.tag} bis ${bericht.tageswerte.at(-1)?.tag} (UTC), Stand ${bericht.stand}. Dieselbe Datenquelle wie im Dashboard; Serverneustarts setzen diese Werte NICHT zurück.\n` +
+    rows.map(m => `${m.model} [${m.quelle}]: ${m.aufrufe} Aufrufe; frische Eingabe ${m.eingabe}; Ausgabe inkl. Denken ${m.ausgabe}; Cache-Lesen ${m.cacheLesen}; Cache-Schreiben ${m.provider === "openai" ? "nicht separat gemeldet" : m.cacheSchreiben}; Gesamt ${m.gesamt}.`).join("\n") +
+    `\nGesamt: ${rows.reduce((s,m) => s + m.gesamt, 0)} Tokens. Jede gemeldete Kategorie genau einmal. OpenAI-Eingabe enthält bereits Cache-Schreibvorgänge, soweit diese nicht als Cache-Lesen gemeldet sind. Keine zusätzliche Schreibzahl erfinden. Der laufende Auftrag ist noch nicht abgeschlossen. Tage ohne Messung sind kein belegter Nullverbrauch. Telefon-/Live-Minuten und externe Gebühren sind keine Texttokens.`;
 }
 
 export async function bestaetigeGuthaben(usd: number, organisation: string) {

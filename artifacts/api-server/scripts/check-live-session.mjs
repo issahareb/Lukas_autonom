@@ -5,10 +5,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 const directory = await mkdtemp(join(tmpdir(), "lukas-live-check-")), output = join(directory, "live-session.mjs");
-const fixture = { sockets: [], requests: [], calls: [], logs: [], usage: [], failSockets: 0,
+const fixture = { memoryParts: [], memoryClosed: [], sockets: [], requests: [], calls: [], logs: [], usage: [], failSockets: 0,
   failCreate: false, sequence: 0, answer: "Bestätigtes Ergebnis.", backend: null };
 globalThis.__liveSessionTest = fixture;
 const stubSources = {
+  "./telefon-memory": `export async function preparePhoneMemory(id, peer, visibility) { const f = globalThis.__liveSessionTest; f.memoryPeer = {id, peer, visibility}; return {input: [{type:"message", role:"user", content:[{type:"input_text", text:"ARCHIVE_SAMSTAG"}]}], observe: part => f.memoryParts.push(part), recall: async () => "ARCHIVE_SAMSTAG", close: async complete => f.memoryClosed.push({id,complete})}; }`,
   undici: [
     'const fixture = globalThis.__liveSessionTest;',
     'export class WebSocket extends EventTarget {',
@@ -32,7 +33,7 @@ await build({
   entryPoints: [resolve(dirname(fileURLToPath(import.meta.url)), "../src/lib/ai/live-session.ts")],
   outfile: output, bundle: true, platform: "node", target: "node22", format: "esm", logLevel: "silent",
   plugins: [{ name: "live-isolation", setup(builder) {
-    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain)$/ },
+    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory)$/ },
       (args) => ({ path: args.path, namespace: "live-stub" }));
     builder.onLoad({ filter: /.*/, namespace: "live-stub" }, (args) => ({ contents: stubSources[args.path], loader: "js" }));
   } }],
@@ -384,11 +385,13 @@ try {
   delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;
   delete process.env.LUKAS_TELEFON_STRENG;
 
-  const sipOptions = { sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
+  const sipOptions = { telefonPeer: {nummer: "4915100000001", richtung: "eingehend"}, sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
     initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };
   const beforeSip = fixture.calls.length;
   await Promise.all([api.acceptLiveSipSession(sipOptions), api.acceptLiveSipSession(sipOptions)]);
   const accepts = fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept"));
+  assert.match(JSON.stringify(accepts[0].body.session.input), /ARCHIVE_SAMSTAG/);
+  assert.equal(fixture.memoryPeer.peer.nummer, "4915100000001");
   assert.equal(accepts.length, 1); assert.equal(accepts[0].body.session.type, "live");
   assert.equal(accepts[0].body.session.client, undefined);
   assert.deepEqual(accepts[0].body.session.audio, { output: { voice: "cedar" } });
@@ -426,7 +429,10 @@ try {
   assert.equal(fixture.calls.length, beforeSip);
   input(sipSocket, "Wie lautet die öffentliche Adresse?"); delegate(sipSocket, "phone_one"); await settle();
   assert.deepEqual(fixture.calls.at(-1).tools, []); assert.equal(fixture.calls.at(-1).userText, "Wie lautet die öffentliche Adresse?");
+  assert.match(fixture.calls.at(-1).systemPromptOverride, /ARCHIVE_SAMSTAG/);
+  assert.ok(fixture.memoryParts.some(p => p.text === "Wie lautet die öffentliche Adresse?"));
   sipSocket.emit({ type: "session.closed", reason: "remote_hangup", usage: { seconds: 3 } });
+  assert.deepEqual(fixture.memoryClosed, [{id: "live_phone_ok", complete: true}]);
   const startupLog = fixture.logs.find(row => row.data.sessionId === sipOptions.sessionId && row.message === "GPT-Live-Sitzung beendet");
   for (const key of ["greetingSentMs", "greetingAcceptedMs", "firstInputAudioEventMs", "firstOutputAudioEventMs", "firstInputTranscriptMs", "firstOutputTranscriptMs"]) {
     assert.equal(typeof startupLog.data.phoneStartup[key], "number", key + " is content-free timing");

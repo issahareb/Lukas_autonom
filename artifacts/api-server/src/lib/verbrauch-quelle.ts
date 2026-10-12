@@ -1,4 +1,4 @@
-export type VerbrauchsQuelle = "chat" | "autonomie" | "reflexion" | "moltbook" | "studio" | "ausgabe" | "telefon" | "sprache" | "portfolio" | "sonstige" | "unzugeordnet";
+export type VerbrauchsQuelle = "unteragent" | "chat" | "autonomie" | "reflexion" | "moltbook" | "studio" | "ausgabe" | "telefon" | "sprache" | "portfolio" | "sonstige" | "unzugeordnet";
 
 // Keep pending writes alive until graceful shutdown, without putting the
 // database latency on the voice/model response path.

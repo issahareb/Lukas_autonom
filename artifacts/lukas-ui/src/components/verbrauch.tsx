@@ -6,12 +6,16 @@ type Bericht = {
   stand: string; tageswerte: Tag[];
   modelle: (Tokens & { provider: string; model: string; quelle: string })[];
   liveModelle: { model: string; quelle: string; sekunden: number; sitzungen: number; ohneMesswert: number; offen: number }[];
+  cacheHinweis?: string;
+  auftraege?: { id: string; conversationId: number | null; quelle: string; status: string; gestartetAt: string; gesamt: number; ohneMesswert: number;
+    aufrufe: {id: string; quelle: string; model: string; phase: string; status: string; eingabe: number | null; ausgabe: number | null; cacheLesen: number | null; cacheSchreiben: number | null; kontext: {systemZeichen: number; verlaufZeichen: number; ergebnisZeichen: number; schemaZeichen: number; werkzeuge: number}}[] }[];
   guthaben: { usd: number; organisation: string; bestaetigtAt: string } | null;
 };
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const headers = () => ({ Authorization: `Bearer ${localStorage.getItem("lukas_token") ?? ""}` });
 const zahl = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 2 });
-const quellen: Record<string, string> = { chat: "Chat", autonomie: "Autonome Arbeit", reflexion: "Reflexion", moltbook: "Moltbook", studio: "Studio", ausgabe: "Antwortpolitur", telefon: "Telefonie", sprache: "Sprachchat", portfolio: "Portfolio", sonstige: "Sonstige", unzugeordnet: "Ältere Daten ohne Zuordnung" };
+const statusText: Record<string, string> = {laeuft:"Noch kein Abschluss erfasst", antwort:"Antwort erstellt", blockiert:"Zugangsblockade", fehler:"Fehler", abgebrochen:"Abgebrochen"};
+const quellen: Record<string, string> = { unteragent: "Unteragent", chat: "Chat", autonomie: "Autonome Arbeit", reflexion: "Reflexion", moltbook: "Moltbook", studio: "Studio", ausgabe: "Antwortpolitur", telefon: "Telefonie", sprache: "Sprachchat", portfolio: "Portfolio", sonstige: "Sonstige", unzugeordnet: "Ältere Daten ohne Zuordnung" };
 export default function Verbrauch() {
   const [daten, setDaten] = useState<Bericht | null>(null);
   const [fehler, setFehler] = useState("");
@@ -72,7 +76,7 @@ export default function Verbrauch() {
             <dt>Frische Eingabe</dt><dd>{t.erfasst ? zahl(t.eingabe) : "–"}</dd>
             <dt>Ausgabe inkl. Denken</dt><dd>{t.erfasst ? zahl(t.ausgabe) : "–"}</dd>
             <dt>Cache gelesen</dt><dd>{t.erfasst ? zahl(t.cacheLesen) : "–"}</dd>
-            <dt>Cache geschrieben</dt><dd>{t.erfasst ? zahl(t.cacheSchreiben) : "–"}</dd>
+            <dt>Cache geschrieben · gemeldeter Anteil</dt><dd>{t.erfasst ? zahl(t.cacheSchreiben) : "–"}</dd>
             <dt>Live-Minuten gemeldet</dt><dd>{t.liveSitzungen ? zahl(t.liveSekunden / 60) : "–"}</dd>
           </dl>
           {!t.erfasst && <p className="mt-2 text-xs text-muted-foreground">Ohne Messdaten ist kein Nullverbrauch belegt.</p>}
@@ -82,8 +86,22 @@ export default function Verbrauch() {
       </details>
       <details className="card-soft rounded-3xl p-5" open><summary className="cursor-pointer font-medium">Nach Modell und Bereich</summary>
         <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{["Modell / Bereich", "Aufrufe", "Eingabe", "Ausgabe", "Cache lesen", "Cache schreiben", "Gesamt"].map(h => <th key={h} className="p-2 whitespace-nowrap">{h}</th>)}</tr></thead>
-          <tbody>{daten.modelle.map(m => <tr key={`${m.provider}:${m.model}:${m.quelle}`} className="border-t border-white/10"><td className="p-2">{m.model}<div className="text-xs text-muted-foreground">{m.provider} · {quellen[m.quelle] ?? m.quelle}</div></td>{[m.aufrufe,m.eingabe,m.ausgabe,m.cacheLesen,m.cacheSchreiben,m.gesamt].map((v,i) => <td key={i} className="p-2 tabular-nums">{zahl(v)}</td>)}</tr>)}</tbody></table></div>
+          <tbody>{daten.modelle.map(m => <tr key={`${m.provider}:${m.model}:${m.quelle}`} className="border-t border-white/10"><td className="p-2">{m.model}<div className="text-xs text-muted-foreground">{m.provider} · {quellen[m.quelle] ?? m.quelle}</div></td>{[m.aufrufe,m.eingabe,m.ausgabe,m.cacheLesen,m.cacheSchreiben,m.gesamt].map((v,i) => <td key={i} className="p-2 tabular-nums">{i === 4 && m.provider === "openai" ? "Nicht separat gemeldet" : zahl(v)}</td>)}</tr>)}</tbody></table></div>
         {!daten.modelle.length && <p className="mt-2 text-sm text-muted-foreground">Keine Modellmessungen für diesen Zeitraum.</p>}
+      </details>
+      {daten.cacheHinweis && <p className="text-xs text-muted-foreground">{daten.cacheHinweis}</p>}
+      <details className="card-soft rounded-3xl p-5"><summary className="cursor-pointer font-medium">Letzte Aufträge · inklusive Unteragenten</summary>
+        <p className="mt-3 text-xs text-muted-foreground">Ab dieser Version erfasst. „Antwort erstellt“ bestätigt eine Antwort, nicht automatisch die fachliche Erledigung. Kontextgrößen sind Zeichen, keine geschätzten Tokens. Ein fehlender Abschluss kann einen laufenden Auftrag oder einen Serverneustart bedeuten.</p>
+        {(daten.auftraege ?? []).map(a => <details key={a.id} className="mt-3 border-t pt-3">
+          <summary className="cursor-pointer text-sm">{new Date(a.gestartetAt).toLocaleString("de-DE")} · {quellen[a.quelle] ?? a.quelle} · {zahl(a.gesamt)} Tokens · {statusText[a.status] ?? a.status}</summary>
+          <p className="my-2 text-xs break-all">Auftrag {a.id}{a.conversationId ? ` · Chat #${a.conversationId}` : ""} · {a.aufrufe.length} Aufrufe{a.ohneMesswert ? ` · ${a.ohneMesswert} ohne Messwert, Summe unvollständig` : ""}</p>
+          {a.aufrufe.map(c => <div key={c.id} className="mb-2 rounded-xl bg-background/50 p-3 text-xs space-y-1">
+            <p>{c.model} · {quellen[c.quelle] ?? c.quelle} · {c.phase} · {c.status}</p>
+            <p>Eingabe {c.eingabe ?? "unbekannt"} · Ausgabe {c.ausgabe ?? "unbekannt"} · Cache gelesen {c.cacheLesen ?? "unbekannt"} · geschrieben {c.cacheSchreiben ?? "nicht separat gemeldet"}</p>
+            <p>Kontext in Zeichen: Regeln/Wissen {c.kontext.systemZeichen}, Dialog {c.kontext.verlaufZeichen}, Werkzeugergebnisse {c.kontext.ergebnisZeichen}, Werkzeugbeschreibungen {c.kontext.schemaZeichen} ({c.kontext.werkzeuge} Werkzeuge).</p>
+          </div>)}
+        </details>)}
+        {!daten.auftraege?.length && <p className="mt-3 text-sm">Noch keine Aufträge mit Einzelmessung erfasst.</p>}
       </details>
       <div className="card-soft rounded-3xl p-5 space-y-2"><h3 className="font-medium">Sprache und Telefonie</h3>
         <p className="text-xs text-muted-foreground">GPT Live meldet Sekunden statt Tokens. Minuten werden dem UTC-Starttag der Sitzung zugeordnet. Backend-Delegationen stehen zusätzlich in der Modelltabelle. Telnyx-/ElevenLabs-Gebühren sind nicht enthalten; ältere Sitzungen wurden nicht nachträglich erfasst.</p>
