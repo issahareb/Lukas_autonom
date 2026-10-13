@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db, telefonAnrufe, messages, conversations, type TelefonAnruf } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import { aktuellerAnruf } from "./telefon-laufend";
 
 const terminal = new Set(["completed", "busy", "no-answer", "failed", "canceled"]);
 const rank: Record<string, number> = { "": 0, queued: 1, initiated: 1, ringing: 2, "in-progress": 3 };
@@ -28,6 +29,7 @@ export const ANRUF_LABEL: Record<string, string> = {
   verbunden: "Anruf angenommen und mit LUKAS verbunden", beendet: "Anruf beendet",
   besetzt: "Ziel ist besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Anruf fehlgeschlagen",
   abgebrochen: "Anruf abgebrochen", verbindungsfehler: "Verbindung zu LUKAS fehlgeschlagen",
+  unbekannt: "Aktueller Anrufstatus nicht bestätigt",
 };
 
 export async function neuerVerfolgterAnruf(nummer: string, anlass: string, conversationId?: number,
@@ -68,7 +70,7 @@ export async function telefonStatus(): Promise<string> {
   const rows = await db.select().from(telefonAnrufe).orderBy(desc(telefonAnrufe.createdAt)).limit(10);
   return JSON.stringify({ anbieter: process.env.LUKAS_TELEFON_ANBIETER ?? "twilio",
     hinweis: "Anrufstart, Zielannahme und SIP-Verbindung sind getrennte Bestätigungen. Annahme beweist keinen menschlichen Gesprächspartner. Fehlende Meldungen bedeuten unbekannt; ein beendeter Anruf beweist keine Auftragserledigung. Alte Einträge ohne kontextId haben keine vollständige Statusverfolgung.",
-    anrufe: rows.map(r => ({ id: r.kontextId ?? r.id, anruf_id: r.id, nummer: "+" + r.nummer, anlass: r.anlass,
+    anrufe: rows.map(r => aktuellerAnruf(r)).map(r => ({ id: r.kontextId ?? r.id, anruf_id: r.id, nummer: "+" + r.nummer, anlass: r.anlass,
       status: ANRUF_LABEL[r.ergebnis] ?? r.ergebnis, zielStatus: r.zielStatus, sipStatus: r.sipStatus,
       liveBereit: r.liveBereit, dauer: r.dauer, detail: r.detail, aufnahmeStatus: r.aufnahmeStatus, zuletzt: r.updatedAt })) });
 }

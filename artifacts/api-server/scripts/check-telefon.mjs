@@ -29,6 +29,7 @@ export const neuerVerfolgterAnruf = async (nummer, anlass) => {
   const id = randomUUID(); tracked.set(id, { nummer, anlass }); return id;
 };
 export const aktualisiereAnruf = async (id, patch) => {
+  (globalThis.telefonStatusUpdates ??= []).push({ id, patch });
   if (patch.liveBereit) globalThis.telefonProtokoll.push({ ...tracked.get(id), richtung: "ausgehend", ergebnis: "angenommen", stufe: globalThis.telefonEintrag?.stufe ?? "oeffentlich" });
 };
 export const db = {
@@ -66,6 +67,7 @@ export const acceptLiveSipSession = async (options) => {
   // Simulate a later backend delegation; existing assertions inspect its prompt.
   globalThis.telefonAnnahmen.push({ ...options, instructions: await options.instructions() });
   if (globalThis.telefonAnnahmeFehler) throw new Error("temporary accept failure");
+  if (globalThis.telefonEndeBeiAnnahme) await options.onTelefonEnd?.("provider_closed");
 };
 export const rejectLiveSipSession = async () => {};
 `,
@@ -86,7 +88,7 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner"].includes(args.path) ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner", "./telefon-laufend"].includes(args.path) ? { path: attrappe } : undefined,
         );
       },
     },
@@ -248,6 +250,9 @@ try {
   assert.match(inbound.initialCommentary, /Kontakt Fouad/);
   assert.match(inbound.initialCommentary, /frühere Telefonhistorie/);
   assert.equal(inbound.allowTools, false, "caller ID history must not grant tools");
+  await inbound.onTelefonEnd("provider_closed");
+  assert.equal(globalThis.telefonProtokoll.at(-1).kontextId, "live_known_inbound");
+  assert.deepEqual(globalThis.telefonStatusUpdates.at(-1), { id: "live_known_inbound", patch: { detail: "Sprachsitzung beendet.", sipStatus: "completed" } }, "Incoming hangup updates the exact call row");
   // Unknown callers never inherit another contact's history.
   globalThis.telefonEintrag = undefined;
   assert.equal(await nimmAn("live_unknown_inbound", "+4930999999"), "oeffentlich");
@@ -558,6 +563,11 @@ try {
   assert.equal(providerCalls.length, beforeBlocked, "A resolved name does not bypass call permission");
   delete globalThis.telefonSuchtreffer;
   console.log("OK — Namen eindeutig auflösen; Aufnahme nur mit gespeicherter Zustimmung, ohne erneute Ansage.");
+  globalThis.telefonEndeBeiAnnahme = true;
+  await nimmAn("live_early_hangup", "+" + ERWARTET);
+  assert.equal(globalThis.telefonProtokoll.at(-1).kontextId, "live_early_hangup");
+  assert.deepEqual(globalThis.telefonStatusUpdates.at(-1), { id: "live_early_hangup", patch: { detail: "Sprachsitzung beendet.", sipStatus: "completed" } }, "Hangup before inbound logging is persisted after inserting the call");
+  delete globalThis.telefonEndeBeiAnnahme;
 } finally {
   globalThis.fetch = oneOffPreviousFetch;
   for (const [key, value] of oneOffPreviousEnv) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }

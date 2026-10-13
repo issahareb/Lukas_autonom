@@ -30,7 +30,7 @@ const stubSources = {
   "../lukas-brain": 'export async function runLukasTurn(options) { const fixture = globalThis.__liveSessionTest; fixture.calls.push(options); return fixture.backend ? await fixture.backend(options) : fixture.answer; }',
 };
 await build({
-  entryPoints: [resolve(dirname(fileURLToPath(import.meta.url)), "../src/lib/ai/live-session.ts")],
+  stdin: { contents: 'export * from "./src/lib/ai/live-session.ts"; export { aktuellerAnruf } from "./src/lib/telefon-laufend.ts";', resolveDir: resolve(dirname(fileURLToPath(import.meta.url)), ".."), loader: "ts" },
   outfile: output, bundle: true, platform: "node", target: "node22", format: "esm", logLevel: "silent",
   plugins: [{ name: "live-isolation", setup(builder) {
     builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory)$/ },
@@ -345,6 +345,23 @@ try {
   assert.equal(mailbox.readyState, 1);
   input(mailbox, "Bitte hinterlassen Sie nach dem Signal"); input(mailbox, "ton eine Nachricht."); await settle();
   assert.ok(endings.includes("mailbox")); assert.equal(mailbox.readyState, 3);
+
+  const normalHangup = await phone("normal_hangup");
+  const liveRow = { kontextId: "context_normal_hangup", ergebnis: "verbunden", createdAt: new Date(0) };
+  assert.equal(api.aktuellerAnruf(liveRow).ergebnis, "verbunden", "An actual live session confirms an ongoing call");
+  const endingsBeforeHangup = endings.length;
+  normalHangup.emit({ type: "session.closed", reason: "remote_hangup" });
+  normalHangup.emit({ type: "session.closed", reason: "remote_hangup" });
+  await settle();
+  assert.equal(endings.length, endingsBeforeHangup + 1, "Ordinary remote hangup persists the call ending exactly once");
+  assert.equal(endings.at(-1), "provider_closed");
+  assert.equal(api.aktuellerAnruf(liveRow).ergebnis, "unbekannt", "Hangup clears the live registry even before the database write completes");
+  const timersBeforePhone = new Set(timers.keys());
+  const timedPhone = await phone("timed_phone");
+  const [lifeToken, lifeTimer] = [...timers].find(([token, timer]) => !timersBeforePhone.has(token) && timer.milliseconds === 1_800_000);
+  timers.delete(lifeToken); lifeTimer.callback(); await settle();
+  assert.equal(endings.at(-1), "duration_limit", "Duration limit also persists the call ending");
+  assert.equal(timedPhone.readyState, 3);
 
   // Only a server-selected, configured owner contact can use tools over SIP.
   process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "7";

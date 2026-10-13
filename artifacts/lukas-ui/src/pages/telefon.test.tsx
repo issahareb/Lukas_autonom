@@ -16,6 +16,18 @@ function setup(nummern: unknown[] = [], anrufe: unknown[] = []) {
   return calls;
 }
 describe("Telefonkontakte", () => {
+  it("zählt nicht bestätigte alte Anrufe nicht als laufende Gespräche", async () => {
+    setup([kontakt], [
+      { id: 1, nummer: kontakt.nummer, richtung: "ausgehend", ergebnis: "unbekannt", createdAt: "2026-10-04T10:05:00Z" },
+      { id: 2, nummer: kontakt.nummer, richtung: "eingehend", ergebnis: "unbekannt", createdAt: "2026-10-04T11:05:00Z" },
+    ]);
+    render(<Telefon />);
+    await screen.findByText("Dein direkter Draht");
+    expect(screen.queryByText(/Gespräche laufen|Gespräch läuft|Anrufe laufen/)).toBeNull();
+    await userEvent.click(screen.getByRole("tab", { name: /Anrufe/ }));
+    expect(screen.queryByRole("region", { name: "Laufende Anrufe" })).toBeNull();
+    expect(screen.getAllByText("Aktueller Status nicht bestätigt")).toHaveLength(2);
+  });
   it("speichert Namen und ausdrückliche Aufnahmezustimmung getrennt von der Anruffreigabe", async () => {
     const calls = setup();
     render(<Telefon />);

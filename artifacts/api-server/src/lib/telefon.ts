@@ -27,6 +27,7 @@ import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 import { neuerVerfolgterAnruf, aktualisiereAnruf } from "./telefon-status";
 import { findeTelefonKontakte, telefonKontakte } from "./telefon-kontakte";
 import { telefonOwnerContactId } from "./telefon-owner";
+import { aktuellerAnruf } from "./telefon-laufend";
 
 export type Stufe = "privat" | "oeffentlich" | "gesperrt";
 
@@ -137,6 +138,7 @@ export async function protokolliere(eintrag: {
   stufe?: string;
   anlass?: string;
   detail?: string;
+  kontextId?: string;
 }): Promise<void> {
   await db
     .insert(telefonAnrufe)
@@ -147,6 +149,7 @@ export async function protokolliere(eintrag: {
       stufe: eintrag.stufe ?? "oeffentlich",
       anlass: eintrag.anlass ?? "",
       detail: (eintrag.detail ?? "").slice(0, 500),
+      ...(eintrag.kontextId ? { kontextId: eintrag.kontextId, zielStatus: "in-progress", sipStatus: "in-progress", liveBereit: true } : {}),
     })
     .catch((err) => logger.warn({ err }, "Anruf konnte nicht protokolliert werden"));
 }
@@ -280,13 +283,20 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
   }
 
   const ownerContactId = telefonOwnerContactId({ id, stufe, nummer: vonNummer, kontext });
+  const statusId = kontext?.id ?? callId;
+  let protokollBereit = kontext?.richtung === "ausgehend";
+  let endGrund: string | undefined;
+  const speichereEnde = async (reason: string) => {
+    endGrund = reason;
+    if (!protokollBereit) return;
+    await aktualisiereAnruf(statusId, { detail: reason === "mailbox" ? "Mailbox erkannt; Anruf beendet."
+      : reason === "verabschiedet" ? "Nach Verabschiedung ohne weitere Antwort beendet." : "Sprachsitzung beendet.", sipStatus: "completed" });
+  };
   await acceptLiveSipSession({
     sessionId: callId,
     telefonKontextId: kontext?.id,
     telefonPeer: { nummer: normalisiere(vonNummer), richtung: ausgehend ? "ausgehend" : "eingehend" },
-    onTelefonEnd: kontext?.id ? async reason => {
-      await aktualisiereAnruf(kontext.id, { detail: reason === "mailbox" ? "Mailbox erkannt; Anruf beendet." : "Nach Verabschiedung ohne weitere Antwort beendet.", sipStatus: "completed" });
-    } : undefined,
+    onTelefonEnd: speichereEnde,
     // Build the private backend prompt only when the first task needs it.
     instructions: async () => (await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined)) + "\n\n" + await inboundHistory,
     visibility: stufe === "privat" ? "private" : "public",
@@ -317,7 +327,10 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     ergebnis: "angenommen",
     stufe,
     anlass: anlass ?? "",
+    kontextId: statusId,
   });
+  protokollBereit = true;
+  if (endGrund) await speichereEnde(endGrund);
   return stufe;
 }
 
@@ -462,7 +475,8 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
 
 /** Die letzten Anrufe fuer das Dashboard. */
 export async function letzteAnrufe(grenze = 30) {
-  return db.select().from(telefonAnrufe).orderBy(desc(telefonAnrufe.createdAt)).limit(grenze);
+  const rows = await db.select().from(telefonAnrufe).orderBy(desc(telefonAnrufe.createdAt)).limit(grenze);
+  return rows.map(anruf => aktuellerAnruf(anruf));
 }
 
 /*

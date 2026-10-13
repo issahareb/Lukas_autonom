@@ -8,6 +8,7 @@ import { verbrauchSchreiben } from "../verbrauch-quelle";
 import { sprachModell, sprachStimme } from "./sprach-sitzung";
 
 import { TelefonGespraech } from "./telefon-gespraech";
+import { merkeTelefonSitzung, entferneTelefonSitzung } from "../telefon-laufend";
 import { LiveOutputAudio } from "./live-output-audio";
 import { TELEFON_SPRACHREGELN, telefonStartInput } from "./telefon-sprachprofil";
 
@@ -24,7 +25,7 @@ export type LiveSessionOptions = {
   telefonPeer?: PhonePeer;
   /** Server-only grant from nimmAn after the signed incoming context/contact check. */
   telefonOwnerContactId?: number;
-  onTelefonEnd?: (reason: "mailbox" | "verabschiedet") => Promise<void>;
+  onTelefonEnd?: (reason: string) => Promise<void>;
 };
 export type LiveWebRtcSession = {
   sdp: string; sessionId: string; closeToken: string; model: string; voice: string;
@@ -267,9 +268,10 @@ function startManaged(
       firstInputTranscriptMs: null, firstOutputTranscriptMs: null };
   }
   if (transport === "sip") state.phone = new TelefonGespraech(reason => {
-    void terminateSession(state, reason).then(() => options.onTelefonEnd?.(reason)).catch(() => {});
+    void terminateSession(state, reason).catch(() => {});
   });
   sessions.set(id, state);
+  if (transport === "sip") merkeTelefonSitzung(id, options.telefonKontextId ?? id);
   persistUsage(state);
   state.lifetime = setTimeout(() => {
     void terminateSession(state, "duration_limit").catch(() => {});
@@ -563,6 +565,15 @@ function scheduleReconnect(state: ManagedSession) {
 function finishSession(state: ManagedSession, reason: string) {
   if (state.ended) return;
   state.ended = true; state.controller.abort();
+  if (state.transport === "sip") {
+    entferneTelefonSitzung(state.id);
+    if (state.options.onTelefonEnd) {
+      const write = Promise.resolve().then(() => state.options.onTelefonEnd!(reason));
+      phoneMemoryWrites.add(write);
+      void write.catch(() => logger.error({ phase: "status_write_failed" }, "Telefon-Endstatus nicht gespeichert"))
+        .finally(() => phoneMemoryWrites.delete(write));
+    }
+  }
   persistUsage(state, reason !== "provider_expiry_after_unconfirmed_close");
   state.phone?.close();
   clearTimeout(state.lifetime);

@@ -9,11 +9,34 @@ let pool, restartPool, client, schema;
 const oldUrl = process.env.DATABASE_URL;
 try {
   const stub = join(dir, "stub.mjs");
-  writeFileSync(stub, "export const db={}, telefonAnrufe={}, messages={}, conversations={};");
+  writeFileSync(stub, "export const db={select:()=>({from:()=>({orderBy:()=>({limit:async n=>(globalThis.telefonStatusRows??[]).slice(0,n)})})})}, telefonAnrufe={}, messages={}, conversations={};");
   const out = join(dir, "pure.mjs");
-  await build({ entryPoints: ["src/lib/telefon-status.ts"], outfile: out, bundle: true,
+  await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/telefon-laufend.ts";', resolveDir: process.cwd(), loader: "ts" }, outfile: out, bundle: true,
     platform: "node", format: "esm", packages: "external", alias: { "@workspace/db": stub } });
-  const { naechsterStatus: next, anrufErgebnis: result } = await import(out);
+  const { naechsterStatus: next, anrufErgebnis: result, aktuellerAnruf, merkeTelefonSitzung, entferneTelefonSitzung } = await import(out);
+  const jetzt = Date.now();
+  const oldCall = { kontextId: "old", ergebnis: "verbunden", createdAt: new Date(jetzt - 86_400_000) };
+  assert.equal(aktuellerAnruf(oldCall, jetzt).ergebnis, "unbekannt", "Persisted connection after restart is not evidence of an ongoing call");
+  assert.equal(oldCall.ergebnis, "verbunden", "Read projection preserves historical evidence");
+  for (const ergebnis of ["gewaehlt", "klingelt", "angenommen", "verbunden"]) {
+    assert.equal(aktuellerAnruf({ ...oldCall, ergebnis }, jetzt).ergebnis, "unbekannt");
+  }
+  assert.equal(aktuellerAnruf({ ...oldCall, kontextId: null, ergebnis: "angenommen" }, jetzt).ergebnis, "unbekannt", "Legacy incoming calls are not counted forever");
+  assert.equal(aktuellerAnruf({ ...oldCall, ergebnis: "gewaehlt", createdAt: new Date(jetzt - 1000) }, jetzt).ergebnis, "gewaehlt");
+  merkeTelefonSitzung("session-a", "old");
+  merkeTelefonSitzung("session-b", "other");
+  assert.equal(aktuellerAnruf(oldCall, jetzt).ergebnis, "verbunden");
+  assert.equal(aktuellerAnruf({ ...oldCall, kontextId: "other" }, jetzt).ergebnis, "verbunden");
+  assert.equal(aktuellerAnruf({ ...oldCall, ergebnis: "beendet" }, jetzt).ergebnis, "beendet", "Runtime session must not revive a terminal callback");
+  entferneTelefonSitzung("session-a");
+  assert.equal(aktuellerAnruf(oldCall, jetzt).ergebnis, "unbekannt");
+  assert.equal(aktuellerAnruf({ ...oldCall, kontextId: "other" }, jetzt).ergebnis, "verbunden", "Ending one call does not affect another call");
+  entferneTelefonSitzung("session-b");
+  globalThis.telefonStatusRows = [oldCall, { ...oldCall, kontextId: "new", ergebnis: "gewaehlt", createdAt: new Date() }];
+  const report = JSON.parse(await (await import(out)).telefonStatus());
+  assert.equal(report.anrufe[0].status, "Aktueller Anrufstatus nicht bestätigt");
+  assert.equal(report.anrufe[1].status, "Anruf gestartet; Annahme noch nicht bestätigt", "Status read checks current time for every row");
+  delete globalThis.telefonStatusRows;
   for (const end of ["completed", "busy", "no-answer", "failed", "canceled"]) {
     for (const late of ["queued", "initiated", "ringing", "in-progress", "completed", "failed"]) assert.equal(next(end, late), end);
   }

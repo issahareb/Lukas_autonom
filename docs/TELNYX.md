@@ -59,6 +59,10 @@ Der Telnyx-Hinweis „This is an automated call generated on the Telnyx platform
 
 Quellen: [Telnyx SIP-URI-Verschlüsselung](https://github.com/team-telnyx/telnyx-node/blob/b697a5ac3b86173a2ca2c837dd51ab7ce7c4db25/src/resources/calls/calls.ts), [Paid-Beschränkungen](https://developers.telnyx.com/docs/account-setup/levels-and-capabilities/paid).
 
+## Aktueller Anrufstatus
+
+Die Telefonübersicht zählt angenommene und verbundene Anrufe nur bei einer aktuell verwalteten SIP-Sitzung als laufend. Normales Auflegen, Zeitlimit und bestätigte serverseitige Beendigung speichern den Endstatus für eingehende und ausgehende Gespräche. Alte Einträge ohne aktuelle Sitzung erscheinen als „Aktueller Status nicht bestätigt“; das behauptet keine nachgewiesene Beendigung. Wähl- und Klingelversuche bleiben vor der SIP-Annahme höchstens zwei Minuten aktuell. Die ursprünglichen Datenbankmeldungen bleiben erhalten, sodass spätere Anbieter-Callbacks weiterhin verarbeitet werden können. Dieser Abgleich nutzt wie die Live-Sitzungsverwaltung eine API-Instanz.
+
 ## Neue Nummer direkt im privaten Chat anrufen
 
 Eine neue, noch nicht gespeicherte Nummer lässt sich mit einem ausdrücklichen

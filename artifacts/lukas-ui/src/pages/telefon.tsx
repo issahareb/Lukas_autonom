@@ -664,7 +664,7 @@ export default function Telefon() {
       </span>
       <div className="min-w-0 flex-1">
         <h3 className="truncate font-medium">{nameFuer(a)}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit Lukas verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{({ gewaehlt: "Gestartet", klingelt: "Klingelt", angenommen: "Angenommen", verbunden: "Mit Lukas verbunden", beendet: "Beendet", besetzt: "Besetzt", keine_antwort: "Keine Antwort", fehlgeschlagen: "Fehlgeschlagen", abgebrochen: "Abgebrochen", verbindungsfehler: "Verbindung fehlgeschlagen", unbekannt: "Aktueller Status nicht bestätigt" } as Record<string, string>)[a.ergebnis] ?? a.ergebnis}{a.dauer != null ? ` · ${a.dauer}s` : ""}</p>
       </div>
       <time className="shrink-0 text-right text-[11px] text-muted-foreground" dateTime={a.createdAt}>{new Date(a.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}<br />{new Date(a.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</time>
     </div>
