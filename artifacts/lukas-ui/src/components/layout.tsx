@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { Fehlergrenze } from "@/components/fehlergrenze";
+import { LukasAvatar } from "@/components/lukas-avatar";
 import { LogOut, X, Grid2X2, ArrowUpRight, Search, ChevronRight } from "lucide-react";
 import { navigation, navigationGroups, mobileNavigation } from "@/lib/navigation";
 import "./app-shell.css";
@@ -71,7 +72,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div ref={shell} className="app-shell" data-tone={current?.tone ?? "mint"} data-page={location}>
       <aside className="app-sidebar" aria-label="Desktop-Navigation">
         <Link href="/" className="app-brand">
-          <span className="app-monogram">L</span>
+          <LukasAvatar className="app-brand-image" />
           <span>
             LUKAS<small>Dein persönlicher Arbeitsraum</small>
           </span>
@@ -99,7 +100,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
       <header className="app-mobile-header">
         <Link href="/" className="app-mobile-brand">
-          <span className="app-monogram">L</span>
+          <LukasAvatar className="app-brand-image" />
           {location === "/" ? "Lukas" : title}
         </Link>
         {status}

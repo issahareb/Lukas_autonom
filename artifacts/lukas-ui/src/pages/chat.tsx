@@ -18,6 +18,7 @@ import { takeCompleteLines, parseSseData } from "@/lib/sse";
 import { warteSchritt, GEDULD_MS } from "@/lib/geduld";
 import { ToolSteps, type ToolStep } from "@/components/tool-steps";
 import { ChatContent } from "@/components/chat-content";
+import { LukasAvatar } from "@/components/lukas-avatar";
 import { VoicePanel } from "@/components/voice-panel";
 import "./chat.css";
 
@@ -106,7 +107,7 @@ function Bubble({
         own ? "chat-message--own items-end" : "chat-message--assistant items-start"
       }`}
     >
-      {!own && <div className="chat-author"><span aria-hidden="true">L</span><strong>Lukas</strong></div>}
+      {!own && <div className="chat-author"><LukasAvatar /><strong>Lukas</strong></div>}
       <div
         className={`chat-bubble min-w-0 ${
           own
@@ -559,7 +560,7 @@ export default function Chat() {
   return (
     <div className="chat-page" data-chat-view={activeId ? "thread" : "list"}>
       <div className="chat-voice-bar">
-        <div className="chat-voice-brand"><span aria-hidden="true">L</span><div>Lukas<small>Dein Gesprächsraum</small></div></div>
+        <div className="chat-voice-brand"><LukasAvatar /><div>Lukas<small>Dein Gesprächsraum</small></div></div>
         <VoicePanel autoStart={autoVoice} />
       </div>
       <div className="chat-workspace">
@@ -608,7 +609,7 @@ export default function Chat() {
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   )}
-                  <span className="chat-thread-avatar" aria-hidden="true">L</span>
+                  <LukasAvatar className="chat-thread-avatar" />
                   <div className="chat-thread-title"><span>{activeConv?.title ?? "Gespräch wird geladen …"}</span><small>{streaming ? "Lukas arbeitet an deiner Antwort" : wartetAufNachzuegler ? "Antwort wird nachgeladen" : "Mit Lukas weiterdenken"}</small></div>
                 </div>
 

@@ -8,7 +8,6 @@
   "background_color": "#10171c",
   "theme_color": "#10171c",
   "icons": [
-    { "src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/app-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/lukas-icon-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
