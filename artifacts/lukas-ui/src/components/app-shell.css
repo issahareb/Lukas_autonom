@@ -47,17 +47,13 @@
   color: #a0a9bc;
   margin-top: 4px;
 }
-.app-monogram {
+.app-brand-image {
   display: grid;
   place-items: center;
   flex-shrink: 0;
   width: 39px;
   height: 39px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #e0d5ff, #a7b4ea);
-  color: #292342;
-  font-size: 21px;
-  font-weight: 600;
   box-shadow: 0 4px 18px #a29bd21c;
 }
 .app-nav-heading {
@@ -289,11 +285,10 @@
     letter-spacing: -0.025em;
     color: #f0f1f7;
   }
-  .app-mobile-brand .app-monogram {
-    height: 28px;
-    width: 28px;
-    font-size: 17px;
-    border-radius: 9px;
+  .app-mobile-brand .app-brand-image {
+    height: 36px;
+    width: 36px;
+    border-radius: 11px;
   }
   .app-tabbar {
     display: grid;
