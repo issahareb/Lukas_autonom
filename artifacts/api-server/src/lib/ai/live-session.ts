@@ -1,5 +1,5 @@
 import type { PhoneEnquiry } from "./telefon-anfrage";
-import { HAREB_DIGITAL_TELEFON } from "../hareb-digital";
+import { HAREB_DIGITAL_TELEFON, telefonRueckrufKontext } from "../hareb-digital";
 import type { PhoneMemory, PhonePeer } from "./telefon-memory";
 /** GPT Live: server-owned delegation over the authenticated sideband. */
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
@@ -43,7 +43,7 @@ type ManagedSession = {
   connection: ReturnType<typeof connectionConfig>;
   model: string; voice: string; transport: "webrtc" | "sip";
   controller: AbortController; conversationId: number; socket?: Socket;
-  socketGeneration: number; lifetime: ReturnType<typeof setTimeout>;
+  socketGeneration: number; lifetime?: ReturnType<typeof setTimeout>;
   reconnectTimer?: ReturnType<typeof setTimeout>; reconnectAttempts: number;
   reconnects: number; requestedCloseReason?: string; providerCloseReason?: string;
   phone?: TelefonGespraech;
@@ -262,7 +262,7 @@ function startManaged(
     },
     connection, ...config, transport, controller: new AbortController(),
     conversationId: -randomInt(1, 2_147_483_648), socketGeneration: 0,
-    lifetime: undefined as unknown as ReturnType<typeof setTimeout>, reconnectAttempts: 0, reconnects: 0,
+    lifetime: undefined, reconnectAttempts: 0, reconnects: 0,
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
@@ -278,10 +278,14 @@ function startManaged(
   sessions.set(id, state);
   if (transport === "sip") merkeTelefonSitzung(id, options.telefonKontextId ?? id);
   persistUsage(state);
-  state.lifetime = setTimeout(() => {
-    void terminateSession(state, "duration_limit").catch(() => {});
-  }, (options.visibility === "public" ? 180 : 1800) * 1000);
-  state.lifetime.unref(); return state;
+  // Browser demo budgets must never terminate an ongoing telephone conversation.
+  if (transport === "webrtc") {
+    state.lifetime = setTimeout(() => {
+      void terminateSession(state, "duration_limit").catch(() => {});
+    }, (options.visibility === "public" ? 180 : 1800) * 1000);
+    state.lifetime.unref();
+  }
+  return state;
 }
 function send(state: ManagedSession, event: Json): boolean {
   if (state.ended || state.socket?.readyState !== WebSocket.OPEN || state.socket.bufferedAmount > 256_000) return false;
@@ -751,7 +755,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       await apiRequest(connection, "/live/sessions/" + encodeURIComponent(options.sessionId) + "/accept", {
         // Startup context is available before the first generated phoneme.
         // Runtime thinking appends arrive gradually and must not carry the initial brief.
-        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])], options.telefonBusiness ? "\n\n" + HAREB_DIGITAL_TELEFON + (!phoneEnquiry ? "\nACHTUNG: Der Anfragenspeicher ist gerade nicht erreichbar. Berate trotzdem zu den Leistungen, aber sage nicht, dass die Anfrage gespeichert oder weitergeleitet wird. Bitte den Anrufer, sie an kontakt@hareb.digital zu senden." : "") : ""),
+        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])], options.telefonBusiness ? "\n\n" + HAREB_DIGITAL_TELEFON + "\n" + telefonRueckrufKontext(options.telefonPeer?.nummer ?? "") + (!phoneEnquiry ? "\nACHTUNG: Der Anfragenspeicher ist gerade nicht erreichbar. Berate trotzdem zu den Leistungen, aber sage nicht, dass die Anfrage gespeichert oder weitergeleitet wird. Bitte den Anrufer, sie an kontakt@hareb.digital zu senden." : "") : ""),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
       state = startManaged(options.sessionId, options, connection, config, "sip");

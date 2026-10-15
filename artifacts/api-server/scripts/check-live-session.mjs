@@ -357,12 +357,20 @@ try {
   assert.equal(endings.length, endingsBeforeHangup + 1, "Ordinary remote hangup persists the call ending exactly once");
   assert.equal(endings.at(-1), "provider_closed");
   assert.equal(api.aktuellerAnruf(liveRow).ergebnis, "unbekannt", "Hangup clears the live registry even before the database write completes");
-  const timersBeforePhone = new Set(timers.keys());
-  const timedPhone = await phone("timed_phone");
-  const [lifeToken, lifeTimer] = [...timers].find(([token, timer]) => !timersBeforePhone.has(token) && timer.milliseconds === 1_800_000);
-  timers.delete(lifeToken); lifeTimer.callback(); await settle();
-  assert.equal(endings.at(-1), "duration_limit", "Duration limit also persists the call ending");
-  assert.equal(timedPhone.readyState, 3);
+  for (const visibility of ["public", "private"]) {
+    const timersBeforePhone = new Set(timers.keys());
+    const id = "unlimited_phone_" + visibility;
+    await api.acceptLiveSipSession({ sessionId: id, instructions: "phone", visibility,
+      onTelefonEnd: async reason => endings.push(reason) });
+    const ongoing = socketFor(id);
+    assert.ok(![...timers].some(([token, timer]) => !timersBeforePhone.has(token) &&
+      [180_000, 1_800_000].includes(timer.milliseconds)), "SIP has no demo duration timer");
+    await settle();
+    assert.equal(ongoing.readyState, 1, "Serious phone calls stay connected beyond browser budgets");
+    input(ongoing, "Ich bin Issa, das ist ein Testanruf."); await settle();
+    assert.equal(ongoing.readyState, 1, "A test or identity claim does not hang up");
+    ongoing.emit({ type: "session.closed", reason: "remote_hangup" }); await settle();
+  }
 
   // Only a server-selected, configured owner contact can use tools over SIP.
   process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "7";
@@ -416,6 +424,17 @@ try {
   assert.equal(fixture.enquiry.parts.length, 1);
   businessSocket.emit({ type: "session.closed", reason: "remote_hangup" });
   assert.equal(fixture.enquiry.closed, 1);
+  for (const number of ["", "anonymous", "000000", "123"]) {
+    const id = "anonymous_business_" + (number || "empty");
+    await api.acceptLiveSipSession({ sessionId: id, telefonBusiness: true,
+      telefonPeer: { nummer: number, richtung: "eingehend" }, visibility: "public", allowTools: false, instructions: "business" });
+    const accepted = fixture.requests.find(r => r.url.endsWith("/" + id + "/accept"));
+    assert.match(accepted.body.session.instructions, /KEINE nutzbare Rufnummer/);
+    assert.match(accepted.body.session.instructions, /Rückrufnummer oder E-Mail-Adresse/);
+    assert.match(accepted.body.session.instructions, /Testanruf.*KEIN/s);
+    socketFor(id).emit({ type: "session.closed", reason: "remote_hangup" }); await settle();
+  }
+
   fixture.memoryClosed.length = 0; fixture.memoryParts.length = 0;
   const beforeSip = fixture.calls.length;
   await Promise.all([api.acceptLiveSipSession(sipOptions), api.acceptLiveSipSession(sipOptions)]);
