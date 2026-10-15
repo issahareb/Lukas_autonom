@@ -5,10 +5,12 @@ type Metrics = {
   rangeDays: number;
   summary: { sessions: number; pageviews: number; avgScrollDepth: number; avgActiveSecondsPerSession: number };
   clicks: { target: string; clicks: number; sessions: number }[];
+  forms?: { kind: string; starts: number; attempts: number; successes: number; errors: number; startedSessions: number; successSessions: number }[];
   funnel: { formStartSessions: number; formSubmitSessions: number; bookings: number };
 };
 const actions: Record<string, string> = { phone: "Anruf", email: "E-Mail", whatsapp: "WhatsApp", google_maps: "Google Maps" };
-const positions: Record<string, string> = { hero: "Hero", header: "Header", menu: "Menü", footer: "Footer", content: "Seiteninhalt" };
+const positions: Record<string, string> = { hero: "Hero", header: "Header", menu: "Menü", footer: "Footer", content: "Seiteninhalt", contact: "Kontaktformular" };
+const formLabels: Record<string, string> = { text: "Hero-Textanfrage", ride: "Fahrtanfrage", contact: "Unteres Kontaktformular", legacy: "Ältere Messung ohne Zuordnung" };
 const buttons: Record<string, string> = { menu_open: "Menü öffnen", menu_close: "Menü schließen", booking_cta: "Fahrt buchen", services_nav: "Leistungen", faq_menu: "FAQ im Menü" };
 export function clickLabel(target: string): string {
   if (buttons[target]) return buttons[target];
@@ -51,6 +53,9 @@ export default function TaxiWebsiteStats() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 my-5">
         {[["Besuche", data.summary.sessions], ["Seitenaufrufe", data.summary.pageviews], ["Formular begonnen", data.funnel.formStartSessions], ["Formular gesendet", data.funnel.formSubmitSessions]].map(([label, value]) => <div key={label}><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-semibold tabular-nums">{Number(value).toLocaleString("de-DE")}</p></div>)}
       </div>
+      <h3 className="font-medium mt-6 mb-2">Formularanfragen</h3>
+      {data.forms?.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-muted-foreground text-xs"><th className="text-left py-2 pr-3 font-medium">Formular</th><th className="text-right px-2 font-medium">Begonnen</th><th className="text-right px-2 font-medium">Versuche</th><th className="text-right px-2 font-medium">Erfolgreich</th><th className="text-right font-medium">Fehler</th></tr></thead><tbody>{data.forms.map(row => <tr key={row.kind} className="border-t border-border/50"><td className="py-3 pr-3 min-w-36">{formLabels[row.kind] ?? row.kind}</td>{[row.starts, row.kind === "legacy" ? null : row.attempts, row.successes, row.kind === "legacy" ? null : row.errors].map((value, index) => <td key={index} className="text-right px-2 tabular-nums">{value === null ? "–" : value.toLocaleString("de-DE")}</td>)}</tr>)}</tbody></table></div> : <p className="text-sm text-muted-foreground">Noch keine Formularereignisse im gewählten Zeitraum.</p>}
+      <p className="text-xs text-muted-foreground mt-2 mb-6 leading-relaxed">Versuche und Ergebnisse zählen einzeln. „Erfolgreich“ bedeutet, dass der Server die Anfrage bestätigt hat; es ist keine Zusage für die Fahrt. Fehler zählen fehlgeschlagene Übermittlungen. Ältere Messungen enthalten keine Versuche oder Fehler.</p>
       {data.clicks.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="text-left font-medium mb-2">Welche Buttons werden geklickt?</caption><thead><tr className="text-muted-foreground text-xs"><th className="text-left py-2 font-medium">Button / Position</th><th className="text-right px-2 font-medium">Klicks</th><th className="text-right font-medium">Besuche</th></tr></thead><tbody>{data.clicks.map(row => <tr key={row.target} className="border-t border-border/50"><td className="py-3 pr-2">{clickLabel(row.target)}</td><td className="text-right px-2 tabular-nums">{row.clicks.toLocaleString("de-DE")}</td><td className="text-right tabular-nums">{row.sessions.toLocaleString("de-DE")}</td></tr>)}</tbody></table></div> : <p className="text-sm text-muted-foreground">Im gewählten Zeitraum wurden noch keine Buttonklicks erfasst.</p>}
       <p className="text-xs text-muted-foreground mt-4">Abruf: {new Date(data.fetchedAt).toLocaleString("de-DE")} · Zeitraum: letzte {data.rangeDays} Tage</p>
     </>}

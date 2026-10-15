@@ -10,6 +10,14 @@ describe('TaxiBB website metrics',()=>{
   fireEvent.change(screen.getByLabelText('TaxiBB Messzeitraum'),{target:{value:'7'}});
   await waitFor(()=>expect(fetch.mock.calls.at(-1)?.[0]).toContain('days=7'));
  });
+ it('separates text, ride and contact outcomes without inventing historical error counts',async()=>{
+  const forms=['text','ride','contact','legacy'].map(kind=>({kind,starts:2,attempts:3,successes:1,errors:2,startedSessions:2,successSessions:1}));
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({...metrics,forms}))));
+  render(<TaxiWebsiteStats/>);
+  expect(await screen.findByText('Hero-Textanfrage')).toBeInTheDocument();
+  expect(screen.getByText('Fahrtanfrage')).toBeInTheDocument();expect(screen.getByText('Unteres Kontaktformular')).toBeInTheDocument();
+  const legacy=screen.getByText('Ältere Messung ohne Zuordnung').closest('tr');expect(legacy?.textContent).toContain('2–1–');
+ });
  it('does not turn a connection error into zero visitors',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('{}',{status:503})));
   render(<TaxiWebsiteStats/>);expect(await screen.findByRole('alert')).toHaveTextContent('konnten nicht geladen');expect(screen.queryByText('0')).not.toBeInTheDocument();

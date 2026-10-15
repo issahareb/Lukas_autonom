@@ -7,6 +7,7 @@ export const taxiAnalyticsSchema = z.object({
   rangeDays: z.number().int().min(1).max(180),
   summary: z.object({ pageviews: number, sessions: number, avgScrollDepth: number, avgActiveSecondsPerSession: number }),
   clicks: z.array(z.object({ target: z.string().max(60), clicks: number, sessions: number })).max(100),
+  forms: z.array(z.object({ kind: z.string().max(60), starts: number, attempts: number, successes: number, errors: number, startedSessions: number, successSessions: number })).max(100).default([]),
   funnel: z.object({ formStartSessions: number, formSubmitSessions: number, bookings: number }),
 });
 const router: IRouter = Router();
