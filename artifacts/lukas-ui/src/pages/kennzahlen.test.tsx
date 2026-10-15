@@ -137,7 +137,7 @@ describe("Kennzahlen", () => {
   it("verschweigt einen Ladefehler nicht", async () => {
     vi.stubGlobal("fetch", () => Promise.resolve(new Response("nope", { status: 500 })));
     render(<Kennzahlen />);
-    expect(await screen.findByText(/konnten nicht geladen werden/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Die Kennzahlen konnten nicht geladen werden/)).toBeInTheDocument();
   });
 
   it("nimmt den Token mit", async () => {

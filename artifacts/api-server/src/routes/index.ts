@@ -14,9 +14,12 @@ import mcpRouter from "./mcp";
 import telefonRouter from "./telefon";
 import telefonAnfragenRouter from "./telefon-anfragen";
 
+import taxiAnalyticsRouter from "./taxibb-analytics";
+
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(taxiAnalyticsRouter);
 router.use(lukasRouter);
 router.use(higgsfieldRouter);
 router.use(anthropicRouter);

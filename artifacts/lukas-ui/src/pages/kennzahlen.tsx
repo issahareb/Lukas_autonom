@@ -1,3 +1,4 @@
+import TaxiWebsiteStats from "@/components/taxi-website-stats";
 import Verbrauch from "@/components/verbrauch";
 import { useCallback, useEffect, useState } from "react";
 import { Seite, Fehler } from "@/components/seite";
@@ -190,6 +191,7 @@ export default function KennzahlenSeite() {
       unterzeile="Vierzehn Tage, verglichen gegen den Median der Vortage."
     >
       <div className="space-y-6">
+      <TaxiWebsiteStats />
       <Verbrauch />
       {laedt && <Skeleton className="h-24 w-full" />}
 

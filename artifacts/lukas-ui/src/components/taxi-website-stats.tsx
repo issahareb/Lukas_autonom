@@ -1,0 +1,59 @@
+import { useEffect, useState } from "react";
+
+type Metrics = {
+  fetchedAt: string;
+  rangeDays: number;
+  summary: { sessions: number; pageviews: number; avgScrollDepth: number; avgActiveSecondsPerSession: number };
+  clicks: { target: string; clicks: number; sessions: number }[];
+  funnel: { formStartSessions: number; formSubmitSessions: number; bookings: number };
+};
+const actions: Record<string, string> = { phone: "Anruf", email: "E-Mail", whatsapp: "WhatsApp", google_maps: "Google Maps" };
+const positions: Record<string, string> = { hero: "Hero", header: "Header", menu: "Menü", footer: "Footer", content: "Seiteninhalt" };
+const buttons: Record<string, string> = { menu_open: "Menü öffnen", menu_close: "Menü schließen", booking_cta: "Fahrt buchen", services_nav: "Leistungen", faq_menu: "FAQ im Menü" };
+export function clickLabel(target: string): string {
+  if (buttons[target]) return buttons[target];
+  if (actions[target]) return `${actions[target]} · ältere Messung ohne Position`;
+  for (const key of Object.keys(actions)) {
+    if (target.startsWith(key + "_")) return `${actions[key]} · ${positions[target.slice(key.length + 1)] ?? "Seiteninhalt"}`;
+  }
+  return target;
+}
+export default function TaxiWebsiteStats() {
+  const [days, setDays] = useState(30);
+  const [refresh, setRefresh] = useState(0);
+  const [data, setData] = useState<Metrics | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setData(null); setError("");
+    const token = localStorage.getItem("lukas_token");
+    fetch(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/lukas/taxibb/analytics?days=${days}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) throw Error("unavailable");
+      const value = await response.json();
+      if (!value.summary || !value.funnel || !Array.isArray(value.clicks) || !value.fetchedAt) throw Error("invalid data");
+      if (!controller.signal.aborted) setData(value);
+    }).catch(() => { if (!controller.signal.aborted) setError("TaxiBB-Messwerte konnten nicht geladen werden. Bitte erneut versuchen."); });
+    return () => controller.abort();
+  }, [days, refresh]);
+  return <section className="card-soft rounded-3xl p-5" aria-labelledby="taxi-stats-heading">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h2 id="taxi-stats-heading" className="font-semibold">TaxiBB Website</h2><p className="text-xs text-muted-foreground mt-1">Besuche und Buttonklicks auf taxibbessen.de</p></div>
+      <div className="flex items-center gap-2">
+        <select aria-label="TaxiBB Messzeitraum" value={days} onChange={e => setDays(Number(e.target.value))} className="rounded-xl border bg-background px-3 py-2 text-sm">
+          {[7, 30, 90, 180].map(day => <option key={day} value={day}>{day} Tage</option>)}
+        </select>
+        <button onClick={() => setRefresh(v => v + 1)} className="rounded-xl border px-3 py-2 text-sm">Aktualisieren</button>
+      </div>
+    </div>
+    {error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : !data ? <p role="status" className="mt-4 text-sm text-muted-foreground">Messwerte werden geladen …</p> : <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 my-5">
+        {[["Besuche", data.summary.sessions], ["Seitenaufrufe", data.summary.pageviews], ["Formular begonnen", data.funnel.formStartSessions], ["Formular gesendet", data.funnel.formSubmitSessions]].map(([label, value]) => <div key={label}><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-semibold tabular-nums">{Number(value).toLocaleString("de-DE")}</p></div>)}
+      </div>
+      {data.clicks.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><caption className="text-left font-medium mb-2">Welche Buttons werden geklickt?</caption><thead><tr className="text-muted-foreground text-xs"><th className="text-left py-2 font-medium">Button / Position</th><th className="text-right px-2 font-medium">Klicks</th><th className="text-right font-medium">Besuche</th></tr></thead><tbody>{data.clicks.map(row => <tr key={row.target} className="border-t border-border/50"><td className="py-3 pr-2">{clickLabel(row.target)}</td><td className="text-right px-2 tabular-nums">{row.clicks.toLocaleString("de-DE")}</td><td className="text-right tabular-nums">{row.sessions.toLocaleString("de-DE")}</td></tr>)}</tbody></table></div> : <p className="text-sm text-muted-foreground">Im gewählten Zeitraum wurden noch keine Buttonklicks erfasst.</p>}
+      <p className="text-xs text-muted-foreground mt-4">Abruf: {new Date(data.fetchedAt).toLocaleString("de-DE")} · Zeitraum: letzte {data.rangeDays} Tage</p>
+    </>}
+    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">Besuche und Klicks werden nur nach Zustimmung erfasst. Anrufklicks sind keine bestätigten Telefonate. Mehrere Klicks eines Besuchs zählen einzeln; „Besuche“ zählt die zugehörigen Sitzungen. Ältere Klicks lassen sich nachträglich keiner Button-Position zuordnen.</p>
+  </section>;
+}

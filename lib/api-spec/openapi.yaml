@@ -18,6 +18,26 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /lukas/taxibb/analytics:
+    get:
+      operationId: getTaxiBBAnalytics
+      tags: [lukas]
+      summary: Private aggregierte TaxiBB-Klickauswertung
+      security:
+        - LukasBearer: []
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, enum: [7, 30, 90, 180], default: 30 }
+      responses:
+        "200":
+          description: Aggregierte Besuche, Buttonklicks und Formularzahlen mit Abrufzeit
+        "400":
+          description: Ungültiger Zeitraum
+        "401":
+          description: Anmeldung erforderlich
+        "503":
+          description: Verbindung fehlt oder Messwerte vorübergehend nicht verfügbar
   /telefon/anfragen:
     get:
       operationId: getTelefonAnfragen
