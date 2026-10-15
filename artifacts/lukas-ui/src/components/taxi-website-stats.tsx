@@ -14,7 +14,7 @@ const formLabels: Record<string, string> = { text: "Hero-Textanfrage", ride: "Fa
 const buttons: Record<string, string> = { menu_open: "Menü öffnen", menu_close: "Menü schließen", booking_cta: "Fahrt buchen", services_nav: "Leistungen", faq_menu: "FAQ im Menü" };
 export function clickLabel(target: string): string {
   if (buttons[target]) return buttons[target];
-  if (actions[target]) return `${actions[target]} · ältere Messung ohne Position`;
+  if (actions[target]) return `${actions[target]} · Position unbekannt`;
   for (const key of Object.keys(actions)) {
     if (target.startsWith(key + "_")) return `${actions[key]} · ${positions[target.slice(key.length + 1)] ?? "Seiteninhalt"}`;
   }
