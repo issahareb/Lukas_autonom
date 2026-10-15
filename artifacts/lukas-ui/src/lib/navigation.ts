@@ -1,8 +1,9 @@
-import { House, MessageSquare, Phone, Network, Brain, Target, BookOpen, Film, Inbox, Lightbulb, ShieldCheck, Plug, BarChart3, KeyRound, AlertTriangle } from "lucide-react";
+import { House, MessageSquare, Phone, PhoneIncoming, Network, Brain, Target, BookOpen, Film, Inbox, Lightbulb, ShieldCheck, Plug, BarChart3, KeyRound, AlertTriangle } from "lucide-react";
 
 export const navigation = [
   { href: "/", label: "Übersicht", icon: House, group: "Arbeitsraum", tone: "mint" },
   { href: "/chat", label: "Chat", icon: MessageSquare, group: "Arbeitsraum", tone: "mint" },
+  { href: "/telefonanfragen", label: "Telefonanfragen", icon: PhoneIncoming, group: "Arbeitsraum", tone: "cyan" },
   { href: "/telefon", label: "Telefon", icon: Phone, group: "Arbeitsraum", tone: "cyan" },
   { href: "/goals", label: "Ziele", icon: Target, group: "Arbeitsraum", tone: "mint" },
   { href: "/studio", label: "Studio", icon: Film, group: "Arbeitsraum", tone: "rose" },

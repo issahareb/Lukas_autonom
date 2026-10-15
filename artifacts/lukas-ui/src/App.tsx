@@ -26,6 +26,7 @@ import Zugaenge from "@/pages/zugaenge";
 const Gehirn = lazy(() => import("@/pages/gehirn"));
 import Mcp from "@/pages/mcp";
 import Telefon from "@/pages/telefon";
+const Telefonanfragen = lazy(() => import("@/pages/telefonanfragen"));
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ function Router() {
         <Route path="/proposals" component={Proposals} />
         <Route path="/mcp" component={Mcp} />
         <Route path="/telefon" component={Telefon} />
+        <Route path="/telefonanfragen" component={Telefonanfragen} />
         <Route path="/kennzahlen" component={Kennzahlen} />
         <Route path="/zugaenge" component={Zugaenge} />
         <Route path="/diagnostics" component={Diagnostics} />

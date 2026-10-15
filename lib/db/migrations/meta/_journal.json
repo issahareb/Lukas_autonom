@@ -64,6 +64,13 @@
       "when": 1791811067237,
       "tag": "0008_premium_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792084849548,
+      "tag": "0009_spotty_ultimatum",
+      "breakpoints": true
     }
   ]
 }

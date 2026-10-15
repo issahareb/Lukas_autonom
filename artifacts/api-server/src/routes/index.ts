@@ -12,6 +12,7 @@ import approvalsRouter from "./approvals";
 import proposalsRouter from "./proposals";
 import mcpRouter from "./mcp";
 import telefonRouter from "./telefon";
+import telefonAnfragenRouter from "./telefon-anfragen";
 
 const router: IRouter = Router();
 
@@ -27,6 +28,7 @@ router.use(whatsappRouter);
 router.use(approvalsRouter);
 router.use(proposalsRouter);
 router.use(mcpRouter);
+router.use(telefonAnfragenRouter);
 router.use(telefonRouter);
 
 export default router;

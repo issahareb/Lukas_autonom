@@ -19,6 +19,7 @@ import { telefonNummern, telefonAnrufe } from "@workspace/db";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { buildSystemPrompt } from "./system-prompt";
 import { buildPublicSystemPrompt } from "./public-prompt";
+import { HAREB_DIGITAL_TELEFON } from "./hareb-digital";
 import { SPRACH_REGEL } from "./ai/sprach-sitzung";
 import { acceptLiveSipSession, rejectLiveSipSession } from "./ai/live-session";
 import { logger } from "./logger";
@@ -297,8 +298,9 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     telefonKontextId: kontext?.id,
     telefonPeer: { nummer: normalisiere(vonNummer), richtung: ausgehend ? "ausgehend" : "eingehend" },
     onTelefonEnd: speichereEnde,
+    telefonBusiness: !ausgehend,
     // Build the private backend prompt only when the first task needs it.
-    instructions: async () => (await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined)) + "\n\n" + await inboundHistory,
+    instructions: async () => (await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined)) + "\n\n" + await inboundHistory + (!ausgehend ? "\n\n" + HAREB_DIGITAL_TELEFON : ""),
     visibility: stufe === "privat" ? "private" : "public",
     initialCommentary: (ausgehend
       ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 1000)}`

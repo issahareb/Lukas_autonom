@@ -18,6 +18,75 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /telefon/anfragen:
+    get:
+      operationId: getTelefonAnfragen
+      tags: [lukas]
+      summary: Private Telefonanfragen, neueste zuerst, maximal 50 pro Seite
+      security:
+        - LukasBearer: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [neu, in_bearbeitung, erledigt, archiviert] }
+        - in: query
+          name: q
+          schema: { type: string, maxLength: 200 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+      responses:
+        "200":
+          description: Anfragen mit Gesamtzahl, ohne Audio oder Sitzungskennungen
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rows, total]
+                properties:
+                  total: { type: integer }
+                  rows:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+        "400": { description: Ungültiger Filter }
+        "401": { description: Zugang erforderlich }
+        "500": { description: Laden fehlgeschlagen }
+  /telefon/anfragen/{id}:
+    patch:
+      operationId: updateTelefonAnfrage
+      tags: [lukas]
+      summary: Bearbeitungsstatus oder interne Notiz ändern
+      security:
+        - LukasBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                status: { type: string, enum: [neu, in_bearbeitung, erledigt, archiviert] }
+                notiz: { type: string, maxLength: 5000 }
+      responses:
+        "200":
+          description: Gespeichert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        "400": { description: Ungültige Änderung }
+        "401": { description: Zugang erforderlich }
+        "404": { description: Anfrage nicht gefunden }
+        "500": { description: Speichern fehlgeschlagen }
   /lukas/verbrauch:
     get:
       operationId: getVerbrauch

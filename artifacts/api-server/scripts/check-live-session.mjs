@@ -9,6 +9,7 @@ const fixture = { memoryParts: [], memoryClosed: [], sockets: [], requests: [], 
   failCreate: false, sequence: 0, answer: "Bestätigtes Ergebnis.", backend: null };
 globalThis.__liveSessionTest = fixture;
 const stubSources = {
+  "../telefon-anfragen": `export async function preparePhoneEnquiry(id, number, context, acknowledge) { const f=globalThis.__liveSessionTest; f.enquiry={id, number, context, acknowledge, parts:[], closed:0}; return {observe: part=>f.enquiry.parts.push(part), close:async()=>{f.enquiry.closed++}}; }`,
   "./telefon-memory": `export async function preparePhoneMemory(id, peer, visibility) { const f = globalThis.__liveSessionTest; f.memoryPeer = {id, peer, visibility}; return {input: [{type:"message", role:"user", content:[{type:"input_text", text:"ARCHIVE_SAMSTAG"}]}], observe: part => f.memoryParts.push(part), recall: async () => "ARCHIVE_SAMSTAG", close: async complete => f.memoryClosed.push({id,complete})}; }`,
   undici: [
     'const fixture = globalThis.__liveSessionTest;',
@@ -33,7 +34,7 @@ await build({
   stdin: { contents: 'export * from "./src/lib/ai/live-session.ts"; export { aktuellerAnruf } from "./src/lib/telefon-laufend.ts";', resolveDir: resolve(dirname(fileURLToPath(import.meta.url)), ".."), loader: "ts" },
   outfile: output, bundle: true, platform: "node", target: "node22", format: "esm", logLevel: "silent",
   plugins: [{ name: "live-isolation", setup(builder) {
-    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory)$/ },
+    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory|\.\.\/telefon-anfragen)$/ },
       (args) => ({ path: args.path, namespace: "live-stub" }));
     builder.onLoad({ filter: /.*/, namespace: "live-stub" }, (args) => ({ contents: stubSources[args.path], loader: "js" }));
   } }],
@@ -404,6 +405,18 @@ try {
 
   const sipOptions = { telefonPeer: {nummer: "4915100000001", richtung: "eingehend"}, sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
     initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };
+  await api.acceptLiveSipSession({ sessionId: "business_inbound", telefonBusiness: true,
+    telefonPeer: { nummer: "4915100000002", richtung: "eingehend" }, visibility: "public", allowTools: false, instructions: "business" });
+  const businessAccept = fixture.requests.find(r => r.url.endsWith("/business_inbound/accept"));
+  assert.match(businessAccept.body.session.instructions, /HAREB DIGITAL/);
+  assert.match(businessAccept.body.session.instructions, /Ich möchte eine Website/);
+  assert.equal(fixture.enquiry.number, "4915100000002");
+  const businessSocket = fixture.sockets.at(-1);
+  businessSocket.emit({ type: "session.input_transcript.delta", event_id: "business_words", delta: "Ich möchte eine Website", start_ms: 0, end_ms: 100 });
+  assert.equal(fixture.enquiry.parts.length, 1);
+  businessSocket.emit({ type: "session.closed", reason: "remote_hangup" });
+  assert.equal(fixture.enquiry.closed, 1);
+  fixture.memoryClosed.length = 0; fixture.memoryParts.length = 0;
   const beforeSip = fixture.calls.length;
   await Promise.all([api.acceptLiveSipSession(sipOptions), api.acceptLiveSipSession(sipOptions)]);
   const accepts = fixture.requests.filter((r) => r.url.endsWith("/live_phone_ok/accept"));

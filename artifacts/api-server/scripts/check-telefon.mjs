@@ -88,7 +88,7 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner", "./telefon-laufend"].includes(args.path) ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner", "./telefon-laufend", "./hareb-digital"].includes(args.path) ? { path: attrappe } : undefined,
         );
       },
     },
@@ -257,6 +257,10 @@ try {
   globalThis.telefonEintrag = undefined;
   assert.equal(await nimmAn("live_unknown_inbound", "+4930999999"), "oeffentlich");
   const unknownInbound = globalThis.telefonAnnahmen.at(-1);
+  assert.equal(unknownInbound.telefonBusiness, true);
+  assert.match(unknownInbound.instructions, /HAREB DIGITAL/);
+  assert.match(unknownInbound.instructions, /Ich möchte eine Website/);
+  assert.equal(unknownInbound.allowTools, false);
   assert.doesNotMatch(unknownInbound.instructions, /Garteninserat/);
   assert.doesNotMatch(unknownInbound.initialCommentary, /Fouad/);
   globalThis.telefonHistorie = [];

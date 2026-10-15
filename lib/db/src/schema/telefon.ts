@@ -119,3 +119,23 @@ export const telefonGedaechtnis = pgTable("lukas_telefon_gedaechtnis", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("lukas_telefon_gedaechtnis_kontakt_idx").on(t.kontaktId, t.updatedAt)]);
+
+/** Business request notes only, separate from opt-in recordings/contact history. */
+export const telefonAnfragen = pgTable("lukas_telefon_anfragen", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  kontextId: text("kontext_id"),
+  nummer: text("nummer").notNull().default(""),
+  status: text("status").notNull().default("neu"),
+  kategorie: text("kategorie").notNull().default("unklar"),
+  zusammenfassung: text("zusammenfassung").notNull().default(""),
+  details: text("details").notNull().default("{}"),
+  weitergabe: text("weitergabe").notNull().default("offen"),
+  auswertung: text("auswertung").notNull().default("laeuft"),
+  notiz: text("notiz").notNull().default(""),
+  emailStatus: text("email_status").notNull().default("ausstehend"),
+  revision: integer("revision").notNull().default(0),
+  beendetAm: timestamp("beendet_am", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("lukas_telefon_anfragen_datum_idx").on(t.createdAt)]);

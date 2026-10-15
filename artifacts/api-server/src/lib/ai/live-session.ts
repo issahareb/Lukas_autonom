@@ -1,3 +1,5 @@
+import type { PhoneEnquiry } from "./telefon-anfrage";
+import { HAREB_DIGITAL_TELEFON } from "../hareb-digital";
 import type { PhoneMemory, PhonePeer } from "./telefon-memory";
 /** GPT Live: server-owned delegation over the authenticated sideband. */
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
@@ -23,6 +25,8 @@ export type LiveSessionOptions = {
   allowTools?: boolean;
   telefonKontextId?: string;
   telefonPeer?: PhonePeer;
+  /** Server-owned flag: inbound business reception, never an owner tool grant. */
+  telefonBusiness?: boolean;
   /** Server-only grant from nimmAn after the signed incoming context/contact check. */
   telefonOwnerContactId?: number;
   onTelefonEnd?: (reason: string) => Promise<void>;
@@ -44,6 +48,7 @@ type ManagedSession = {
   reconnects: number; requestedCloseReason?: string; providerCloseReason?: string;
   phone?: TelefonGespraech;
   phoneMemory?: PhoneMemory;
+  phoneEnquiry?: PhoneEnquiry;
   phoneSpeechObserved?: boolean;
   outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
@@ -133,11 +138,11 @@ function reserve(visibility: Visibility): symbol {
   }
   const token = Symbol("live"); reservations.set(token, visibility); return token;
 }
-function sessionConfig(config: { model: string; voice: string }, browser: boolean, input: Json[] = []) {
+function sessionConfig(config: { model: string; voice: string }, browser: boolean, input: Json[] = [], businessInstructions = "") {
   return {
     model: config.model, audio: { output: { voice: config.voice } },
     ...(!browser && input.length ? { input } : {}),
-    instructions: (browser ? FRONTEND_INSTRUCTIONS : TELEFON_SPRACHREGELN) + (!browser ? "\nTelefonat: Wenn das Gespräch fertig ist, verabschiede dich kurz mit Tschüss oder Auf Wiederhören. Danach schweige und warte auf eine mögliche Antwort. Die Telefonsteuerung beendet nach fünf Sekunden ohne Antwort. Bei einer eindeutigen Mailboxansage führe kein Gespräch mit der Aufnahme. Vertrauliche Auftraggeberhinweise aus dem Backend werden still berücksichtigt und nicht vorgelesen." : ""), delegation: { type: "client" }, store: false,
+    instructions: (browser ? FRONTEND_INSTRUCTIONS : TELEFON_SPRACHREGELN) + (!browser ? "\nTelefonat: Wenn das Gespräch fertig ist, verabschiede dich kurz mit Tschüss oder Auf Wiederhören. Danach schweige und warte auf eine mögliche Antwort. Die Telefonsteuerung beendet nach fünf Sekunden ohne Antwort. Bei einer eindeutigen Mailboxansage führe kein Gespräch mit der Aufnahme. Vertrauliche Auftraggeberhinweise aus dem Backend werden still berücksichtigt und nicht vorgelesen." : "") + businessInstructions, delegation: { type: "client" }, store: false,
     ...(browser ? { client: { data_channel: {
       allowed_client_events: ["session.close"],
       allowed_server_events: ["session.started", "session.input_transcript.delta",
@@ -345,7 +350,7 @@ async function drainWork(state: ManagedSession) {
           quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
           history: [...state.history], userText: work.userText,
           systemPromptOverride: instructions + recall + (state.options.allowTools ? "" :
-            "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung."),
+            "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung." + (state.options.telefonBusiness ? " Die Annahme einer Geschäftsanfrage ist ausdrücklich erlaubt: Qualifiziere sie mit den Firmeninformationen. Die separate Telefonintegration speichert bestätigte Anfragedaten. Weise Kunden nicht ab und behaupte keine Speicherung ohne technische Bestätigung." : "")),
           conversationId: state.conversationId,
           ...(state.options.allowTools ? {} : { tools: [] }),
           signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(120_000)]),
@@ -448,6 +453,7 @@ function observe(state: ManagedSession, event: Json) {
     }
     state.phone?.observe(role, event.delta);
     state.phoneMemory?.observe({ role, text: event.delta, startMs: event.start_ms, endMs: event.end_ms });
+    state.phoneEnquiry?.observe({ role, text: event.delta, startMs: event.start_ms, endMs: event.end_ms });
     state.transcript.push({ role, text: event.delta, endMs: event.end_ms });
     if (role === "user") state.userCharacters += event.delta.length;
     while (state.transcript.length > 1024 || state.transcript.reduce((n, row) => n + row.text.length, 0) > 40_000) {
@@ -573,6 +579,12 @@ function finishSession(state: ManagedSession, reason: string) {
       void write.catch(() => logger.error({ phase: "status_write_failed" }, "Telefon-Endstatus nicht gespeichert"))
         .finally(() => phoneMemoryWrites.delete(write));
     }
+  }
+  if (state.phoneEnquiry) {
+    const write = state.phoneEnquiry.close();
+    phoneMemoryWrites.add(write);
+    void write.catch(() => logger.error({ phase: "enquiry_final_write_failed" }, "Telefonanfrage nicht abschließend gespeichert"))
+      .finally(() => phoneMemoryWrites.delete(write));
   }
   persistUsage(state, reason !== "provider_expiry_after_unconfirmed_close");
   state.phone?.close();
@@ -720,6 +732,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
     const reservation = reserve(options.visibility);
     let state: ManagedSession | undefined, accepted = false;
     let phoneMemory: PhoneMemory | undefined;
+    let phoneEnquiry: PhoneEnquiry | undefined;
     try {
       const connection = connectionConfig(), config = liveConfig();
       if (options.telefonPeer) {
@@ -728,14 +741,22 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
           phoneMemory = await preparePhoneMemory(options.sessionId, options.telefonPeer, options.visibility);
         } catch { logger.warn({ phase: "lookup_failed" }, "Telefon-Gedächtnis nicht geladen"); }
       }
+      if (options.telefonBusiness && options.telefonPeer?.richtung === "eingehend") {
+        try {
+          const { preparePhoneEnquiry } = await import("../telefon-anfragen");
+          phoneEnquiry = await preparePhoneEnquiry(options.sessionId, options.telefonPeer.nummer, options.telefonKontextId,
+            message => { if (state && !state.ended && !state.closing) thinking(state, message); });
+        } catch { logger.error({ phase: "enquiry_prepare_failed" }, "Telefonanfragen-Speicher nicht verfügbar"); }
+      }
       await apiRequest(connection, "/live/sessions/" + encodeURIComponent(options.sessionId) + "/accept", {
         // Startup context is available before the first generated phoneme.
         // Runtime thinking appends arrive gradually and must not carry the initial brief.
-        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])]),
+        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])], options.telefonBusiness ? "\n\n" + HAREB_DIGITAL_TELEFON + (!phoneEnquiry ? "\nACHTUNG: Der Anfragenspeicher ist gerade nicht erreichbar. Berate trotzdem zu den Leistungen, aber sage nicht, dass die Anfrage gespeichert oder weitergeleitet wird. Bitte den Anrufer, sie an kontakt@hareb.digital zu senden." : "") : ""),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
       state = startManaged(options.sessionId, options, connection, config, "sip");
       state.phoneMemory = phoneMemory;
+      state.phoneEnquiry = phoneEnquiry;
       reservations.delete(reservation);
       if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.", true);
       await attachSideband(state);
@@ -766,7 +787,10 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       }
     } catch (error) {
       if (state) await terminateSession(state, "sip_setup_failed").catch(() => {});
-      else await phoneMemory?.close(false).catch(() => {});
+      else {
+        await phoneMemory?.close(false).catch(() => {});
+        await phoneEnquiry?.close().catch(() => {});
+      }
       if (accepted) throw new LiveSessionError(error instanceof Error ? error.message : "SIP-Aufbau fehlgeschlagen.", true);
       throw error;
     } finally { reservations.delete(reservation); }
