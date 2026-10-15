@@ -1,8 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import TaxiWebsiteStats from './taxi-website-stats';
-const metrics={fetchedAt:'2026-10-15T20:00:00Z',rangeDays:30,summary:{sessions:9,pageviews:14},funnel:{formStartSessions:2,formSubmitSessions:1},clicks:[{target:'phone_header',clicks:5,sessions:3}]};
+const metrics={fetchedAt:'2026-10-15T20:00:00Z',rangeDays:30,summary:{sessions:9,pageviews:14},funnel:{formStartSessions:2,formSubmitSessions:1,bookings:10},clicks:[{target:'phone_header',clicks:5,sessions:3}]};
 describe('TaxiBB website metrics',()=>{
+ it('separates stored requests from consenting sessions and does not equate them to delivered emails',async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({...metrics,funnel:{...metrics.funnel,formSubmitSessions:5}}))));
+  render(<TaxiWebsiteStats/>);
+  const requests=await screen.findByLabelText('Gespeicherte Anfragen');
+  expect(within(requests).getByText('10')).toBeInTheDocument();
+  expect(screen.getByText('Besuche mit erfolgreicher Sendung').parentElement).toHaveTextContent('5');
+  expect(screen.queryByText('Formular gesendet')).not.toBeInTheDocument();
+  expect(requests).toHaveTextContent('unabhängig von der Tracking-Einwilligung');
+  expect(requests).toHaveTextContent('keine E-Mail-Zustellung');
+  expect(requests).toHaveTextContent('Das untere Kontaktformular');
+  expect(screen.getByText(/kein Kalendermonat/)).toBeInTheDocument();
+ });
  it('shows actual per-position counts and refetches the chosen period',async()=>{
   const fetch=vi.fn().mockImplementation(()=>Promise.resolve(new Response(JSON.stringify(metrics))));vi.stubGlobal('fetch',fetch);
   render(<TaxiWebsiteStats/>);
