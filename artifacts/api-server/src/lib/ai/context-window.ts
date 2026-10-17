@@ -10,13 +10,14 @@ import { BILD_MARKE } from "../bildablage";
  * und ein Zug mit zehn Werkzeugrunden zehnmal. Fuer ein Modellfenster war das
  * grosszuegig gedacht; fuer die Rechnung ist es der teuerste Posten ueberhaupt.
  *
- * 60.000 Zeichen (~17.000 Tokens) sind ein langes Gespraech, nicht ein kurzes.
- * Was davor liegt, ist NICHT verloren: der Rohverlauf steht vollstaendig in der
- * Datenbank, und was zur aktuellen Nachricht passt, holt buildSystemPrompt
- * ueber memoryContextFor gezielt zurueck — plus query_memory, wenn Lukas
- * gezielt sucht. Gekuerzt wird also nur, was in DIESEM Aufruf mitfaehrt.
+ * Kurze Unterhaltungen brauchen standardmaessig nur 32.000 Zeichen.
+ * Code, Analysen, Recherchen und komplexe Auftraege behalten 60.000.
+ * Was davor liegt, ist NICHT verloren: der Rohverlauf bleibt vollstaendig in
+ * der Datenbank, relevante Stellen kommen per gezieltem Memory-Retrieval zurueck.
+ * Beide Grenzen sind per Umgebungsvariable anpassbar.
  */
-const DEFAULT_MAX_CONTEXT_CHARS = 60_000;
+const DEFAULT_MAX_CONTEXT_CHARS = 32_000;
+const DEFAULT_COMPLEX_CONTEXT_CHARS = 60_000;
 
 function contentCost(content: unknown): number {
   if (typeof content === "string") return content.length;
@@ -45,10 +46,23 @@ function messageCost(message: OpenAI.Chat.Completions.ChatCompletionMessageParam
   return total;
 }
 
-function maxContextChars(): number {
-  const raw = Number(process.env.LUKAS_CONTEXT_MAX_CHARS ?? DEFAULT_MAX_CONTEXT_CHARS);
-  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_MAX_CONTEXT_CHARS;
-  return Math.max(12_000, Math.floor(raw));
+function maxContextChars(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): number {
+  const explizit = Number(process.env.LUKAS_CONTEXT_MAX_CHARS);
+  // Ein konfiguriertes Limit gewinnt immer, auch wenn die Aufgabe komplex ist.
+  if (Number.isFinite(explizit) && explizit > 0) return Math.max(12_000, Math.floor(explizit));
+
+  // Die letzten echten Nutzer-Nachrichten bestimmen die Tiefe. Ein kurzes
+  // "weiter" nach einer Code-Recherche darf den erforderlichen Kontext
+  // nicht wegwerfen. Die History und alle Memories bleiben unveraendert.
+  const letzte = messages.filter((m) => m.role === "user").slice(-3);
+  const aufgabe = letzte.map(m => typeof m.content === "string" ? m.content : "").join(" ").slice(-4000);
+  const komplex = /repo|github|typescript|javascript|python|code|programmier|implementier|skript|debug|deploy|fehler|recherch|analys|strategie|architektur|verglei|audit|projekt|website|webseite|https?:|datei|dokument|konzept|mehrere|schritt.fuer.schritt/i.test(aufgabe) ||
+    letzte.some(m => typeof m.content !== "string");
+  if (!komplex) return DEFAULT_MAX_CONTEXT_CHARS;
+  const configured = Number(process.env.LUKAS_CONTEXT_COMPLEX_MAX_CHARS ?? DEFAULT_COMPLEX_CONTEXT_CHARS);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.max(DEFAULT_MAX_CONTEXT_CHARS, Math.floor(configured))
+    : DEFAULT_COMPLEX_CONTEXT_CHARS;
 }
 
 /**
@@ -60,7 +74,7 @@ function maxContextChars(): number {
 export function fitLukasContext(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-  const maxChars = maxContextChars();
+  const maxChars = maxContextChars(messages);
   const total = messages.reduce((sum, message) => sum + messageCost(message), 0);
   if (total <= maxChars) return messages;
 
