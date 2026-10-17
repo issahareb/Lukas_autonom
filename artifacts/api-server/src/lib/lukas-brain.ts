@@ -99,6 +99,7 @@ export async function runLukasTurn(opts: {
     opts.systemPromptOverride ??
     (await buildSystemPrompt(opts.userText.slice(0, 1000), {
       ohneZieleUndTagebuch: opts.ohneZieleUndTagebuch,
+      routingTask: previousRoutingTask(opts.history, opts.userText) ?? undefined,
     }));
   opts.signal?.throwIfAborted();
   let tools = opts.tools ?? (await allLukasTools(opts.userText + " " + (previousRoutingTask(opts.history, opts.userText) ?? "")));
