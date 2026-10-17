@@ -49,7 +49,7 @@ export type LukasPromptBausteine = {
 /** Alle Entscheidungen sind deterministisch: gleiche Aufgabe -> gleicher Prompt. */
 export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
   const text = task.slice(0, 5000);
-  const code = /\b(code|coding|github|repo|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
+  const code = /\b(code|coding|github|repos?|repository|repositories|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
   const telefon = /telefon|anruf|anrufen|ruf.*an|gespr[aä]ch|telnyx|sip|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail/i.test(text);
   const mail = /e-?mail|postfach|posteingang|imap|smtp/i.test(text);
   const sms = /\bsms\b|kurznachricht/i.test(text);
