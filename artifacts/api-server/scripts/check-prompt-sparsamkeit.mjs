@@ -21,7 +21,7 @@ function pruefe(name, value) {
 try {
   await build({
     entryPoints: ["src/lib/lukas-soul.ts", "src/lib/lukas-prompt-auswahl.ts", "src/lib/ai/context-window.ts"],
-    outdir: dir, bundle: true, format: "esm", platform: "node",
+    outdir: dir, entryNames: "[name]", bundle: true, format: "esm", platform: "node",
     outExtension: { ".js": ".mjs" },
     plugins: [{
       name: "isolierte-pruefung",
