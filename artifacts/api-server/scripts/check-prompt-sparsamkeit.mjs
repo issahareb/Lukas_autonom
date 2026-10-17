@@ -26,7 +26,7 @@ try {
     plugins: [{
       name: "isolierte-pruefung",
       setup(b) {
-        b.onResolve({ filter: /(^|\\/)(logger|bildablage)$/ }, () => ({ path: stub }));
+        b.onResolve({ filter: /(?:logger|bildablage)$/ }, () => ({ path: stub }));
       },
     }],
     logLevel: "silent",
