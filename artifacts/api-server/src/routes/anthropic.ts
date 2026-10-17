@@ -330,12 +330,13 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .where(and(eq(attachmentsTable.conversationId, convId), isNull(attachmentsTable.messageId)))
       .returning();
 
-    const systemPrompt = await buildSystemPrompt(String(content).slice(0, 1000));
     const history = await db
       .select()
       .from(messages)
       .where(eq(messages.conversationId, convId))
       .orderBy(asc(messages.createdAt));
+    const previousUserText = previousRoutingTask(history, String(content));
+    const systemPrompt = await buildSystemPrompt(String(content).slice(0, 1000), { routingTask: previousUserText ?? undefined });
 
     const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -350,7 +351,6 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     const internalDraftPieces: string[] = [];
     const usedTools: string[] = [];
     const schritte: ToolStep[] = [];
-    const previousUserText = previousRoutingTask(history, String(content));
     const attachmentKinds = pendingAttachments.map((a) => attachmentKind(a.mimeType, a.filename));
 
     /*
