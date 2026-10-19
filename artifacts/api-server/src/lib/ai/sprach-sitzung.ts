@@ -19,6 +19,11 @@ export function sprachStimme(): string {
   return process.env.LUKAS_LIVE_VOICE?.trim() || "cedar";
 }
 
+/** Unabhängige SIP-Stimme; Dashboard und Widget behalten ihre bisherige Stimme. */
+export function telefonSprachStimme(): string {
+  return process.env.LUKAS_TELEFON_LIVE_VOICE?.trim() || sprachStimme();
+}
+
 /** WebRTC und SIP handeln das Audioformat selbst aus. */
 export function sprachAudio() {
   return { output: { voice: sprachStimme() } };
