@@ -7,7 +7,7 @@ import { WebSocket } from "undici";
 import type OpenAI from "openai";
 import { logger } from "../logger";
 import { verbrauchSchreiben } from "../verbrauch-quelle";
-import { sprachModell, sprachStimme } from "./sprach-sitzung";
+import { sprachModell, sprachStimme, telefonSprachStimme } from "./sprach-sitzung";
 
 import { TelefonGespraech } from "./telefon-gespraech";
 import { merkeTelefonSitzung, entferneTelefonSitzung } from "../telefon-laufend";
@@ -120,12 +120,12 @@ function connectionConfig() {
   if (project) headers["OpenAI-Project"] = project;
   return { base, headers };
 }
-function liveConfig() {
+function liveConfig(telefon = false) {
   const model = sprachModell().trim();
   if (!/^gpt-live-[A-Za-z0-9.-]+$/.test(model)) {
     throw new LiveSessionError("GPT Live benötigt ein gpt-live-Modell; Realtime verwendet ein anderes Protokoll.");
   }
-  return { model, voice: sprachStimme().trim() || "cedar" };
+  return { model, voice: (telefon ? telefonSprachStimme() : sprachStimme()).trim() || "cedar" };
 }
 function reserve(visibility: Visibility): symbol {
   if (shuttingDown) throw new LiveSessionError("Der Sprachdienst startet gerade neu.");
@@ -738,7 +738,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
     let phoneMemory: PhoneMemory | undefined;
     let phoneEnquiry: PhoneEnquiry | undefined;
     try {
-      const connection = connectionConfig(), config = liveConfig();
+      const connection = connectionConfig(), config = liveConfig(true);
       if (options.telefonPeer) {
         try {
           const { preparePhoneMemory } = await import("./telefon-memory");

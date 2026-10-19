@@ -27,7 +27,7 @@ const stubSources = {
   ].join("\n"),
   "../live-verbrauch": 'export async function speichereLiveVerbrauch(input) { globalThis.__liveSessionTest.usage.push(input); }',
   "../logger": 'const record = (data, message) => globalThis.__liveSessionTest.logs.push({data, message}); export const logger = { info: record, warn: record, error: record };',
-  "./sprach-sitzung": 'export const sprachModell = () => process.env.LUKAS_LIVE_MODEL || "gpt-live-1"; export const sprachStimme = () => process.env.LUKAS_LIVE_VOICE || "cedar";',
+  "./sprach-sitzung": 'export const sprachModell = () => process.env.LUKAS_LIVE_MODEL || "gpt-live-1"; export const sprachStimme = () => process.env.LUKAS_LIVE_VOICE || "cedar"; export const telefonSprachStimme = () => process.env.LUKAS_TELEFON_LIVE_VOICE || sprachStimme();',
   "../lukas-brain": 'export async function runLukasTurn(options) { const fixture = globalThis.__liveSessionTest; fixture.calls.push(options); return fixture.backend ? await fixture.backend(options) : fixture.answer; }',
 };
 await build({
@@ -40,7 +40,7 @@ await build({
   } }],
 });
 const previous = { fetch: globalThis.fetch, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
-const envKeys = ["OPENAI_PROJECT_ID", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS", "LUKAS_TELEFON_OWNER_CONTACT_ID", "LUKAS_TELEFON_STRENG"];
+const envKeys = ["OPENAI_PROJECT_ID", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_TELEFON_LIVE_VOICE", "LUKAS_LIVE_MAX_SESSIONS", "LUKAS_TELEFON_OWNER_CONTACT_ID", "LUKAS_TELEFON_STRENG"];
 const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
 for (const key of envKeys) delete process.env[key];
 const timers = new Map();
@@ -328,7 +328,11 @@ try {
   };
   const say = (s, delta) => s.emit({ type: "session.output_transcript.delta", event_id: "event_" + ++serial, delta, start_ms: serial * 10, end_ms: serial * 10 + 10 });
   assert.equal(api.fluestereLiveTelefon("context_goodbye", "Vorgemerkt vor Annahme.", true), "queued");
+  process.env.LUKAS_TELEFON_LIVE_VOICE = "flitz";
   const farewell = await phone("goodbye");
+  assert.equal(fixture.requests.find(r => r.url.endsWith("/goodbye/accept")).body.session.audio.output.voice, "flitz",
+    "SIP must use the telephone-only German voice");
+  delete process.env.LUKAS_TELEFON_LIVE_VOICE;
   assert.ok(farewell.sent.some(e => e.content?.includes("Vorgemerkt vor Annahme.")));
 
   say(farewell, "Vielen Dank. Tsch"); say(farewell, "üss!");
@@ -342,6 +346,8 @@ try {
   assert.ok(endings.includes("verabschiedet"));
   assert.equal(api.fluestereLiveTelefon("context_goodbye", "late"), false);
   const mailbox = await phone("mailbox");
+  assert.equal(fixture.requests.find(r => r.url.endsWith("/mailbox/accept")).body.session.audio.output.voice, "cedar",
+    "SIP must fall back to the existing voice if no override is set");
   input(mailbox, "Ich habe meine Mailbox noch nicht abgehört.");
   assert.equal(mailbox.readyState, 1);
   input(mailbox, "Bitte hinterlassen Sie nach dem Signal"); input(mailbox, "ton eine Nachricht."); await settle();
