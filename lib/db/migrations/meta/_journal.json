@@ -71,6 +71,13 @@
       "when": 1792084849548,
       "tag": "0009_spotty_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792583301059,
+      "tag": "0010_mean_pretty_boy",
+      "breakpoints": true
     }
   ]
 }

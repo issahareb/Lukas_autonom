@@ -1,4 +1,5 @@
 import TaxiWebsiteStats from "@/components/taxi-website-stats";
+import WebsiteActivity from "@/components/website-activity";
 import Verbrauch from "@/components/verbrauch";
 import { useCallback, useEffect, useState } from "react";
 import { Seite, Fehler } from "@/components/seite";
@@ -192,6 +193,7 @@ export default function KennzahlenSeite() {
     >
       <div className="space-y-6">
       <TaxiWebsiteStats />
+      <WebsiteActivity />
       <Verbrauch />
       {laedt && <Skeleton className="h-24 w-full" />}
 

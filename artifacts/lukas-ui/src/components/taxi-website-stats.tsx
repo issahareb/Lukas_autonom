@@ -25,9 +25,11 @@ export default function TaxiWebsiteStats() {
   const [refresh, setRefresh] = useState(0);
   const [data, setData] = useState<Metrics | null>(null);
   const [error, setError] = useState("");
+  useEffect(() => {const timer=setInterval(()=>{if(document.visibilityState==='visible')setRefresh(v=>v+1)},15000);return()=>clearInterval(timer)}, []);
+  useEffect(() => setData(null), [days]);
   useEffect(() => {
     const controller = new AbortController();
-    setData(null); setError("");
+    setError("");
     const token = localStorage.getItem("lukas_token");
     fetch(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/lukas/taxibb/analytics?days=${days}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal,

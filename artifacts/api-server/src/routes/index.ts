@@ -15,11 +15,13 @@ import telefonRouter from "./telefon";
 import telefonAnfragenRouter from "./telefon-anfragen";
 
 import taxiAnalyticsRouter from "./taxibb-analytics";
+import websiteAnalyticsRouter from "./website-analytics";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(taxiAnalyticsRouter);
+router.use(websiteAnalyticsRouter);
 router.use(lukasRouter);
 router.use(higgsfieldRouter);
 router.use(anthropicRouter);

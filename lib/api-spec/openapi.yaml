@@ -18,6 +18,59 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /public/website-events:
+    post:
+      operationId: ingestWebsiteEvents
+      tags: [lukas]
+      summary: First-party consented events; per-site server write token required
+      parameters:
+        - in: header
+          name: x-activity-token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: 'Version 1 batch, site, session/page UUIDs, path without query, 1-40 validated events. Field values are never accepted.' }
+      responses:
+        "202": { description: Accepted; duplicate event IDs ignored }
+        "400": { description: Invalid or stale events }
+        "401": { description: Invalid site write token }
+        "503": { description: Storage unavailable }
+  /lukas/websites/analytics:
+    get:
+      operationId: getWebsiteAnalytics
+      tags: [lukas]
+      summary: Private website time, scroll, click and form aggregates
+      security:
+        - LukasBearer: []
+      parameters:
+        - in: query
+          name: site
+          schema: { type: string, enum: [hareb.digital, issahareb.me] }
+        - in: query
+          name: days
+          schema: { type: integer, enum: [1, 7, 30, 90], default: 7 }
+      responses:
+        "200": { description: Summary and breakdowns with fetchedAt timestamp }
+        "400": { description: Invalid site or period }
+        "401": { description: Authentication required }
+        "503": { description: Analytics unavailable }
+  /lukas/websites/stream:
+    get:
+      operationId: streamWebsiteAnalytics
+      tags: [lukas]
+      summary: Authenticated server-sent invalidations after committed events
+      security:
+        - LukasBearer: []
+      responses:
+        "200":
+          description: Site name invalidation; keepalive every 15 seconds
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { description: Authentication required }
   /lukas/taxibb/analytics:
     get:
       operationId: getTaxiBBAnalytics
