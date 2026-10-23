@@ -70,4 +70,11 @@ class EvaSurface:
         if await button.count()!=1 or not await button.is_enabled():
             raise RuntimeError('Reviewed start button unavailable')
         await button.click()
+        # A click may only reveal the normal microphone preflight. It is not
+        # evidence that an interview connection has actually begun.
+        return {'interview':'Start angefordert; Verbindung unbestätigt','completion_confirmed':False}
+
+    async def wait_for_audio_ready(self):
+        await self.page.locator('elevenlabs-convai').wait_for(state='visible',timeout=20000)
+        await self.page.get_by_text('Ich höre zu',exact=True).wait_for(state='visible',timeout=20000)
         return {'interview':'gestartet','completion_confirmed':False}

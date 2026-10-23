@@ -85,7 +85,6 @@ class Worker:
         self.question_metrics = []
         self.awaiting_answer = None
         self.context = ''
-        self.recent_input = ''
 
     def knowledge_parts(self):
         data=json.loads(self.context)
@@ -350,6 +349,7 @@ class Worker:
                     if surface:
                         result=await surface.start_reviewed(review)
                         self.status.update(result)
+                        self.status.update(await surface.wait_for_audio_ready())
                         # The normal widget owns microphone permission and its session.
                         # No direct interview endpoint, injected token or CAPTCHA work.
                         await self.send({'type':'session.commentary.append',
