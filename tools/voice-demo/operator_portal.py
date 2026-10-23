@@ -13,9 +13,17 @@ from aiohttp import web
 from playwright.async_api import async_playwright
 from worker import Worker, browser_env, GREETING
 from eva_surface import EvaSurface
+from conversation_recording import ConversationRecording
+import io
+import zipfile
+import uuid
+from datetime import datetime, timezone
+from network_diagnostics import Diagnostics
+from transcribe_recording import safe_transcribe, private_json
 
 ROOT=Path(__file__).parent
 PRIVATE=Path('/tmp/lukas-operator-private')
+ARCHIVE=Path(os.getenv('DEMO_ARCHIVE_DIR','/data/conversations'))
 PRIVACY='Ich habe die Datenschutzhinweise gelesen und bin mit der Verarbeitung meiner Angaben für das Voice Interview einverstanden.'
 RECORDING='Ich bin damit einverstanden, dass das Gespräch aufgezeichnet und zur Auswertung meiner Bewerbung genutzt wird. Diese Einwilligung kann ich jederzeit per E-Mail an info@everlastconsulting.de widerrufen.'
 
@@ -27,6 +35,8 @@ class Operator:
         self.created=time.monotonic();self.failure=None;self.failed_logins={}
         self.greeted=False;self.interview='nicht gestartet';self.lock=asyncio.Lock()
         self.prepared=False;self.prepare_attempts=0
+        self.recording=None;self.transcription_task=None;self.test_task=None
+        self.diagnostics=None;self.archive_ready=False
 
     @web.middleware
     async def secure(self,request,handler):
@@ -64,6 +74,17 @@ class Operator:
                 if not self.armed or self.used or not self.worker or self.worker.stop.is_set():
                     await route.abort();return
                 # Exactly one real attempt. Never automatically retry this POST.
+                if os.getenv('DEMO_REAL_INTERVIEW_ENABLED')!='1' or not self.archive_ready:
+                    self.failure='RealInterviewNotReleased';await route.abort();return
+                for label in (PRIVACY,RECORDING):
+                    if not await self.page.get_by_role('checkbox',name=label,exact=True).is_checked():
+                        self.failure='ConsentMissing';await route.abort();return
+                self.recording=ConversationRecording(self.new_archive('interview'),self.consent)
+                try:await self.recording.start()
+                except Exception:
+                    self.worker.halt('recording_start_failed')
+                    await route.abort();return
+                self.worker.recording=self.recording
                 self.used=True;self.interview='Start angefordert; Verbindung unbestätigt'
             elif u.path not in allowed:
                 await route.abort();return  # Includes application submissions and phone-call path.
@@ -74,6 +95,9 @@ class Operator:
         context=os.environ.pop('DEMO_CONTEXT_JSON')
         cp=PRIVATE/'context.json';cp.write_text(context);cp.chmod(0o600)
         self.context_path=cp
+        ARCHIVE.mkdir(parents=True,exist_ok=True,mode=0o700);ARCHIVE.chmod(0o700)
+        self.archive_ready=os.path.ismount('/data') or os.getenv('DEMO_ALLOW_LOCAL_STORAGE')=='1'
+        self.diagnostics=Diagnostics(ARCHIVE.parent/'network-diagnostics.json')
         self.pw=await async_playwright().start()
         proxy=os.environ.get('HTTPS_PROXY')
         self.browser=await self.pw.chromium.launch(executable_path='/usr/bin/chromium',
@@ -83,6 +107,7 @@ class Operator:
         ctx=await self.browser.new_context(viewport={'width':1100,'height':900},permissions=['microphone'])
         await ctx.route('https://career.corporatellm.de/**',self.guard)
         self.page=await ctx.new_page();self.surface=EvaSurface(self.page)
+        await self.diagnostics.attach(self.page)
         self.identity=json.loads(os.environ.pop('DEMO_APPLICANT_JSON'))
         self.consent=json.loads(os.environ.pop('DEMO_CONSENT_JSON'))
         try:await self.prepare()
@@ -107,11 +132,15 @@ class Operator:
 
     async def monitor(self):
         while not self.closed:
+            if self.recording and not self.recording.closed:
+                if any(t.done() for t in self.recording.tasks):
+                    self.worker.halt('recording_failure')
+                if self.worker.stop.is_set():await self.finish_recording('voice_stopped')
             if self.worker and self.worker.stop.is_set():
                 self.armed=False
                 if self.used:self.interview='abgebrochen'
             if self.used and self.page and not self.page.is_closed():
-                # Read only visible UI. No interview transcript or recording is saved.
+                # Read visible UI only. Consented audio and draft text are stored separately.
                 listening=self.page.get_by_text('Ich höre zu',exact=True)
                 speaking=self.page.get_by_text('Eva antwortet',exact=True)
                 if not self.greeted and (await listening.count() or await speaking.count()):
@@ -128,6 +157,8 @@ class Operator:
             'prepared':self.prepared,'checks':ready,'lukas':self.worker.status if self.worker else {'state':'nicht verbunden'},
             'interview':self.interview,'attempt_used':self.used,'armed':self.armed,
             'consent_recorded':True,'error_type':self.failure,
+            'archive_ready':self.archive_ready,'real_interview_enabled':os.getenv('DEMO_REAL_INTERVIEW_ENABLED')=='1',
+            'test_running':bool(self.test_task and not self.test_task.done()),
             'expires_in_seconds':max(0,3600-int(time.monotonic()-self.created))})
 
     async def screen(self,request):
@@ -140,12 +171,19 @@ class Operator:
             self.armed=False;self.closed=True
             if self.worker:self.worker.halt('operator_stop')
             elif self.browser:await self.browser.close()
+            if self.recording:await self.finish_recording('operator_stop')
             if self.interview!='nicht gestartet':self.interview='abgebrochen'
             return web.json_response({'ok':True})
         async with self.lock:
             if action=='prepare':
                 await self.prepare()
+            elif action=='recording-test':
+                if self.used or self.worker or self.test_task:raise web.HTTPConflict(text='Test bereits ausgeführt oder Sitzung aktiv.')
+                if not self.archive_ready:raise web.HTTPConflict(text='Privates Volume fehlt.')
+                from recording_test_job import run_test
+                self.test_task=asyncio.create_task(run_test(self.new_archive('test'),self.consent))
             elif action=='connect':
+                if self.test_task and not self.test_task.done():raise web.HTTPConflict(text='Test läuft.')
                 if not self.prepared:raise web.HTTPConflict(text='Zuerst Interviewfenster vorbereiten.')
                 if self.worker or self.closed:raise web.HTTPConflict(text='Sitzung bereits verwendet')
                 ready=await self.surface.readiness()
@@ -181,14 +219,68 @@ class Operator:
             else:raise web.HTTPNotFound()
         return web.json_response({'ok':True})
 
+    def new_archive(self,kind):
+        if sum(p.stat().st_size for p in ARCHIVE.rglob('*') if p.is_file())>800_000_000:
+            raise ValueError('Private archive capacity reached')
+        name=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+kind+'-'+uuid.uuid4().hex[:8]
+        root=ARCHIVE/name;root.mkdir(mode=0o700)
+        private_json(root/'manifest.json',{'kind':kind,'utc':datetime.now(timezone.utc).isoformat(),'consent':self.consent})
+        return root
+
+    async def finish_recording(self,reason):
+        if self.recording and not self.recording.closed:
+            await self.recording.close(reason)
+            self.transcription_task=asyncio.create_task(safe_transcribe(self.recording.root))
+
+    async def archives(self,request):
+        entries=[]
+        for root in sorted(ARCHIVE.glob('*'),reverse=True):
+            if root.is_dir() and (root/'manifest.json').exists():
+                status=root/'transcription-status.json'
+                entries.append({'id':root.name,'manifest':json.loads((root/'manifest.json').read_text()),
+                    'transcription':json.loads(status.read_text()) if status.exists() else {'state':'pending'},
+                    'download':'/conversation.zip?id='+root.name})
+        return web.json_response(entries)
+
+    async def diagnostic_report(self,request):
+        path=ARCHIVE.parent/'network-diagnostics.json'
+        return web.json_response(json.loads(path.read_text()) if path.exists() else [])
+
+    async def download(self,request):
+        ident=request.query.get('id')
+        if ident:
+            import re
+            if not re.fullmatch(r'[0-9TZ]+-(?:interview|test)-[a-f0-9]{8}',ident):raise web.HTTPBadRequest()
+            root=ARCHIVE/ident
+        elif self.recording:root=self.recording.root
+        else:
+            roots=sorted(p for p in ARCHIVE.glob('*') if p.is_dir() and (p/'manifest.json').exists())
+            if not roots:raise web.HTTPNotFound(text='Noch kein Gespräch aufgezeichnet.')
+            root=roots[-1]
+        if not root.is_dir():raise web.HTTPNotFound()
+        if self.recording and root==self.recording.root and not self.recording.closed:
+            raise web.HTTPConflict(text='Zuerst Gespräch stoppen.')
+        if not (root/'README.txt').exists():raise web.HTTPConflict(text='Aufnahme noch nicht abgeschlossen oder nach Absturz unvollständig.')
+        data=io.BytesIO()
+        with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as archive:
+            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json'):
+                path=root/name
+                if path.is_file():archive.write(path,name)
+        return web.Response(body=data.getvalue(),content_type='application/zip',headers={'Content-Disposition':'attachment; filename=eva-lukas-gespraech.zip'})
+
     async def close(self):
         self.closed=True;self.armed=False
         if self.worker:self.worker.halt('operator_shutdown')
         if self.worker_task:await self.worker_task
+        if self.recording:await self.finish_recording('operator_shutdown')
         if hasattr(self,'monitor_task'):
             self.monitor_task.cancel();await asyncio.gather(self.monitor_task,return_exceptions=True)
-        if self.browser:await self.browser.close()
-        if hasattr(self,'pw'):await self.pw.stop()
+        if self.browser:
+            try:await self.browser.close()
+            except Exception:pass
+        if hasattr(self,'pw'):
+            try:await self.pw.stop()
+            except Exception:pass
 
     def app(self):
         app=web.Application(middlewares=[self.secure],client_max_size=8192)
@@ -196,6 +288,8 @@ class Operator:
         async def js(request):return web.Response(text=ROOT.joinpath('operator-client.txt').read_text(),content_type='application/javascript')
         app.router.add_get('/',index);app.router.add_get('/client.js',js)
         app.router.add_get('/healthz',index);app.router.add_get('/status',self.status)
+        app.router.add_get('/conversation.zip',self.download)
+        app.router.add_get('/archives',self.archives);app.router.add_get('/diagnostics',self.diagnostic_report)
         app.router.add_get('/screen',self.screen);app.router.add_post('/action/{action}',self.action)
         return app
 
@@ -209,7 +303,10 @@ async def main():
         await operator.open()
         print('OPERATOR_READY: authenticated browser available; interview not started',flush=True)
         try:await asyncio.wait_for(stop.wait(),3600)
-        except asyncio.TimeoutError:pass
+        except asyncio.TimeoutError:
+            await operator.close()
+            # Keep authenticated archive downloads available; browser/model remain closed.
+            await stop.wait()
     except Exception as exc:
         print('OPERATOR_START_FAILED '+type(exc).__name__,flush=True)
         raise SystemExit(1)

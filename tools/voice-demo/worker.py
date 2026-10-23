@@ -86,6 +86,7 @@ class Worker:
         self.question_metrics = []
         self.awaiting_answer = None
         self.context = ''
+        self.recording = None
 
     def knowledge_parts(self):
         data=json.loads(self.context)
@@ -161,6 +162,8 @@ class Worker:
                     await self.send({'type':'session.commentary.append','delegation_id':ident,
                         'content':'Die angehängten lokalen Quellen sind geprüft. Beantworte die aktuelle Frage konkret anhand ihrer Fakten, insbesondere Architektur und technische Beispiele. Nur tatsächlich fehlende Angaben sind unbekannt. Es gibt keine Aktionen oder verbindlichen Zusagen. Antworte in höchstens drei Sätzen.'})
             elif kind in ('session.input_transcript.delta','session.output_transcript.delta'):
+                if self.recording:
+                    self.recording.event('transcript_delta', speaker='Eva' if 'input_' in kind else 'LUKAS', text=str(event.get('delta',''))[:4000], provisional=True)
                 if getattr(self.args,'test_script',None):
                     self.test_transcripts.append({'role':'user' if 'input_' in kind else 'assistant',
                         'text':str(event.get('delta',''))[:4000],
@@ -193,6 +196,7 @@ class Worker:
                     await self.send({'type':'session.instructions.append','delegation_id':None,
                         'content':'Der Gesprächspartner unterbricht gerade. Brich die bisherige Antwort sofort ab, auch eine eben erhaltene Delegationsantwort. Höre die neue Frage vollständig an und beantworte danach nur diese. Setze die alte Antwort nicht fort, außer er verlangt es ausdrücklich.'})
                 # Flush unsounded audio on a new input turn, including OS queue.
+                if self.recording:self.recording.event('interruption',speaker='LUKAS')
                 await self.audio.flush()
                 while not self.output.empty(): self.output.get_nowait()
                 self.status['interruptions']+=1

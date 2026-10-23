@@ -1,0 +1,15 @@
+# Private recording and diagnosis
+
+Real interview remains disabled by default (DEMO_REAL_INTERVIEW_ENABLED=0). A verified full connection and reviewed consent are required before releasing it. No CAPTCHA workarounds, token transfer, identity masking, proxy rotation or direct interview API calls.
+
+Private Railway volume: /data, initialized root-owned then chowned to runtime UID 10001; browser and application run without root. Archives use independent IDs, 700 directories, 600 files; no automatic deletion. New recordings stop being admitted above 800 MB. Export and delete privately when no longer needed. No public object bucket. /archives, /conversation.zip and /diagnostics require authentication. No audio or transcript in runtime logs or public source. After one hour browser/model close; authenticated downloads remain available. Restart preserves completed recordings. A crash during WAV writing can leave an incomplete recording and is not reported complete.
+
+Two actual Pulse monitor tracks are recorded only with consent, max 660 seconds each. Post-call gpt-transcribe recognizes each track separately in bounded speech regions, orders them by relative audio time and marks overlapping windows and captured interruptions. PCM windows give approximate utterance timestamps, not word-level timestamps. The output remains labelled automatically audio-aligned until a human listens to both tracks; uncertain and incomplete words must not be invented. The live model draft is retained separately and never treated as proof of spoken output. A 900-second transcription deadline and 160-request ceiling bound the job. No automatic retries. Audio survives transcription failures.
+
+POST /action/recording-test generates a synthetic two-speaker conversation including overlap and a cut sentence, records both Pulse streams, invokes actual transcription, and stores its test report. It never starts Eva. Once per process, only when no live voice session is active. /archives exposes completion state and links. A subsequent deployment/restart is required to verify real volume persistence.
+
+Network diagnosis records UTC, method, sanitized URL, HTTP status, cf-ray, cf-mitigated and websocket handshake status. It stores no bodies, authorization headers, cookies, challenge tokens or WS frames. Challenge opaque path components and all queries are removed. Historical failures before instrumentation cannot be reconstructed. A failed interactive challenge must be reproduced by the human operator; the agent never clicks it.
+
+Local checks: test_recording, test_operator, test_archive: seven passed in 3.498 seconds. These are not evidence of a working Eva connection. Remote deployment, recording, transcription and restart verification are reported separately.
+
+Official API guide checked 2026-10-23: https://developers.openai.com/api/docs/guides/speech-to-text (gpt-transcribe, file transcription endpoint). Cloudflare error reference: https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/.

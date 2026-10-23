@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import unittest
+from unittest.mock import patch, AsyncMock, MagicMock
 from aiohttp.test_utils import TestClient,TestServer
 from operator_portal import Operator
 
@@ -13,6 +14,8 @@ class TestOperatorSecurity(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):await self.client.close()
     async def test_auth_and_cross_site_stop(self):
         self.assertEqual((await self.client.get('/screen')).status,401)
+        self.assertEqual((await self.client.get('/conversation.zip')).status,401)
+        self.assertEqual((await self.client.get('/conversation.zip',headers=self.auth)).status,404)
         self.assertEqual((await self.client.get('/healthz')).status,200)
         self.assertEqual((await self.client.get('/',headers=self.auth)).status,200)
         response=await self.client.post('/action/stop',json={},headers={**self.auth,'Origin':'https://untrusted.invalid'})
@@ -29,7 +32,14 @@ class TestOperatorSecurity(unittest.IsolatedAsyncioTestCase):
         first=Route();await self.operator.guard(first);self.assertTrue(first.aborted)
         class Worker:stop=asyncio.Event()
         self.operator.worker=Worker();self.operator.armed=True
-        second=Route();await self.operator.guard(second);self.assertTrue(second.continued)
+        self.operator.consent={'recording_allowed':True}
+        self.operator.archive_ready=True
+        self.operator.page=MagicMock()
+        self.operator.page.get_by_role.return_value.is_checked=AsyncMock(return_value=True)
+        self.operator.new_archive=MagicMock()
+        with patch.dict('os.environ',{'DEMO_REAL_INTERVIEW_ENABLED':'1'}), patch('operator_portal.ConversationRecording') as recording:
+            recording.return_value.start=AsyncMock()
+            second=Route();await self.operator.guard(second);self.assertTrue(second.continued)
         third=Route();await self.operator.guard(third);self.assertTrue(third.aborted)
         application=Route();application.request=type('Request',(),{'method':'POST','url':'https://career.corporatellm.de/api/application'})()
         await self.operator.guard(application);self.assertTrue(application.aborted)
