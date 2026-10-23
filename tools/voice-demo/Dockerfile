@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim-trixie
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium pulseaudio pulseaudio-utils ca-certificates tini espeak-ng \
+    chromium pulseaudio pulseaudio-utils ca-certificates tini espeak-ng xvfb \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 demo
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=demo:demo *.py *.html *.sh ./
+COPY --chown=demo:demo *.py *.html *.sh operator-client.txt ./
 RUN chmod +x /app/*.sh
 USER demo
 ENV DEMO_RUNTIME=/tmp/lukas-voice-demo

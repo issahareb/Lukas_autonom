@@ -53,15 +53,16 @@ def session_config(context):
 
 def browser_env():
     # Never pass API credentials, production tokens or general environment to browser.
-    keep = ['PATH','HOME','LANG','LD_LIBRARY_PATH','SSL_CERT_FILE','SSL_CERT_DIR']
+    keep = ['PATH','HOME','LANG','LD_LIBRARY_PATH','SSL_CERT_FILE','SSL_CERT_DIR','DISPLAY']
     env = {k: os.environ[k] for k in keep if k in os.environ}
     env.update(PULSE_SERVER=os.environ['PULSE_SERVER'], PULSE_SINK='eva_out',
                PULSE_SOURCE='eva_mic')
     return env
 
 class Worker:
-    def __init__(self, args, connector=connect):
+    def __init__(self, args, connector=connect, prepared_page=None):
         self.args = args
+        self.prepared_page = prepared_page
         self.audio = Audio()
         self.stop = asyncio.Event()
         self.started = asyncio.Event()
@@ -293,19 +294,23 @@ class Worker:
         tokenfile=private/'control.token';tokenfile.write_text(self.token);tokenfile.chmod(0o600)
         server=await asyncio.start_server(self.control,'127.0.0.1',self.args.port,limit=8192)
         tasks=[]
-        for sig in (signal.SIGINT,signal.SIGTERM):
-            asyncio.get_running_loop().add_signal_handler(sig,self.halt,'signal')
+        if not self.prepared_page:
+            for sig in (signal.SIGINT,signal.SIGTERM):
+                asyncio.get_running_loop().add_signal_handler(sig,self.halt,'signal')
         try:
-            self.pw = await async_playwright().start()
-            if self.pw:
-                pw = self.pw
-                self.browser=await pw.chromium.launch(executable_path=os.getenv('CHROMIUM','/usr/bin/chromium'),
+            self.pw = None
+            if self.prepared_page:
+                page=self.prepared_page;ctx=page.context;self.browser=ctx.browser
+            else:
+                self.pw = await async_playwright().start()
+                self.browser=await self.pw.chromium.launch(executable_path=os.getenv('CHROMIUM','/usr/bin/chromium'),
                     headless=True, env=browser_env(), ignore_default_args=['--mute-audio'],
                     args=['--autoplay-policy=no-user-gesture-required','--disable-dev-shm-usage'])
                 state=getattr(self.args,'browser_state',None)
                 ctx=await self.browser.new_context(permissions=['microphone'],
                     **({'storage_state':state} if state else {}))
                 page=await ctx.new_page()
+            if page:
                 page.on('crash',lambda _:self.halt('browser_crash'))
                 page.on('close',lambda _:self.halt('browser_closed'))
                 review_path=getattr(self.args,'eva_review',None)
@@ -320,7 +325,7 @@ class Worker:
                     ready=await surface.readiness()
                     if ready['identity_fields_empty'] or not ready['security_check_complete']:
                         raise ValueError('Eva requires operator review in existing application')
-                else:
+                elif not self.prepared_page:
                     await page.goto(f'http://127.0.0.1:{self.args.port}/fixture')
                     await page.evaluate('start()')
                 key=os.environ.get('OPENAI_API_KEY','')
@@ -340,7 +345,9 @@ class Worker:
                     additional_headers=headers,open_timeout=20,
                     ping_interval=10,ping_timeout=10,max_size=1_000_000,max_queue=16) as self.ws:
                     tasks.append(asyncio.create_task(self.guarded(self.receive())))
-                    await self.send({'type':'session.start','session':session_config(context)})
+                    config=session_config(context)
+                    if self.prepared_page: config['input']=[]
+                    await self.send({'type':'session.start','session':config})
                     await asyncio.wait_for(self.started.wait(),20)
                     await self.audio.start() # Before simulator speaks: preserves opening audio.
                     tasks += [asyncio.create_task(self.guarded(c)) for c in
@@ -375,7 +382,7 @@ class Worker:
             if self.browser:
                 try: await self.browser.close()
                 except Exception: pass
-            if hasattr(self,'pw'): await self.pw.stop()
+            if getattr(self,'pw',None): await self.pw.stop()
             self.status['state']='stopped'
             (private/'last-status.json').write_text(json.dumps(self.status,indent=2))
             if getattr(self.args,'test_script',None):

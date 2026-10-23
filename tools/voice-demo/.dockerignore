@@ -4,3 +4,5 @@
 !*.html
 !*.sh
 !Dockerfile
+
+!operator-client.txt
