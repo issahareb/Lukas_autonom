@@ -5,8 +5,9 @@ from urllib.parse import urlencode
 from urllib.request import Request,urlopen
 
 def main():
-    key=os.environ.get('LUKAS_API_TOKEN')
+    key=os.environ.get('LUKAS_API_TOKEN','').strip()
     if not key: raise SystemExit('Missing LUKAS_API_TOKEN in audit service Variables')
+    if '\r' in key or '\n' in key: raise SystemExit('LUKAS_API_TOKEN contains an internal line break; correct it in audit service Variables')
     rows={};truncated=[]
     for term in ('CorporateLLM','EVERLAST','Bewerbung','Eva','issa-corporatellm-eva-demo-v1'):
         request=Request('https://lukas.issahareb.me/api/lukas/memories?'+urlencode({'search':term,'limit':200}),

@@ -11,7 +11,7 @@ p.add_argument('--private-dir',required=True)
 a=p.parse_args()
 private=Path(a.private_dir)
 if private.stat().st_mode & 0o077: raise SystemExit('Private directory must have mode 700')
-key=os.environ.get('LUKAS_API_TOKEN')
+key=os.environ.get('LUKAS_API_TOKEN','').strip()
 if not key: raise SystemExit('LUKAS_API_TOKEN fehlt; keine Suche oder Speicherung durchgeführt.')
 rows={};truncated=[]
 for term in ('CorporateLLM','EVERLAST','Bewerbung','Eva','issa-corporatellm-eva-demo-v1'):
