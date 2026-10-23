@@ -84,6 +84,23 @@ class Worker:
         self.test_transcripts = []
         self.question_metrics = []
         self.awaiting_answer = None
+        self.context = ''
+        self.recent_input = ''
+
+    def knowledge_parts(self):
+        data=json.loads(self.context)
+        # Exact local facts only. Never consult tools or model-supplied URLs.
+        records=[json.dumps(data.get('user_confirmed',{}),ensure_ascii=False)]
+        for project in data.get('projects',[]):
+            records.append(project['name']+': CODEGEPRÜFT: '+
+                json.dumps(project['code_verified'],ensure_ascii=False)+' Grenzen: '+project['limits'])
+        for record in records:
+            words=record.split();part=''
+            for word in words:
+                if len(part)+len(word)>650:
+                    yield part;part=''
+                part+=word+' '
+            if part: yield part
 
     def halt(self, reason):
         if not self.stop.is_set(): self.status.update(state='stopping', reason=reason)
@@ -138,8 +155,11 @@ class Worker:
                 if ident and ident not in self.delegations:
                     self.delegations.add(ident)
                     if len(self.delegations)>30: self.halt('delegation_limit');continue
+                    for part in self.knowledge_parts():
+                        await self.send({'type':'session.thinking.append','delegation_id':ident,
+                            'content':part})
                     await self.send({'type':'session.commentary.append','delegation_id':ident,
-                        'content':'Für diese Demo gibt es keinen zusätzlichen Abruf und keine Aktionen. Verwende ausschließlich den vorab geladenen Bewerbungskontext. Wenn er die Frage nicht beantwortet, sage ehrlich, dass die Angabe nicht verifiziert ist oder Issa selbst antworten muss.'})
+                        'content':'Die angehängten lokalen Quellen sind geprüft. Beantworte die aktuelle Frage konkret anhand ihrer Fakten, insbesondere Architektur und technische Beispiele. Nur tatsächlich fehlende Angaben sind unbekannt. Es gibt keine Aktionen oder verbindlichen Zusagen. Antworte in höchstens drei Sätzen.'})
             elif kind in ('session.input_transcript.delta','session.output_transcript.delta'):
                 if getattr(self.args,'test_script',None):
                     self.test_transcripts.append({'role':'user' if 'input_' in kind else 'assistant',
@@ -242,7 +262,12 @@ class Worker:
             if starts:
                 self.question_metrics[-1]['question_end_to_browser_mic_ms']=round(starts[0]-timing['speechEnd'],1)
             interrupt_previous=bool(item.get('interrupt_next'))
-        self.halt('scripted_test_finished')
+        # Exercise the exact operator Stop endpoint against the live provider.
+        reader,writer=await asyncio.open_connection('127.0.0.1',self.args.port)
+        writer.write(('POST /stop HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer '+self.token+'\r\n\r\n').encode())
+        await writer.drain()
+        response=await reader.read();writer.close();await writer.wait_closed()
+        self.status['stop_http_ok']=response.startswith(b'HTTP/1.1 200')
 
     async def watchdog(self):
         while not self.stop.is_set():
@@ -285,6 +310,7 @@ class Worker:
                 key=os.environ.get('OPENAI_API_KEY','')
                 if not key: raise ValueError('OPENAI_API_KEY missing')
                 context=Path(self.args.context).read_text()
+                self.context=context
                 if len(context)>30000: raise ValueError('Context too large')
                 # websockets uses the inherited HTTPS proxy and system CA trust.
                 base=os.environ.get('OPENAI_BASE_URL','https://api.openai.com/v1').strip().strip('"\'').rstrip('/')
