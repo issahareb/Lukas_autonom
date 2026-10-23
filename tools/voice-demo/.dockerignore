@@ -1,0 +1,6 @@
+*
+!requirements.txt
+!*.py
+!*.html
+!*.sh
+!Dockerfile

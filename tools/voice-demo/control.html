@@ -1,0 +1,19 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><title>LUKAS Demo-Steuerung</title>
+<h1>LUKAS – isolierter Demo-Worker</h1>
+<p>Lokale Steuerung. Hier niemals einen OpenAI- oder LUKAS-API-Schlüssel eingeben.</p>
+<label>Lokales Token aus control.token <input type="password" id="token" autocomplete="off"></label>
+<button id="connect">Status anzeigen</button>
+<button id="stop" style="background:#9c1520;color:white;font-size:1.5em">SOFORT STOPP</button>
+<pre id="status">Nicht verbunden</pre>
+<p>Stop beendet lokale Audio-Prozesse sofort und fordert die Schließung der Voice-Sitzung an.
+Nur provider_finalized=true bestätigt die Schließung beim Anbieter.</p>
+<script>
+let timer;
+async function call(path,method='GET'){
+ const r=await fetch(path,{method,headers:{Authorization:'Bearer '+token.value}});
+ if(!r.ok)throw Error('Nicht autorisiert');return await r.json();
+}
+async function update(){try{document.querySelector('#status').textContent=JSON.stringify(await call('/status'),null,2)}catch{document.querySelector('#status').textContent='Verbindung beendet oder nicht autorisiert. last-status.json prüfen.'}}
+document.querySelector('#connect').onclick=()=>{clearInterval(timer);update();timer=setInterval(update,500)};
+document.querySelector('#stop').onclick=async()=>{try{await call('/stop','POST');document.querySelector('#status').textContent='Stopp angefordert'}catch{document.querySelector('#status').textContent='Stopp nicht bestätigt – Prozess mit SIGTERM stoppen.'}};
+</script></html>

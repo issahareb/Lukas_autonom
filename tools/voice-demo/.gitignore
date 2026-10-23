@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env*
+private/
+*.wav
+*.pcm
+control.token
+last-status.json

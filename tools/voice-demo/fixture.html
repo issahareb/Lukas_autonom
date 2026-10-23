@@ -1,0 +1,36 @@
+<!doctype html><html lang="de"><meta charset="utf-8">
+<title>Lokaler Interview-Simulator</title>
+<h1>Lokaler Interview-Simulator – keine Bewerbung</h1>
+<button onclick="start()">Mikrofon aktivieren</button>
+<button onclick="tone(440,1000)">Testton als Eva senden</button>
+<button onclick="stop()">Audio stoppen</button><pre id="state">Bereit</pre>
+<script>
+let ac, mic, analyser, source, osc, warmup, meter;
+window.micSegments=[];let voiced=false,lastSignal=0;
+window.samples=[];
+async function start(){
+ ac=new AudioContext({sampleRate:48000}); await ac.resume();
+ warmup=ac.createOscillator();let silent=ac.createGain();silent.gain.value=0;
+ warmup.connect(silent).connect(ac.destination);warmup.start();
+ mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+ source=ac.createMediaStreamSource(mic); analyser=ac.createAnalyser(); analyser.fftSize=2048;
+ source.connect(analyser); // Never connect the microphone to the speakers.
+ meter=setInterval(()=>{
+   const x=new Float32Array(analyser.fftSize);analyser.getFloatTimeDomainData(x);
+   const rms=Math.sqrt(x.reduce((s,v)=>s+v*v,0)/x.length),now=performance.now();
+   if(rms>.01){if(!voiced){micSegments.push({start:now});if(micSegments.length>1000)micSegments.shift();voiced=true;}lastSignal=now;}
+   else if(voiced&&now-lastSignal>160){micSegments[micSegments.length-1].end=lastSignal;voiced=false;}
+ },10);
+ state.textContent='Mikrofon aktiv – kein Mithören';
+}
+function tone(freq,ms){
+ osc=ac.createOscillator();osc.frequency.value=freq;
+ let gain=ac.createGain();gain.gain.value=.2;osc.connect(gain).connect(ac.destination);
+ osc.start();osc.stop(ac.currentTime+ms/1000);
+}
+function spectrum(){
+ const x=new Float32Array(analyser.frequencyBinCount);analyser.getFloatFrequencyData(x);
+ const peak=x.indexOf(Math.max(...x));return {hz:peak*ac.sampleRate/analyser.fftSize,db:x[peak]};
+}
+function stop(){clearInterval(meter);if(osc)try{osc.stop()}catch{};if(warmup)warmup.stop();if(mic)mic.getTracks().forEach(t=>t.stop());if(ac)ac.close();state.textContent='Gestoppt';}
+</script></html>
