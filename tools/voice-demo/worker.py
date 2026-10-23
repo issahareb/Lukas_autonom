@@ -300,13 +300,27 @@ class Worker:
                 self.browser=await pw.chromium.launch(executable_path=os.getenv('CHROMIUM','/usr/bin/chromium'),
                     headless=True, env=browser_env(), ignore_default_args=['--mute-audio'],
                     args=['--autoplay-policy=no-user-gesture-required','--disable-dev-shm-usage'])
-                ctx=await self.browser.new_context(permissions=['microphone'])
+                state=getattr(self.args,'browser_state',None)
+                ctx=await self.browser.new_context(permissions=['microphone'],
+                    **({'storage_state':state} if state else {}))
                 page=await ctx.new_page()
                 page.on('crash',lambda _:self.halt('browser_crash'))
                 page.on('close',lambda _:self.halt('browser_closed'))
-                # Only the local simulator is enabled until full acceptance.
-                await page.goto(f'http://127.0.0.1:{self.args.port}/fixture')
-                await page.evaluate('start()')
+                review_path=getattr(self.args,'eva_review',None)
+                surface=None
+                if review_path:
+                    from eva_surface import EvaSurface
+                    surface=EvaSurface(page)
+                    await surface.inspect()
+                    review=json.loads(Path(review_path).read_text())
+                    # Do not silently convert a test run into a real interview.
+                    if getattr(self.args,'test_script',None): raise ValueError('Modes conflict')
+                    ready=await surface.readiness()
+                    if ready['identity_fields_empty'] or not ready['security_check_complete']:
+                        raise ValueError('Eva requires operator review in existing application')
+                else:
+                    await page.goto(f'http://127.0.0.1:{self.args.port}/fixture')
+                    await page.evaluate('start()')
                 key=os.environ.get('OPENAI_API_KEY','')
                 if not key: raise ValueError('OPENAI_API_KEY missing')
                 context=Path(self.args.context).read_text()
@@ -330,6 +344,13 @@ class Worker:
                     tasks += [asyncio.create_task(self.guarded(c)) for c in
                               (self.capture(),self.play(),self.watchdog())]
                     self.status['state']='ready'
+                    if surface:
+                        result=await surface.start_reviewed(review)
+                        self.status.update(result)
+                        # The normal widget owns microphone permission and its session.
+                        # No direct interview endpoint, injected token or CAPTCHA work.
+                        await self.send({'type':'session.commentary.append',
+                            'delegation_id':None,'content':GREETING})
                     if getattr(self.args,'test_script',None):
                         tasks.append(asyncio.create_task(self.guarded(self.scripted_test(page))))
                     print('Demo bereit. Status/Stop: localhost:'+str(self.args.port),flush=True)
@@ -370,6 +391,8 @@ if __name__=='__main__':
     p.add_argument('--port',type=int,default=8765)
     p.add_argument('--max-seconds',type=int,default=660)
     p.add_argument('--test-script',help='Private JSON list of synthetic question WAV paths')
+    p.add_argument('--eva-review',help='Private reviewed acceptance/consent report; blocks on missing UI gates')
+    p.add_argument('--browser-state',help='Private Playwright state from the existing applicant session')
     a=p.parse_args()
     if not 1<=a.max_seconds<=660: p.error('max-seconds must be 1..660')
     asyncio.run(Worker(a).run())
