@@ -189,6 +189,9 @@ class Worker:
                 self.last_input_signal=now
             if self.speech_frames>=3 and not self.speech_active:
                 self.speech_active=True
+                if now-self.last_output<1 and self.last_output>self.created:
+                    await self.send({'type':'session.instructions.append','delegation_id':None,
+                        'content':'Der Gesprächspartner unterbricht gerade. Brich die bisherige Antwort sofort ab, auch eine eben erhaltene Delegationsantwort. Höre die neue Frage vollständig an und beantworte danach nur diese. Setze die alte Antwort nicht fort, außer er verlangt es ausdrücklich.'})
                 # Flush unsounded audio on a new input turn, including OS queue.
                 await self.audio.flush()
                 while not self.output.empty(): self.output.get_nowait()
