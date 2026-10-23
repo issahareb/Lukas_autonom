@@ -171,9 +171,12 @@ class Worker:
             await self.send({'type':'session.input_audio.append','audio':base64.b64encode(pcm).decode()})
 
     async def play(self):
+        due=time.monotonic()
         while not self.stop.is_set():
             generation,pcm=await self.output.get()
             if generation==self.audio.generation:
+                now=time.monotonic()
+                if now-due>.1: due=now
                 await self.audio.write(pcm)
                 if np.max(np.abs(np.frombuffer(pcm,dtype='<i2').astype(float)))>450:
                     self.last_activity=time.monotonic()
@@ -182,7 +185,8 @@ class Worker:
                         metric=self.question_metrics[self.awaiting_answer]
                         metric['question_end_to_playback_enqueue_ms']=round((self.last_output-metric['question_end_monotonic'])*1000,1)
                         self.awaiting_answer=None
-                await asyncio.sleep(len(pcm)/48000)
+                due+=len(pcm)/48000
+                await asyncio.sleep(max(0,due-time.monotonic()))
 
     async def scripted_test(self,page):
         """Play supplied synthetic question WAVs through browser speakers only."""
@@ -190,12 +194,13 @@ class Worker:
         script=json.loads(script_path.read_text())
         if not isinstance(script,list) or not 1<=len(script)<=20: raise ValueError('Invalid test script')
         await asyncio.sleep(8)  # Give the disclosed greeting time; no interview site involved.
+        interrupt_previous=False
         for item in script:
             wav=(script_path.parent/item['audio']).resolve()
             if not wav.is_relative_to(script_path.parent): raise ValueError('Invalid test path')
             data=wav.read_bytes()
             if len(data)>2_000_000: raise ValueError('Test clip too long')
-            while time.monotonic()-self.last_output<1.5 and not self.stop.is_set(): await asyncio.sleep(.1)
+            while not interrupt_previous and time.monotonic()-self.last_output<1.5 and not self.stop.is_set(): await asyncio.sleep(.1)
             if self.stop.is_set(): return
             timing=await page.evaluate('''async encoded=>{
                 const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
@@ -211,9 +216,10 @@ class Worker:
             sent=time.monotonic();deadline=sent+30
             self.question_metrics.append({'question':item.get('id',wav.stem),
                 'question_end_monotonic':sent,'question_end_to_playback_enqueue_ms':None,
-                'question_end_to_browser_mic_ms':None})
+                'question_end_to_browser_mic_ms':None,'interrupt_previous':interrupt_previous})
             self.awaiting_answer=len(self.question_metrics)-1
             while time.monotonic()<deadline and not self.stop.is_set():
+                if item.get('interrupt_next') and self.last_output>sent and time.monotonic()-sent>.6: break
                 if self.last_output>sent and time.monotonic()-self.last_output>2: break
                 await asyncio.sleep(.1)
             segments=await page.evaluate('micSegments')
@@ -221,6 +227,7 @@ class Worker:
             starts=[s['start'] for s in segments if s['start']>=timing['began']]
             if starts:
                 self.question_metrics[-1]['question_end_to_browser_mic_ms']=round(starts[0]-timing['speechEnd'],1)
+            interrupt_previous=bool(item.get('interrupt_next'))
         self.halt('scripted_test_finished')
 
     async def watchdog(self):
