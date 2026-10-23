@@ -1,6 +1,8 @@
 """One-shot read-only audit. Run in a separate service with no voice model."""
 import json
 import os
+import sys
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request,urlopen
 
@@ -15,7 +17,8 @@ def main():
         try:
             with urlopen(request,timeout=20) as response: matches=json.load(response)
         except Exception as exc:
-            print(json.dumps({'audit':'failed','error_type':type(exc).__name__,'writes':0}));return
+            print(json.dumps({'audit':'failed','error_type':type(exc).__name__,
+                              'http_status':exc.code if isinstance(exc,HTTPError) else None,'writes':0}));return 1
         if not isinstance(matches,list): raise SystemExit('Unexpected memory response')
         if len(matches)==200:truncated.append(term)
         for item in matches: rows[str(item['id'])]=item
@@ -31,4 +34,4 @@ def main():
             'canonical_demo_id':'issa-corporatellm-eva-demo-v1' in text})
     print('MEMORY_AUDIT '+json.dumps({'candidate_summaries':report,'possibly_truncated':truncated,'writes':0}))
 
-if __name__=='__main__':main()
+if __name__=='__main__':sys.exit(main() or 0)

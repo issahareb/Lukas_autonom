@@ -26,7 +26,9 @@ Dies ist eine offen gekennzeichnete Bewerbungsdemo. Stelle dich ausdrücklich al
 KI-Agent vor und frage, ob diese Demo vorgesehen ist. Bei Ablehnung oder Pflicht
 zur persönlichen Durchführung beende das Gespräch und bitte Issa zu übernehmen.
 Sprich Deutsch, zunächst zwei bis vier kurze Sätze. Beschreibe Issa in dritter
-Person. Nutze nur die vorab geprüften Fakten. Trenne Nutzerangaben, Codebelege
+Person. Begrenze normale Antworten auf höchstens drei Sätze und 60 Wörter.
+Vermeide ungefragte Zusatzvorträge; vertiefe nur auf Nachfrage.
+Nutze nur die vorab geprüften Fakten. Trenne Nutzerangaben, Codebelege
 und Ungeprüftes. Keine erfundenen Qualifikationen, Testerfolge oder Zusagen.
 Persönliche Erfahrungen, Wertungen und verbindliche Vertragsfragen muss Issa
 selbst beantworten. Du hast keine Aktionswerkzeuge und kannst keine Daten,
@@ -74,6 +76,8 @@ class Worker:
         self.created = time.monotonic()
         self.suppress_until = 0
         self.speech_frames = 0
+        self.speech_active = False
+        self.last_input_signal = 0
         self.delegations = set()
         self.connector = connector
         self.last_output = time.monotonic()
@@ -160,13 +164,18 @@ class Worker:
             rms=float(np.sqrt(np.mean(np.frombuffer(pcm,dtype='<i2').astype(float)**2)))
             now=time.monotonic()
             self.speech_frames = self.speech_frames+1 if rms>450 else 0
-            if rms>450: self.last_activity=now
-            if self.speech_frames==3:
+            if rms>450:
+                self.last_activity=now
+                self.last_input_signal=now
+            if self.speech_frames>=3 and not self.speech_active:
+                self.speech_active=True
                 # Flush unsounded audio on a new input turn, including OS queue.
                 await self.audio.flush()
                 while not self.output.empty(): self.output.get_nowait()
                 self.status['interruptions']+=1
-            if self.speech_frames>=3: self.suppress_until=now+.12
+            if self.speech_active:
+                if now-self.last_input_signal>.25: self.speech_active=False
+                else: self.suppress_until=now+.05
             # Continuous stream: never drop opening frames for local VAD.
             await self.send({'type':'session.input_audio.append','audio':base64.b64encode(pcm).decode()})
 
@@ -193,7 +202,11 @@ class Worker:
         script_path=Path(self.args.test_script).resolve()
         script=json.loads(script_path.read_text())
         if not isinstance(script,list) or not 1<=len(script)<=20: raise ValueError('Invalid test script')
-        await asyncio.sleep(8)  # Give the disclosed greeting time; no interview site involved.
+        await asyncio.sleep(2)
+        if self.last_output<=self.created+2:
+            await self.send({'type':'session.commentary.append','event_id':'demo_disclosure',
+                'delegation_id':None,'content':'Stelle dich jetzt hörbar vor und frage, ob die Demo vorgesehen ist: '+GREETING})
+        await asyncio.sleep(6)
         interrupt_previous=False
         for item in script:
             wav=(script_path.parent/item['audio']).resolve()
@@ -224,7 +237,8 @@ class Worker:
                 await asyncio.sleep(.1)
             segments=await page.evaluate('micSegments')
             # Measured at the browser microphone, not at network arrival/enqueue.
-            starts=[s['start'] for s in segments if s['start']>=timing['began']]
+            starts=[s['start'] for s in segments if s['start']>=timing['speechEnd']]
+            self.question_metrics[-1]['audio_overlap_during_question']=any(timing['began']<=s['start']<timing['speechEnd'] for s in segments)
             if starts:
                 self.question_metrics[-1]['question_end_to_browser_mic_ms']=round(starts[0]-timing['speechEnd'],1)
             interrupt_previous=bool(item.get('interrupt_next'))
