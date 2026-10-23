@@ -86,9 +86,26 @@ Die verlinkten Datenschutzhinweise wurden gelesen: vollständige Gesprächsaufna
 Transkript, KI-Auswertung, menschliche Bewerbungsentscheidung, Löschung/Anonymisierung
 180 Tage nach Abschluss; Widerruf per info@everlastconsulting.de. Keine ausdrückliche
 KI-Agenten-Zulassung oder persönliche Durchführungspflicht gefunden. Issas Aussage
-zur Demo-Zulassung bleibt als Nutzerangabe gekennzeichnet. Einwilligung zur konkreten
-Aufzeichnung ist angefragt, aber bisher nicht bestätigt.
+zur Demo-Zulassung bleibt als Nutzerangabe gekennzeichnet. Einwilligung zur Aufzeichnung dieser einen offenen Demo wurde inzwischen vom Nutzer ausdrücklich erteilt und privat dokumentiert.
 
 Private Nachweise liegen außerhalb des Repositorys in `/workspace/demo-private`.
 Die echten Testtranskripte enthalten nur synthetische Fragen und freigegebene
 Kontextantworten. Keine zusätzlichen Gesprächsaufnahmen wurden gespeichert.
+
+## Bedienzugang, Fortsetzung am Abend des 23.10.2026
+
+Ein eigener HTTPS-Zugang mit separatem Passwort steuert einen grafischen Chromium
+unter Xvfb im gleichen Audio-Worker. Cloudflare wird nicht automatisch bedient.
+API-Schlüssel bleiben serverseitig. Neue Bewerbungs-POSTs und der Telefonanrufpfad
+sind blockiert; ein Widget-Session-Anlegeversuch wird erst nach LUKAS-Verbindung
+und höchstens einmal pro Lauf erlaubt. Der Sofort-Stopp wartet nicht auf laufende
+Browserbedienung. Dreizehn lokale Tests bestanden in 22,758 Sekunden; nach der
+Korrektur des UI-Ladewartens bestanden die sechs betroffenen Tests erneut.
+
+Der erste echte Containerstart zeigte eine Lade-Race-Condition bei der Eva-CTA;
+das Warten auf die sichtbare Schaltfläche wurde ergänzt. Bei gesperrter Vorbereitung
+bleibt der Browser nun zur manuellen Bedienung offen. Der lokale Docker-Browser
+braucht die bereitgestellte Proxy-CA in seiner Zertifikatsdatenbank; keine TLS-Prüfung
+wurde abgeschaltet. Der Railway-Zugang ist im Deployment f455e6a8-dd7a-4c55-89f1-b139e2798bb6 mit SUCCESS und OPERATOR_READY bestätigt: ohne Authentifizierung liefert /screen 401, mit Authentifizierung liefern /status und das Browserbild 200. Name/E-Mail sind ausgefüllt, die zwei exakten Einwilligungen angehakt. Cloudflare zeigt eine manuell zu bedienende Prüfung. Kein Widget-Session-Startversuch wurde ausgelöst.
+
+Der Browser-Frontendtest lud das Live-Bild ohne JavaScript-Fehler. Ein Klick auf den Stopp-Schalter schloss den lokalen Container-Browser; der externe Railway-Browser blieb für den Nutzer offen. Aktueller letzter Status: `prepared=true`, `identity_fields_empty=false`, `consent_recorded=true`, `security_check_complete=false`, `attempt_used=false`, Interview nicht gestartet.

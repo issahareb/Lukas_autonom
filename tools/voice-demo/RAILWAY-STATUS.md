@@ -23,7 +23,7 @@ Suchergebnisse, keine Schreiboperation. Die Token-Referenz des Prüfjobs wurde
 anschließend geleert. Der vollständige Kontext liegt privat in der Worker-Variable
 `DEMO_CONTEXT_JSON` und lokal außerhalb des Repositorys.
 
-Beide zusätzlichen Dienste haben keine öffentliche Domain und Restart NEVER.
+Beide zusätzlichen Dienste haben Restart NEVER. Der Voice-Dienst hat jetzt ausschließlich für die passwortgeschützte Bedienseite die Domain lukas-voice-demo-production.up.railway.app; der Prüf-Dienst bleibt ohne öffentliche Domain.
 Der Prüf-Dienst wird nach dem Audit für den lesenden Eva-Oberflächencheck verwendet;
 er hat dabei kein produktives Token und keinen Modell-Key. Für einen separaten echten Netzwerkabbruchtest wurden OpenAI- und Kontextreferenzen kurzzeitig gesetzt und anschließend wieder geleert.
 
