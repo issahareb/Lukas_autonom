@@ -26,6 +26,7 @@ class Operator:
         self.worker_task=None;self.armed=False;self.used=False;self.closed=False
         self.created=time.monotonic();self.failure=None;self.failed_logins={}
         self.greeted=False;self.interview='nicht gestartet';self.lock=asyncio.Lock()
+        self.prepared=False;self.prepare_attempts=0
 
     @web.middleware
     async def secure(self,request,handler):
@@ -82,9 +83,17 @@ class Operator:
         ctx=await self.browser.new_context(viewport={'width':1100,'height':900},permissions=['microphone'])
         await ctx.route('https://career.corporatellm.de/**',self.guard)
         self.page=await ctx.new_page();self.surface=EvaSurface(self.page)
+        self.identity=json.loads(os.environ.pop('DEMO_APPLICANT_JSON'))
+        self.consent=json.loads(os.environ.pop('DEMO_CONSENT_JSON'))
+        try:await self.prepare()
+        except Exception as exc:self.failure=type(exc).__name__
+        self.monitor_task=asyncio.create_task(self.monitor())
+
+    async def prepare(self):
+        if self.used or self.worker or self.prepare_attempts>=3:raise ValueError('Preparation limit reached')
+        self.prepare_attempts+=1
         await self.surface.inspect()
-        identity=json.loads(os.environ.pop('DEMO_APPLICANT_JSON'))
-        consent=json.loads(os.environ.pop('DEMO_CONSENT_JSON'))
+        identity=self.identity;consent=self.consent
         if consent.get('recording_allowed') is not True or consent.get('processing_allowed') is not True:
             raise ValueError('Explicit consent missing')
         for placeholder,key in [('Max','first_name'),('Mustermann','last_name'),('max@beispiel.de','email')]:
@@ -94,11 +103,13 @@ class Operator:
         for label in (PRIVACY,RECORDING):
             await self.page.get_by_role('checkbox',name=label,exact=True).check()
         (PRIVATE/'consent.json').write_text(json.dumps(consent));(PRIVATE/'consent.json').chmod(0o600)
-        self.monitor_task=asyncio.create_task(self.monitor())
+        self.prepared=True;self.failure=None
 
     async def monitor(self):
         while not self.closed:
-            if self.worker and self.worker.stop.is_set():self.armed=False
+            if self.worker and self.worker.stop.is_set():
+                self.armed=False
+                if self.used:self.interview='abgebrochen'
             if self.used and self.page and not self.page.is_closed():
                 # Read only visible UI. No interview transcript or recording is saved.
                 listening=self.page.get_by_text('Ich höre zu',exact=True)
@@ -114,7 +125,7 @@ class Operator:
     async def status(self,request):
         ready=await self.surface.readiness() if self.page and not self.page.is_closed() else {}
         return web.json_response({'browser_open':bool(self.page and not self.page.is_closed()),
-            'checks':ready,'lukas':self.worker.status if self.worker else {'state':'nicht verbunden'},
+            'prepared':self.prepared,'checks':ready,'lukas':self.worker.status if self.worker else {'state':'nicht verbunden'},
             'interview':self.interview,'attempt_used':self.used,'armed':self.armed,
             'consent_recorded':True,'error_type':self.failure,
             'expires_in_seconds':max(0,3600-int(time.monotonic()-self.created))})
@@ -132,7 +143,10 @@ class Operator:
             if self.interview!='nicht gestartet':self.interview='abgebrochen'
             return web.json_response({'ok':True})
         async with self.lock:
-            if action=='connect':
+            if action=='prepare':
+                await self.prepare()
+            elif action=='connect':
+                if not self.prepared:raise web.HTTPConflict(text='Zuerst Interviewfenster vorbereiten.')
                 if self.worker or self.closed:raise web.HTTPConflict(text='Sitzung bereits verwendet')
                 ready=await self.surface.readiness()
                 if not ready['security_check_complete'] or ready['identity_fields_empty']:
@@ -143,7 +157,7 @@ class Operator:
                 for _ in range(400):
                     if self.worker.status['state']=='ready' or self.worker_task.done():break
                     await asyncio.sleep(.05)
-                if self.worker.status['state']!='ready':raise web.HTTPConflict(text='Sprachverbindung nicht bereit.')
+                if self.closed or self.worker.stop.is_set() or self.worker.status['state']!='ready':raise web.HTTPConflict(text='Sprachverbindung nicht bereit.')
                 self.armed=True
             elif action=='click':
                 x=float(data['x']);y=float(data['y'])
@@ -196,6 +210,9 @@ async def main():
         print('OPERATOR_READY: authenticated browser available; interview not started',flush=True)
         try:await asyncio.wait_for(stop.wait(),3600)
         except asyncio.TimeoutError:pass
+    except Exception as exc:
+        print('OPERATOR_START_FAILED '+type(exc).__name__,flush=True)
+        raise SystemExit(1)
     finally:await operator.close();await runner.cleanup()
 
 if __name__=='__main__':asyncio.run(main())

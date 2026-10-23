@@ -10,6 +10,7 @@ class EvaSurface:
 
     async def inspect(self):
         await self.page.goto(THANK_YOU,wait_until='domcontentloaded')
+        await self.page.get_by_role('button',name='Jetzt Vorsprung sichern',exact=True).wait_for(state='visible',timeout=20000)
         cookies=self.page.get_by_role('button',name='Nur Notwendige',exact=True)
         if await cookies.count()==1: await cookies.click()
         button=self.page.get_by_role('button',name='Jetzt Vorsprung sichern',exact=True)
