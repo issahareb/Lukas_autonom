@@ -12,7 +12,10 @@ def main():
     if '\r' in key or '\n' in key: raise SystemExit('LUKAS_API_TOKEN contains an internal line break; correct it in audit service Variables')
     rows={};truncated=[]
     for term in ('CorporateLLM','EVERLAST','Bewerbung','Eva','issa-corporatellm-eva-demo-v1'):
-        request=Request('https://lukas.issahareb.me/api/lukas/memories?'+urlencode({'search':term,'limit':200}),
+        host=os.environ.get('LUKAS_PRIVATE_HOST','')
+        if not host.endswith('.railway.internal') or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-.' for c in host):
+            raise SystemExit('Configure LUKAS_PRIVATE_HOST as Railway service private-domain reference')
+        request=Request('http://'+host+':8080/api/lukas/memories?'+urlencode({'search':term,'limit':200}),
                         headers={'Authorization':'Bearer '+key})
         try:
             with urlopen(request,timeout=20) as response: matches=json.load(response)
