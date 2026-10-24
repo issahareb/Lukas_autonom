@@ -1,6 +1,7 @@
 """Transcribe actual isolated audio, align utterances to PCM, never invent missing words."""
 import asyncio
 import hashlib
+from difflib import SequenceMatcher
 import io
 import json
 import os
@@ -63,6 +64,7 @@ async def transcribe(root):
                     w.setnchannels(1);w.setsampwidth(2);w.setframerate(RATE)
                     w.writeframes(pcm[int(start*RATE)*2:int(end*RATE)*2])
                 data=aiohttp.FormData();data.add_field('model','gpt-transcribe');data.add_field('language','de')
+                data.add_field('prompt','Eigennamen: Issa Hareb, LUKAS, TaxiBB Essen, GuardianGrid, Hareb Digital. Unverständliche Wörter als [unverständlich] markieren. Abgebrochene Wörter nicht vervollständigen.')
                 data.add_field('file',buf.getvalue(),filename='audio.wav',content_type='audio/wav')
                 async with client.post(base+'/audio/transcriptions',data=data,allow_redirects=False) as response:
                     if response.status!=200:raise RuntimeError('Transcription HTTP '+str(response.status))
@@ -72,6 +74,12 @@ async def transcribe(root):
                     'text':text or '[unverständlich]','flags':[],'audio_source':speaker+'.wav'})
     rows.sort(key=lambda r:(r['start'],r['speaker']))
     for row in rows:
+        candidates=[e.get('text','') for e in events if e.get('kind')=='transcript_delta' and e.get('speaker')==row['speaker'] and row['start']-2<=e['elapsed']<=row['end']+2]
+        if candidates:
+            normalize=lambda t:re.sub(r'[^a-zäöüß0-9]','',t.lower())
+            similarity=SequenceMatcher(None,normalize(row['text']),normalize(''.join(candidates))).ratio()
+            row['live_text_similarity']=round(similarity,3)
+            if similarity<.8:row['flags'].append('Unsichere Erkennung: Abweichung zur Live-Transkription; Tonspur prüfen, keine Wörter ergänzt')
         if any(other['speaker']!=row['speaker'] and max(other['start'],row['start'])<min(other['end'],row['end']) for other in rows):row['flags'].append('Überlappung; Zeitfenster anhand Tonspur')
         if row['speaker']=='LUKAS' and any(row['start']<=t<=row['end']+.4 for t in interruptions):row['flags'].append('Unterbrechung erkannt; Wortende prüfen')
         if row['end']-row['start']>=24:row['flags'].append('Technische Segmentgrenze; Fortsetzung möglich')

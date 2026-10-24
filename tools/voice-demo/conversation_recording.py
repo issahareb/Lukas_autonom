@@ -37,13 +37,13 @@ class ConversationRecording:
                 output = self.private_file(speaker+'.wav')
                 wav = wave.open(output, 'wb')
                 wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(24000)
-                self.event('audio_start', speaker=speaker)
-                self.tasks.append(asyncio.create_task(self.pump(proc, wav, output)))
+                self.tasks.append(asyncio.create_task(self.pump(proc, wav, output, speaker)))
         except BaseException:
             await self.close('recording_start_failed')
             raise
 
-    async def pump(self, proc, wav, output):
+    async def pump(self, proc, wav, output, speaker):
+        first=True
         remaining = 24000 * 2 * 660
         try:
             while remaining:
@@ -51,6 +51,9 @@ class ConversationRecording:
                 if not pcm:
                     if not self.closed: raise RuntimeError('Recording stream ended')
                     return
+                if first:
+                    self.event('audio_start',speaker=speaker,elapsed=round(max(0,time.monotonic()-self.started-len(pcm)/48000),3),alignment='first PCM arrival minus block duration; approximate')
+                    first=False
                 wav.writeframesraw(pcm); remaining -= len(pcm)
             if not self.closed: raise RuntimeError('Recording limit reached')
         finally:

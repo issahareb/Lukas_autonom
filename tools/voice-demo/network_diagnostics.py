@@ -8,8 +8,9 @@ from urllib.parse import urlsplit
 def safe_url(url):
     u=urlsplit(url);host=u.hostname or ''
     path=u.path
-    if host=='challenges.cloudflare.com' and '/challenge-platform/' in path:
-        path='/cdn-cgi/challenge-platform/[opaque-path-redacted]'
+    if (host=='challenges.cloudflare.com' or host.endswith('.challenges.cloudflare.com')) and '/challenge-platform/' in path:
+        category=next((part for part in ('pat','turnstile','flow','orchestrate') if '/'+part+'/' in path),'other')
+        path='/cdn-cgi/challenge-platform/'+category+'/[opaque-path-redacted]'
     else:
         path='/'.join('[redacted]' if len(p)>70 or '@' in p else p for p in path.split('/'))
     return f'{u.scheme}://{host}{path}'+('?REDACTED' if u.query else '')
