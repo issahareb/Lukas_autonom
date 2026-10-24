@@ -1,3 +1,4 @@
+import { telefonNummer } from "./telefon-nummer";
 import { db, telefonNummern } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import type { TelefonKontext } from "./telnyx";
@@ -26,8 +27,8 @@ export function telefonOwnerContactId(input: {
   if (!configured || input.id !== configured || input.stufe !== "privat" || strict() ||
       context?.richtung !== "eingehend" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(context.id) ||
       !/^\+[1-9]\d{5,14}$/.test(context.nummer) || !Number.isFinite(context.exp) || context.exp <= Date.now()) return undefined;
-  const normal = (value: string) => value.replace(/[^0-9]/g, "").replace(/^00/, "");
-  return normal(input.nummer) === normal(context.nummer) ? configured : undefined;
+  const number = telefonNummer(input.nummer);
+  return number && number === telefonNummer(context.nummer) ? configured : undefined;
 }
 
 /** Read-only startup lookup; never logs or returns phone numbers or contact names. */
