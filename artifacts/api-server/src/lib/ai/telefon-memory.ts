@@ -1,4 +1,5 @@
 /** Contact-scoped telephone history. Never grants tools or changes contact permissions. */
+import { telefonNummer } from "../telefon-nummer";
 import { pool } from "@workspace/db";
 import { logger } from "../logger";
 
@@ -21,9 +22,7 @@ export type PhoneMemory = {
   close: (complete?: boolean) => Promise<void>;
 };
 export function phoneNumber(value: string): string {
-  const sip = value.match(/sip:([^@;>]+)/i);
-  const number = (sip?.[1] ?? value).replace(/[^0-9]/g, "").replace(/^00/, "");
-  return /^[1-9]\d{5,14}$/.test(number) ? number : "";
+  return telefonNummer(value);
 }
 /** Byte budgets are conservative upper bounds on the startup token budget. */
 export function boundedText(value: string, limit: number): string {

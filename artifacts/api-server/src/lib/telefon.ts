@@ -27,6 +27,7 @@ import type { OwnerCallGrant } from "./owner-call-grant";
 import { istTelnyx, telnyxWaehle, type TelefonKontext } from "./telnyx";
 import { neuerVerfolgterAnruf, aktualisiereAnruf } from "./telefon-status";
 import { findeTelefonKontakte, telefonKontakte } from "./telefon-kontakte";
+import { telefonNummer } from "./telefon-nummer";
 import { telefonOwnerContactId } from "./telefon-owner";
 import { aktuellerAnruf } from "./telefon-laufend";
 
@@ -40,9 +41,7 @@ export type Stufe = "privat" | "oeffentlich" | "gesperrt";
  * deshalb ausschliesslich die Ziffernfolge — genau wie bei WhatsApp.
  */
 export function normalisiere(roh: string): string {
-  const nurZiffern = roh.replace(/[^0-9]/g, "");
-  // Fuehrende Amtsnullen wegwerfen: 0049… und +49… sind dieselbe Nummer.
-  return nurZiffern.replace(/^00/, "");
+  return telefonNummer(roh);
 }
 
 /** Die Nummer aus einem SIP-From-Header ziehen ("Name" <sip:49151…@host>). */
@@ -306,7 +305,7 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
       ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 1000)}`
       : `Ein Anrufer hat dich erreicht. ${name ? `Die Rufnummer ist dem Kontakt ${name} zugeordnet. ` : ""}${name ? "Prüfe frühere Telefonhistorie zu diesem Kontakt, wenn der Anrufer daran anknüpft. " : ""}Begrüße kurz.`) +
       (ownerContactId !== undefined
-        ? " Dies ist die serverseitig freigegebene private Owner-Sitzung. Das Backend darf konkrete Aufgaben und Codezugriff mit seinen Werkzeugen bearbeiten. Delegiere solche Aufträge; dein eigener Code liegt im Repository Lukas_autonom. Behaupte keine Ausführung ohne bestätigtes Backend-Ergebnis."
+        ? " Dies ist die serverseitig freigegebene private Owner-Sitzung mit Issa Hareb, Gründer und Inhaber von Hareb Digital. Sprich Issa direkt mit du an; behandle ihn nicht als fremden Interessenten. Nutze das öffentliche Firmenwissen und delegiere private Fragen an das Backend. Das Backend darf konkrete Aufgaben und Codezugriff mit seinen Werkzeugen bearbeiten. Delegiere solche Aufträge; dein eigener Code liegt im Repository Lukas_autonom. Behaupte keine Ausführung ohne bestätigtes Backend-Ergebnis."
         : ""),
     allowTools: ownerContactId !== undefined,
     ...(ownerContactId !== undefined ? { telefonOwnerContactId: ownerContactId } : {}),
