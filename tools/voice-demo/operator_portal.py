@@ -19,6 +19,7 @@ import zipfile
 import uuid
 from datetime import datetime, timezone
 from network_diagnostics import Diagnostics
+from storage_paths import archive_mounted
 from transcribe_recording import safe_transcribe, private_json
 
 ROOT=Path(__file__).parent
@@ -36,7 +37,7 @@ class Operator:
         self.greeted=False;self.interview='nicht gestartet';self.lock=asyncio.Lock()
         self.prepared=False;self.prepare_attempts=0
         self.recording=None;self.transcription_task=None;self.test_task=None
-        self.diagnostics=None;self.archive_ready=False
+        self.diagnostics=None;self.archive_ready=False;self.test_actions=set()
 
     @web.middleware
     async def secure(self,request,handler):
@@ -96,7 +97,7 @@ class Operator:
         cp=PRIVATE/'context.json';cp.write_text(context);cp.chmod(0o600)
         self.context_path=cp
         ARCHIVE.mkdir(parents=True,exist_ok=True,mode=0o700);ARCHIVE.chmod(0o700)
-        self.archive_ready=os.path.ismount('/data') or os.getenv('DEMO_ALLOW_LOCAL_STORAGE')=='1'
+        self.archive_ready=archive_mounted() or os.getenv('DEMO_ALLOW_LOCAL_STORAGE')=='1'
         self.diagnostics=Diagnostics(ARCHIVE.parent/'network-diagnostics.json')
         self.pw=await async_playwright().start()
         proxy=os.environ.get('HTTPS_PROXY')
@@ -168,6 +169,8 @@ class Operator:
     async def action(self,request):
         data=await request.json();action=request.match_info['action']
         if action=='stop':
+            if self.test_task and not self.test_task.done():
+                self.test_task.cancel();await asyncio.gather(self.test_task,return_exceptions=True)
             self.armed=False;self.closed=True
             if self.worker:self.worker.halt('operator_stop')
             elif self.browser:await self.browser.close()
@@ -177,11 +180,14 @@ class Operator:
         async with self.lock:
             if action=='prepare':
                 await self.prepare()
-            elif action=='recording-test':
-                if self.used or self.worker or self.test_task:raise web.HTTPConflict(text='Test bereits ausgeführt oder Sitzung aktiv.')
+            elif action in ('recording-test','voice-test'):
+                if self.used or self.worker or action in self.test_actions or (self.test_task and not self.test_task.done()):raise web.HTTPConflict(text='Test bereits ausgeführt oder Sitzung aktiv.')
                 if not self.archive_ready:raise web.HTTPConflict(text='Privates Volume fehlt.')
-                from recording_test_job import run_test
-                self.test_task=asyncio.create_task(run_test(self.new_archive('test'),self.consent))
+                from recording_test_job import run_test, run_voice_test
+                self.test_actions.add(action)
+                root=self.new_archive('test')
+                job=run_voice_test(root,self.consent,self.context_path) if action=='voice-test' else run_test(root,self.consent)
+                self.test_task=asyncio.create_task(job)
             elif action=='connect':
                 if self.test_task and not self.test_task.done():raise web.HTTPConflict(text='Test läuft.')
                 if not self.prepared:raise web.HTTPConflict(text='Zuerst Interviewfenster vorbereiten.')

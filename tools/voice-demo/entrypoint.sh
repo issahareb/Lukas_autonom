@@ -3,7 +3,7 @@ set -eu
 umask 077
 mkdir -p "$DEMO_RUNTIME"
 chmod 700 "$DEMO_RUNTIME"
-sh /app/pulse.sh >/dev/null 2>&1 &
+sh /app/pulse.sh >"$DEMO_RUNTIME/pulse-startup.log" 2>&1 &
 PULSE_PID=$!
 WORKER_PID=
 cleanup() {
@@ -15,7 +15,7 @@ trap cleanup EXIT
 trap 'exit 143' TERM INT
 i=0
 until pactl info >/dev/null 2>&1; do
-  i=$((i+1)); [ "$i" -le 30 ] || exit 1
+  i=$((i+1)); [ "$i" -le 30 ] || { echo "AUDIO_START_FAILED"; exit 1; }
   sleep .1
 done
 python /app/"$@" &

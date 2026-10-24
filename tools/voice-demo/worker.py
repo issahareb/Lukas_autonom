@@ -196,7 +196,8 @@ class Worker:
                     await self.send({'type':'session.instructions.append','delegation_id':None,
                         'content':'Der Gesprächspartner unterbricht gerade. Brich die bisherige Antwort sofort ab, auch eine eben erhaltene Delegationsantwort. Höre die neue Frage vollständig an und beantworte danach nur diese. Setze die alte Antwort nicht fort, außer er verlangt es ausdrücklich.'})
                 # Flush unsounded audio on a new input turn, including OS queue.
-                if self.recording:self.recording.event('interruption',speaker='LUKAS')
+                if self.recording and now-self.last_output<1 and self.last_output>self.created:
+                    self.recording.event('interruption',speaker='LUKAS')
                 await self.audio.flush()
                 while not self.output.empty(): self.output.get_nowait()
                 self.status['interruptions']+=1
@@ -298,7 +299,7 @@ class Worker:
         tokenfile=private/'control.token';tokenfile.write_text(self.token);tokenfile.chmod(0o600)
         server=await asyncio.start_server(self.control,'127.0.0.1',self.args.port,limit=8192)
         tasks=[]
-        if not self.prepared_page:
+        if not self.prepared_page and not getattr(self.args,'managed_signals',False):
             for sig in (signal.SIGINT,signal.SIGTERM):
                 asyncio.get_running_loop().add_signal_handler(sig,self.halt,'signal')
         try:
