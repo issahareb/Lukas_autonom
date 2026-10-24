@@ -180,13 +180,13 @@ class Operator:
         async with self.lock:
             if action=='prepare':
                 await self.prepare()
-            elif action in ('recording-test','voice-test'):
+            elif action in ('recording-test','voice-test','voice-test-baseline'):
                 if self.used or self.worker or action in self.test_actions or (self.test_task and not self.test_task.done()):raise web.HTTPConflict(text='Test bereits ausgeführt oder Sitzung aktiv.')
                 if not self.archive_ready:raise web.HTTPConflict(text='Privates Volume fehlt.')
                 from recording_test_job import run_test, run_voice_test
                 self.test_actions.add(action)
                 root=self.new_archive('test')
-                job=run_voice_test(root,self.consent,self.context_path) if action=='voice-test' else run_test(root,self.consent)
+                job=run_voice_test(root,self.consent,self.context_path,baseline=action=='voice-test-baseline') if action.startswith('voice-test') else run_test(root,self.consent)
                 self.test_task=asyncio.create_task(job)
             elif action=='connect':
                 if self.test_task and not self.test_task.done():raise web.HTTPConflict(text='Test läuft.')
@@ -269,7 +269,7 @@ class Operator:
         if not (root/'README.txt').exists():raise web.HTTPConflict(text='Aufnahme noch nicht abgeschlossen oder nach Absturz unvollständig.')
         data=io.BytesIO()
         with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as archive:
-            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json'):
+            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json','content-timing.json'):
                 path=root/name
                 if path.is_file():archive.write(path,name)
         return web.Response(body=data.getvalue(),content_type='application/zip',headers={'Content-Disposition':'attachment; filename=eva-lukas-gespraech.zip'})

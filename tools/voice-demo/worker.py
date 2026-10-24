@@ -23,7 +23,8 @@ from audio import Audio, FRAME
 ROOT = Path(__file__).parent
 RULES = '''Du bist LUKAS, Issa Harebs KI-Agent, niemals Issa selbst.
 Dies ist eine offen gekennzeichnete Bewerbungsdemo. Stelle dich ausdrücklich als
-KI-Agent vor und frage, ob diese Demo vorgesehen ist. Bei Ablehnung oder Pflicht
+KI-Agent vor und gehe danach direkt auf Eva ein, ohne um die Übernahme des
+Gesprächs zu bitten. Bei ausdrücklicher Ablehnung oder Pflicht
 zur persönlichen Durchführung beende das Gespräch und bitte Issa zu übernehmen.
 Sprich Deutsch, zunächst zwei bis vier kurze Sätze. Beschreibe Issa in dritter
 Person. Begrenze normale Antworten auf höchstens drei Sätze und 60 Wörter.
@@ -40,7 +41,7 @@ Keine Kontaktdaten oder vertraulichen Informationen ergänzen.
 GREETING = ('Hallo Eva, ich bin LUKAS, ein von Issa Hareb entwickelter KI-Agent. '
             'Issa möchte mich als praktische Demonstration seines Projekts vorstellen. '
             'Ich bin nicht Issa selbst. Ich kann seine Arbeitsweise und die überprüften '
-            'technischen Details seiner Projekte erläutern. Ist diese Demo in diesem Gespräch vorgesehen?')
+            'technischen Details seiner Projekte erläutern.')
 
 def session_config(context):
     return {'model': 'gpt-live-1', 'store': False,
@@ -87,21 +88,57 @@ class Worker:
         self.awaiting_answer = None
         self.context = ''
         self.recording = None
+        self.latest_question = ''
+        self.new_question = True
+        self.pending_audio = []
+        self.timeline = []
+        self.legacy = bool(getattr(args, 'baseline', False))
 
     def knowledge_parts(self):
         data=json.loads(self.context)
-        # Exact local facts only. Never consult tools or model-supplied URLs.
-        records=[json.dumps(data.get('user_confirmed',{}),ensure_ascii=False)]
+        # Local selection only; question text can never choose a URL or an operation.
+        question=self.latest_question.casefold()
+        aliases={'LUKAS':['lukas','backend','dashboard'], 'TaxiBB Essen':['taxi','taxibb'],
+                 'GuardianGrid':['guardian','destiny','bungie'],
+                 'Persönliches Portfolio':['portfolio'], 'Hareb Digital':['hareb digital','studio']}
+        records=[]
+        facts=data.get('user_confirmed',{})
+        if self.legacy:
+            records.append(json.dumps(facts,ensure_ascii=False))
+        else:
+            topics={'experience':['erfahrung','jahr','ausbildung','studium'],
+                    'workflow':['arbeit','smartphone','codex','claude','werkzeug'],
+                    'strengths':['stärke','umsetz','problem'], 'availability':['start','verfüg'],
+                    'salary':['gehalt','euro'], 'studio':['neben','studio']}
+            selected={k:v for k,v in facts.items() if k in topics and any(t in question for t in topics[k])}
+            if selected: records.append('NUTZERBESTÄTIGT: '+json.dumps(selected,ensure_ascii=False))
         for project in data.get('projects',[]):
-            records.append(project['name']+': CODEGEPRÜFT: '+
-                json.dumps(project['code_verified'],ensure_ascii=False)+' Grenzen: '+project['limits'])
-        for record in records:
-            words=record.split();part=''
-            for word in words:
-                if len(part)+len(word)>650:
-                    yield part;part=''
-                part+=word+' '
-            if part: yield part
+            if self.legacy or any(t in question for t in aliases.get(project['name'],[project['name'].casefold()])):
+                verified=project['code_verified']
+                # Send matching factual fields where possible; limits always travel with them.
+                if not self.legacy and isinstance(verified,dict):
+                    terms=[t.strip('.,?!') for t in question.split() if len(t)>4]
+                    matching={k:v for k,v in verified.items() if any(t in (k+' '+str(v)).casefold() for t in terms)}
+                    if matching: verified=matching
+                records.append(project['name']+': CODEGEPRÜFT: '+json.dumps(verified,ensure_ascii=False)+' Grenzen: '+project['limits'])
+        if not records:
+            records=['Der vollständige freigegebene Kontext ist bereits in den Sitzungsinstruktionen. Verwende nur dort belegte Fakten. Unbekannte Zahlen und persönliche Zusagen nicht ergänzen. Keine Aktionen möglich.']
+        text=' '.join(records)
+        if not self.legacy and len(text)>2200:
+            text=text[:2000].rsplit(' ',1)[0]+' [Auszug gekürzt; vollständige Fakten und Grenzen stehen im Anfangskontext.]'
+        words=text.split();part=''
+        for word in words:
+            if len(part)+len(word)>650:
+                yield part;part=''
+            part+=word+' '
+        if part: yield part
+
+    def enqueue_pcm(self, pcm):
+        for i in range(0,len(pcm),FRAME):
+            try: self.output.put_nowait((self.audio.generation,pcm[i:i+FRAME]))
+            except asyncio.QueueFull:
+                self.status['error_type']='QueueFull'
+                self.halt('output_overflow');break
 
     def halt(self, reason):
         if not self.stop.is_set(): self.status.update(state='stopping', reason=reason)
@@ -144,24 +181,36 @@ class Worker:
             elif kind == 'session.output_audio.delta' and not self.stop.is_set():
                 pcm=base64.b64decode(event['delta'], validate=True)
                 if len(pcm)%2: raise ValueError('Invalid PCM')
-                if time.monotonic() < self.suppress_until: continue
-                for i in range(0,len(pcm),FRAME):
-                    try: self.output.put_nowait((self.audio.generation,pcm[i:i+FRAME]))
-                    except asyncio.QueueFull:
-                        self.status['error_type']='QueueFull'
-                        self.halt('output_overflow');break
+                now=time.monotonic()
+                if getattr(self.args,'test_script',None) and pcm:
+                    self.timeline.append({'kind':'receive_audio','time':now,'voiced':bool(np.max(np.abs(np.frombuffer(pcm,dtype='<i2').astype(float)))>450)})
+                if self.legacy:
+                    if now < self.suppress_until: continue
+                elif self.speech_active:
+                    # Keep the onset during the quiet tail; renewed speech discards it.
+                    if sum(map(len,self.pending_audio))+len(pcm)>96000:
+                        self.halt('pending_audio_overflow');continue
+                    self.pending_audio.append(pcm);continue
+                self.enqueue_pcm(pcm)
             elif kind == 'session.delegation.created':
                 # No model-generated operation is executed, even if requested.
                 d=event.get('delegation',{});ident=d.get('id')
                 if ident and ident not in self.delegations:
                     self.delegations.add(ident)
                     if len(self.delegations)>30: self.halt('delegation_limit');continue
-                    for part in self.knowledge_parts():
+                    parts=list(self.knowledge_parts())
+                    if getattr(self.args,'test_script',None):
+                        self.timeline.append({'kind':'knowledge','time':time.monotonic(),'characters':sum(map(len,parts))})
+                    for part in parts:
                         await self.send({'type':'session.thinking.append','delegation_id':ident,
                             'content':part})
                     await self.send({'type':'session.commentary.append','delegation_id':ident,
                         'content':'Die angehängten lokalen Quellen sind geprüft. Beantworte die aktuelle Frage konkret anhand ihrer Fakten, insbesondere Architektur und technische Beispiele. Nur tatsächlich fehlende Angaben sind unbekannt. Es gibt keine Aktionen oder verbindlichen Zusagen. Antworte in höchstens drei Sätzen.'})
             elif kind in ('session.input_transcript.delta','session.output_transcript.delta'):
+                if 'output_' in kind: self.new_question=True
+                if 'input_' in kind:
+                    if self.new_question: self.latest_question='';self.new_question=False
+                    self.latest_question=(self.latest_question+str(event.get('delta','')))[-2500:]
                 if self.recording:
                     self.recording.event('transcript_delta', speaker='Eva' if 'input_' in kind else 'LUKAS', text=str(event.get('delta',''))[:4000], provisional=True)
                 if getattr(self.args,'test_script',None):
@@ -190,6 +239,7 @@ class Worker:
             if rms>450:
                 self.last_activity=now
                 self.last_input_signal=now
+                self.pending_audio.clear()
             if self.speech_frames>=3 and not self.speech_active:
                 self.speech_active=True
                 if now-self.last_output<1 and self.last_output>self.created:
@@ -202,8 +252,12 @@ class Worker:
                 while not self.output.empty(): self.output.get_nowait()
                 self.status['interruptions']+=1
             if self.speech_active:
-                if now-self.last_input_signal>.25: self.speech_active=False
-                else: self.suppress_until=now+.05
+                quiet=now-self.last_input_signal
+                if quiet>(.25 if self.legacy else .12):
+                    self.speech_active=False
+                    for held in self.pending_audio: self.enqueue_pcm(held)
+                    self.pending_audio.clear()
+                elif self.legacy: self.suppress_until=now+.05
             # Continuous stream: never drop opening frames for local VAD.
             await self.send({'type':'session.input_audio.append','audio':base64.b64encode(pcm).decode()})
 
@@ -218,6 +272,8 @@ class Worker:
                 if np.max(np.abs(np.frombuffer(pcm,dtype='<i2').astype(float)))>450:
                     self.last_activity=time.monotonic()
                     self.last_output=self.last_activity
+                    if getattr(self.args,'test_script',None):
+                        self.timeline.append({'kind':'play_audio','time':self.last_output})
                     if self.awaiting_answer is not None:
                         metric=self.question_metrics[self.awaiting_answer]
                         metric['question_end_to_playback_enqueue_ms']=round((self.last_output-metric['question_end_monotonic'])*1000,1)
@@ -233,7 +289,7 @@ class Worker:
         await asyncio.sleep(2)
         if self.last_output<=self.created+2:
             await self.send({'type':'session.commentary.append','event_id':'demo_disclosure',
-                'delegation_id':None,'content':'Stelle dich jetzt hörbar vor und frage, ob die Demo vorgesehen ist: '+GREETING})
+                'delegation_id':None,'content':'Stelle dich jetzt hörbar als Issas KI-Agent vor, dann höre zu: '+GREETING})
         await asyncio.sleep(6)
         interrupt_previous=False
         for item in script:
@@ -243,6 +299,12 @@ class Worker:
             if len(data)>2_000_000: raise ValueError('Test clip too long')
             while not interrupt_previous and time.monotonic()-self.last_output<1.5 and not self.stop.is_set(): await asyncio.sleep(.1)
             if self.stop.is_set(): return
+            before=time.monotonic();browser_now=await page.evaluate('performance.now()');after=time.monotonic()
+            offset=(before+after)/2-browser_now/1000
+            rtt=None
+            if hasattr(self.ws,'ping'):
+                ping_start=time.monotonic();pong=await self.ws.ping();await asyncio.wait_for(pong,5)
+                rtt=round((time.monotonic()-ping_start)*1000,1)
             timing=await page.evaluate('''async encoded=>{
                 const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
                 const buffer=await ac.decodeAudioData(bytes.buffer);
@@ -256,7 +318,10 @@ class Worker:
             }''',base64.b64encode(data).decode())
             sent=time.monotonic();deadline=sent+30
             self.question_metrics.append({'question':item.get('id',wav.stem),
-                'question_end_monotonic':sent,'question_end_to_playback_enqueue_ms':None,
+                'question_end_monotonic':offset+timing['speechEnd']/1000,
+                'clock_sync_uncertainty_ms':round((after-before)*500,2),'websocket_ping_rtt_ms':rtt,
+                'browser_question_end_ms':timing['speechEnd'],'browser_question_start_ms':timing['began'],
+                'question_end_to_playback_enqueue_ms':None,
                 'question_end_to_browser_mic_ms':None,'interrupt_previous':interrupt_previous})
             self.awaiting_answer=len(self.question_metrics)-1
             while time.monotonic()<deadline and not self.stop.is_set():
@@ -270,6 +335,16 @@ class Worker:
             if starts:
                 self.question_metrics[-1]['question_end_to_browser_mic_ms']=round(starts[0]-timing['speechEnd'],1)
             interrupt_previous=bool(item.get('interrupt_next'))
+        # Re-evaluate all turns, including fast/brief audio before a scripted interruption.
+        segments=await page.evaluate('micSegments')
+        for i,metric in enumerate(self.question_metrics):
+            end=metric['question_end_monotonic']
+            upper=self.question_metrics[i+1]['question_end_monotonic'] if i+1<len(self.question_metrics) else time.monotonic()
+            for kind,key in [('receive_audio','question_end_to_provider_audio_received_ms'),('play_audio','question_end_to_playback_enqueue_ms')]:
+                times=[t['time'] for t in self.timeline if t['kind']==kind and t.get('voiced',True) and end<=t['time']<upper]
+                metric[key]=round((min(times)-end)*1000,1) if times else None
+            starts=[x['start'] for x in segments if metric['browser_question_end_ms']<=x['start']<(upper-offset)*1000]
+            metric['question_end_to_browser_mic_ms']=round(min(starts)-metric['browser_question_end_ms'],1) if starts else None
         # Exercise the exact operator Stop endpoint against the live provider.
         reader,writer=await asyncio.open_connection('127.0.0.1',self.args.port)
         writer.write(('POST /stop HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer '+self.token+'\r\n\r\n').encode())

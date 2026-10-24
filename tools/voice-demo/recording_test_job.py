@@ -57,7 +57,7 @@ async def run_test(root,consent):
         await rec.close('test_failure')
         private_json(root/'test-report.json',{'synthetic':True,'state':'failed','error_type':type(e).__name__})
 
-async def run_voice_test(root,consent,context_path):
+async def run_voice_test(root,consent,context_path,baseline=False):
     """Real provider dialogue on the local fixture, with recording and transcription."""
     import argparse
     from worker import Worker
@@ -77,15 +77,19 @@ async def run_voice_test(root,consent,context_path):
             path.chmod(0o600);script.append({'id':ident,'audio':path.name,'interrupt_next':interrupt})
         script_path=private/'script.json';private_json(script_path,script)
         args=argparse.Namespace(context=str(context_path),private_dir=str(private),port=8877,max_seconds=240,
-            test_script=str(script_path),managed_signals=True)
+            test_script=str(script_path),managed_signals=True,baseline=baseline)
         worker=Worker(args);worker.recording=rec
         await rec.start()
         await asyncio.wait_for(worker.run(),270)
         await rec.close('real_model_test_stop')
         private_json(root/'test-report.json',{'kind':'real_model_voice_test','status':worker.status,
+            'variant':'baseline' if baseline else 'optimized','timeline':worker.timeline,
             'metrics':worker.question_metrics,'context_loaded':bool(worker.context),'real_interview_started':False,
             'transcription':'pending'})
         rows=await safe_transcribe(root)
+        from content_timing import measure_content
+        try: await measure_content(root,worker,rec)
+        except Exception as e: private_json(root/'content-timing.json',{'state':'failed','error_type':type(e).__name__})
         # Separate actual transport-loss test, never contacting the interview surface.
         fault_dir=root/'fault';fault_dir.mkdir(mode=0o700)
         fault=Worker(argparse.Namespace(context=str(context_path),private_dir=str(fault_dir),port=8878,max_seconds=30,managed_signals=True))
@@ -105,6 +109,7 @@ async def run_voice_test(root,consent,context_path):
         finally:
             if not task.done():fault.halt('test_cleanup');await task
         private_json(root/'test-report.json',{'kind':'real_model_voice_test','status':worker.status,
+            'variant':'baseline' if baseline else 'optimized','timeline':worker.timeline,
             'metrics':worker.question_metrics,'context_loaded':bool(worker.context),'real_interview_started':False,
             'transcription':'completed' if rows is not None else 'failed','fault':fault_report})
     except BaseException as e:
