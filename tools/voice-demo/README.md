@@ -126,3 +126,33 @@ Zusätzliche private Variablen: `DEMO_APPLICANT_JSON`, `DEMO_CONSENT_JSON`,
 `DEMO_OPERATOR_PASSWORD`. Sie werden weder committed noch an Chromium als
 Umgebungsvariablen weitergereicht. Das Browserbild und die Steuerung benötigen
 Authentifizierung; Zugriffslogs der Bedienanwendung sind deaktiviert.
+
+
+### Latenzvergleich und Inhaltsbeginn
+
+Authentifizierte POST-Aktionen `voice-test-baseline` und `voice-test` spielen
+je dieselben fünf lokalen Fragen ab. Jede Variante ist einmal pro Prozess
+zulässig; Tests dürfen nicht parallel oder während eines Interviews laufen.
+Baseline verwendet die frühere Faktenübergabe und Audio-Unterdrückung.
+Die reguläre Verbindung nutzt gezielte Fakten und puffert den Antwortbeginn
+während der kurzen Stille nach einer Unterbrechung. Die Vorstellung benennt
+LUKAS ausdrücklich als KI-Agent, ohne nach Erlaubnis zur Übernahme zu fragen.
+Ausdrückliche Ablehnung bzw. eine Pflicht zur persönlichen Durchführung gilt weiter.
+
+`test-report.json` unterscheidet Browser-Frageende, erstes stimmhaftes
+Provider-Audio, Übergabe an PulseAudio und Erkennung am Browsermikrofon.
+Die Browseruhr wird gegen die monotone Prozessuhr kalibriert; die halbe
+Messdauer wird als Unsicherheit angegeben. WebSocket-Ping ist nur RTT,
+keine separate Messung der Modelllaufzeit. Browsermessung: 10-ms-Abtastung
+mit 2048 Samples bei 48 kHz, daher keine samplegenauen Zeitangaben.
+
+Wortzeitstempel aus `content-timing.json` sind rohe ASR-Schätzungen und können
+halluzinieren oder vor dem tatsächlichen Tonbeginn liegen. Sie sind KEINE
+validierten Messwerte. `content-review.json` entfernt diese aus dem Bericht
+und schätzt den Inhaltsbeginn konservativ aus aufgenommenen Sprachabschnitten,
+wobei reine Füllsätze ausgeschlossen werden. Gemischte und unterbrochene
+Abschnitte bleiben ungeklärt. Menschliche Hörprüfung bleibt erforderlich.
+Die authentifizierte Aktion `review-test-timing` kann bestehende abgeschlossene
+Vergleichstests ohne neue API-Aufrufe prüfen; Originalberichte bleiben erhalten.
+Alle Aufnahmen, Transkripte und Diagnoseberichte bleiben privat. Der echte
+Interviewstart bleibt durch `DEMO_REAL_INTERVIEW_ENABLED=0` gesperrt.

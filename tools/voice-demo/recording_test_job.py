@@ -90,6 +90,8 @@ async def run_voice_test(root,consent,context_path,baseline=False):
         from content_timing import measure_content
         try: await measure_content(root,worker,rec)
         except Exception as e: private_json(root/'content-timing.json',{'state':'failed','error_type':type(e).__name__})
+        from content_review import review_content
+        if rows is not None: review_content(root,worker.question_metrics)
         # Separate actual transport-loss test, never contacting the interview surface.
         fault_dir=root/'fault';fault_dir.mkdir(mode=0o700)
         fault=Worker(argparse.Namespace(context=str(context_path),private_dir=str(fault_dir),port=8878,max_seconds=30,managed_signals=True))

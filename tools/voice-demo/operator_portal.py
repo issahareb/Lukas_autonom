@@ -188,6 +188,18 @@ class Operator:
                 root=self.new_archive('test')
                 job=run_voice_test(root,self.consent,self.context_path,baseline=action=='voice-test-baseline') if action.startswith('voice-test') else run_test(root,self.consent)
                 self.test_task=asyncio.create_task(job)
+            elif action=='review-test-timing':
+                if self.worker or (self.test_task and not self.test_task.done()):raise web.HTTPConflict(text='Sitzung aktiv.')
+                from content_review import review_content
+                for root in sorted(ARCHIVE.glob('*-test-*'))[-10:]:
+                    report=root/'test-report.json'
+                    if not report.is_file() or (root/'content-review.json').exists() or not (root/'transcript.json').exists():continue
+                    saved=json.loads(report.read_text())
+                    if saved.get('variant') not in ('baseline','optimized'):continue
+                    private_json(root/'test-report-uncorrected.json',saved)
+                    review_content(root,saved['metrics'])
+                    saved['timing_review']='Unvalidated word timestamps removed; see content-review.json. Original retained in test-report-uncorrected.json.'
+                    private_json(report,saved)
             elif action=='connect':
                 if self.test_task and not self.test_task.done():raise web.HTTPConflict(text='Test läuft.')
                 if not self.prepared:raise web.HTTPConflict(text='Zuerst Interviewfenster vorbereiten.')
@@ -269,7 +281,7 @@ class Operator:
         if not (root/'README.txt').exists():raise web.HTTPConflict(text='Aufnahme noch nicht abgeschlossen oder nach Absturz unvollständig.')
         data=io.BytesIO()
         with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as archive:
-            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json','content-timing.json'):
+            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json','content-timing.json','content-review.json','test-report-uncorrected.json'):
                 path=root/name
                 if path.is_file():archive.write(path,name)
         return web.Response(body=data.getvalue(),content_type='application/zip',headers={'Content-Disposition':'attachment; filename=eva-lukas-gespraech.zip'})
