@@ -37,7 +37,8 @@ export async function starteAnrufMitStatus(){throw new Error('Real calls forbidd
     assert.equal((await fetch(base)).status,401);
     assert.equal((await fetch(base+'/planned/stornieren',{method:'POST'})).status,401);
     const headers={Authorization:'Bearer callback-test-owner'};
-    assert.equal((await fetch(base,{headers})).status,200);
+    const statusResponse=await fetch(base,{headers});
+    assert.equal(statusResponse.status,200);assert.equal(statusResponse.headers.get('cache-control'),'no-store');
     assert.equal((await fetch(base+'/planned/stornieren',{method:'POST',headers})).status,200);
     assert.equal((await fetch(base+'/started/stornieren',{method:'POST',headers})).status,409);
     console.log('OK — Private HTTP status/cancellation require owner authentication; started jobs cannot be falsely cancelled.');
