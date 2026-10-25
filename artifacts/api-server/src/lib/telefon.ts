@@ -379,14 +379,19 @@ export function twilioZugang(): { sid: string; nutzer: string; geheim: string } 
   return null;
 }
 
+export type AnrufStartErgebnis = { status: "started" | "blocked" | "uncertain"; message: string; callId?: string };
 export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant, conversationId?: number): Promise<string> {
-  if (!nummer.trim()) return "Kontaktname oder Telefonnummer fehlt. Kein Anruf gestartet.";
+  return (await starteAnrufMitStatus(nummer, anlass, ownerCallGrant, conversationId)).message;
+}
+
+export async function starteAnrufMitStatus(nummer: string, anlass: string, ownerCallGrant?: OwnerCallGrant, conversationId?: number): Promise<AnrufStartErgebnis> {
+  if (!nummer.trim()) return { status: "blocked", message: "Kontaktname oder Telefonnummer fehlt. Kein Anruf gestartet." };
   // A name must resolve uniquely before any dialing or one-use grant is consumed.
   if (!/^[+\d\s()./-]+$/.test(nummer.trim())) {
     const kontakte = await findeTelefonKontakte(nummer);
-    if (kontakte.length !== 1) return kontakte.length
+    if (kontakte.length !== 1) return { status: "blocked", message: kontakte.length
       ? `Mehrere Kontakte passen. Frage Issa, welchen er meint. Kein Anruf gestartet. ${await telefonKontakte(nummer)}`
-      : "Kein passender Kontakt gefunden. Frage nach dem gespeicherten Namen oder der Telefonnummer. Kein Anruf gestartet.";
+      : "Kein passender Kontakt gefunden. Frage nach dem gespeicherten Namen oder der Telefonnummer. Kein Anruf gestartet." };
     nummer = "+" + kontakte[0].nummer;
   }
   const zugang = twilioZugang();
@@ -394,15 +399,15 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
   const projekt = process.env.OPENAI_PROJECT_ID?.trim();
 
   if (!istTelnyx() && (!zugang || !von || !projekt)) {
-    return (
+    return { status: "blocked", message: (
       "Zum Anrufen fehlen noch Zugangsdaten. Gebraucht werden TWILIO_ACCOUNT_SID (AC…), " +
       "TWILIO_NUMMER, OPENAI_PROJECT_ID — und zur Anmeldung entweder TWILIO_API_KEY " +
       "plus TWILIO_API_SECRET oder TWILIO_AUTH_TOKEN."
-    );
+    ) };
   }
 
   const ziel = normalisiere(nummer);
-  if (!/^[1-9]\d{5,14}$/.test(ziel)) return "Eine gültige Telefonnummer mit Ländervorwahl oder ein eindeutiger Kontaktname ist nötig.";
+  if (!/^[1-9]\d{5,14}$/.test(ziel)) return { status: "blocked", message: "Eine gültige Telefonnummer mit Ländervorwahl oder ein eindeutiger Kontaktname ist nötig." };
   const [eintrag] = await db
     .select()
     .from(telefonNummern)
@@ -415,9 +420,9 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
   const einmalig = !eintrag && ownerCallGrant?.(ziel) === true;
   if (!einmalig && (!eintrag?.darfAngerufenWerden || eintrag.stufe === "gesperrt")) {
     await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "abgewiesen", anlass });
-    return eintrag
+    return { status: "blocked", message: eintrag
       ? "Diese Nummer ist nicht zum Anrufen freigegeben. Issa kann sie im Dashboard unter Telefon freischalten."
-      : "Für diese neue Nummer brauche ich einen ausdrücklichen Anrufauftrag in deiner aktuellen Dashboard-Nachricht, zum Beispiel: Ruf +4915112345678 an und verhandle über den Garten. Die Nummer muss dafür nicht gespeichert werden. Ein bereits verbrauchter Auftrag braucht eine neue Nachricht.";
+      : "Für diese neue Nummer brauche ich einen ausdrücklichen Anrufauftrag in deiner aktuellen Dashboard-Nachricht, zum Beispiel: Ruf +4915112345678 an und verhandle über den Garten. Die Nummer muss dafür nicht gespeichert werden. Ein bereits verbrauchter Auftrag braucht eine neue Nachricht." };
   }
 
   if (istTelnyx()) {
@@ -431,13 +436,13 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
     try {
       const sid = await telnyxWaehle(`+${ziel}`, anlass, id, aufnahme, mithoeren);
       await aktualisiereAnruf(id, { providerSid: sid }).catch(err => logger.error({ err }, "Anruf gestartet, Anbieter-ID noch nicht gespeichert"));
-      return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an. Anruf-ID: ${id}. Status: gestartet; Annahme noch nicht bestätigt. Statusänderungen werden im ursprünglichen Chat gemeldet. Nutze telefon_status, um den aktuellen Stand zu prüfen.${sid ? "" : " Der Anbieter hat keine Anruf-ID geliefert; Statusverfolgung ist noch nicht bestätigt."}`;
+      return { status: "started", message: `Ich rufe ${eintrag?.name || "+" + ziel} gerade an. Anruf-ID: ${id}. Status: gestartet; Annahme noch nicht bestätigt. Statusänderungen werden im ursprünglichen Chat gemeldet. Nutze telefon_status, um den aktuellen Stand zu prüfen.${sid ? "" : " Der Anbieter hat keine Anruf-ID geliefert; Statusverfolgung ist noch nicht bestätigt."}`, callId: id };
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Telnyx-Anruf fehlgeschlagen";
       const unsicher = err instanceof Error && ["TimeoutError", "AbortError", "TypeError"].includes(err.name);
       await aktualisiereAnruf(id, { ...(unsicher ? {} : { zielStatus: "failed" }),
         detail: unsicher ? "Anbieterantwort fehlt; ob der Anruf gestartet wurde, ist noch unbestätigt. Nicht automatisch erneut wählen." : detail }).catch(() => {});
-      if (unsicher) return `Die Anbieterantwort fehlt. Ob der Anruf an +${ziel} gestartet wurde, ist noch unbestätigt. Nicht erneut wählen. Anruf-ID: ${id}; prüfe telefon_status.`;
+      if (unsicher) return { status: "uncertain", callId: id, message: `Die Anbieterantwort fehlt. Ob der Anruf an +${ziel} gestartet wurde, ist noch unbestätigt. Nicht erneut wählen. Anruf-ID: ${id}; prüfe telefon_status.` };
       throw new Error(detail);
     }
   }
@@ -467,11 +472,11 @@ export async function starteAnruf(nummer: string, anlass: string, ownerCallGrant
       anlass,
       detail: text,
     });
-    return `Der Anruf ging nicht raus (${res.status}): ${text.slice(0, 200)}`;
+    return { status: "blocked", message: `Der Anruf ging nicht raus (${res.status}): ${text.slice(0, 200)}` };
   }
 
   await protokolliere({ richtung: "ausgehend", nummer: ziel, ergebnis: "gewaehlt", anlass });
-  return `Ich rufe ${eintrag?.name || "+" + ziel} gerade an.`;
+  return { status: "started", message: `Ich rufe ${eintrag?.name || "+" + ziel} gerade an.` };
 }
 
 /** Die letzten Anrufe fuer das Dashboard. */

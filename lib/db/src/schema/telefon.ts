@@ -139,3 +139,18 @@ export const telefonAnfragen = pgTable("lukas_telefon_anfragen", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("lukas_telefon_anfragen_datum_idx").on(t.createdAt)]);
+
+/** Scheduled calls are work, not memories. Persist before acknowledging. */
+export const rueckrufe = pgTable("lukas_rueckrufe", {
+  id: text("id").primaryKey(),
+  kontaktId: integer("kontakt_id").references(() => telefonNummern.id, { onDelete: "set null" }),
+  nummer: text("nummer").notNull(),
+  anlass: text("anlass").notNull(),
+  faelligAm: timestamp("faellig_am", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("geplant"),
+  conversationId: integer("conversation_id"),
+  ergebnis: text("ergebnis").notNull().default(""),
+  anrufId: text("anruf_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [index("lukas_rueckrufe_faellig_idx").on(t.status,t.faelligAm)]);

@@ -406,6 +406,7 @@ try {
     const call = fixture.calls.at(-1);
     assert.equal(call.userText, "Lies deinen Code im Repository Lukas_autonom.");
     assert.equal(call.quelle, "telefon");
+    assert.equal(call.telefonOwnerContactId, test.enabled ? test.contactId : undefined, "only verified owner identity reaches callback tools");
     if (test.enabled) {
       assert.equal(call.tools, undefined, "owner can delegate to the real backend toolset");
       assert.equal(call.systemPromptOverride, "OWNER_PRIVATE_BACKEND");

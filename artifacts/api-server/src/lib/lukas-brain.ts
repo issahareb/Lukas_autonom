@@ -1,3 +1,4 @@
+import { istMisserfolg } from "./werkzeug-ergebnis";
 import { mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
 import { zugangsFehler, werkzeugeNachFehler } from "./werkzeug-auswahl";
 import { randomInt } from "node:crypto";
@@ -51,6 +52,7 @@ export async function runLukasTurn(opts: {
   history: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   userText: string;
   conversationId?: number;
+  telefonOwnerContactId?: number;
   /** Stop future model/tool work when the caller leaves or the task expires. */
   signal?: AbortSignal;
   /*
@@ -199,6 +201,7 @@ export async function runLukasTurn(opts: {
         opts.signal?.throwIfAborted();
         const toolResult = await executeLukasTool(tc.name, input, {
           rawUserMessage: opts.userText,
+          telefonOwnerContactId: opts.telefonOwnerContactId,
           conversationId,
           signal: opts.signal,
         });
@@ -219,7 +222,7 @@ export async function runLukasTurn(opts: {
         void fuehleWerkzeug({
           werkzeug: tc.name,
           eingabe: input,
-          gelungen: true,
+          gelungen: !istMisserfolg(toolResult),
           runde: i,
           autonom: opts.ohneZieleUndTagebuch === true,
         });

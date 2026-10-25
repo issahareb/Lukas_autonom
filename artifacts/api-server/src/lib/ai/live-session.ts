@@ -356,6 +356,7 @@ async function drainWork(state: ManagedSession) {
           systemPromptOverride: instructions + recall + (state.options.allowTools ? "" :
             "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung." + (state.options.telefonBusiness ? " Die Annahme einer Geschäftsanfrage ist ausdrücklich erlaubt: Qualifiziere sie mit den Firmeninformationen. Die separate Telefonintegration speichert bestätigte Anfragedaten. Weise Kunden nicht ab und behaupte keine Speicherung ohne technische Bestätigung." : "")),
           conversationId: state.conversationId,
+          telefonOwnerContactId: state.options.allowTools ? state.options.telefonOwnerContactId : undefined,
           ...(state.options.allowTools ? {} : { tools: [] }),
           signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(120_000)]),
         });
