@@ -88,7 +88,7 @@ await build({
       name: "attrappen",
       setup(b) {
         b.onResolve({ filter: /^\.\// }, (args) =>
-          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner", "./telefon-laufend", "./hareb-digital"].includes(args.path) ? { path: attrappe } : undefined,
+          args.importer.endsWith("telefon.ts") && !["./telnyx", "./owner-call-grant", "./telefon-owner", "./telefon-nummer", "./telefon-laufend", "./hareb-digital"].includes(args.path) ? { path: attrappe } : undefined,
         );
       },
     },
@@ -111,6 +111,7 @@ const ERWARTET = "4915112345678";
 for (const [roh, wie] of [
   ["+49 151 12345678", "international mit Leerzeichen"],
   ["+4915112345678", "international kompakt"],
+  ["0151 12345678", "deutsches Inlandsformat"],
   ["004915112345678", "mit Amtsnullen"],
   ["49-151-12345678", "mit Bindestrichen"],
   ["(+49) 151 / 123 456 78", "mit Klammern und Schraegstrich"],
@@ -259,6 +260,9 @@ try {
   const unknownInbound = globalThis.telefonAnnahmen.at(-1);
   assert.equal(unknownInbound.telefonBusiness, true);
   assert.match(unknownInbound.instructions, /HAREB DIGITAL/);
+  assert.match(unknownInbound.instructions, /Gründer und Inhaber ist Issa Hareb/);
+  assert.match(unknownInbound.instructions, /TaxiBB Essen/);
+  assert.match(unknownInbound.instructions, /GuardianGrid/);
   assert.match(unknownInbound.instructions, /Ich möchte eine Website/);
   assert.equal(unknownInbound.allowTools, false);
   assert.doesNotMatch(unknownInbound.instructions, /Garteninserat/);
@@ -291,6 +295,7 @@ try {
     "Pending last-seen bookkeeping must not delay SIP accept");
   delete globalThis.telefonLastSeenPending; delete globalThis.telefonExpectedPromptBuilds;
   const accepted = globalThis.telefonAnnahmen.at(-1);
+  assert.match(accepted.initialCommentary, /Issa Hareb, Gründer/);
   assert.equal(accepted.allowTools, true); assert.equal(accepted.telefonOwnerContactId, 17);
   assert.equal(accepted.visibility, "private");
   assert.match(accepted.instructions, /github_read_path.*Lukas_autonom/);

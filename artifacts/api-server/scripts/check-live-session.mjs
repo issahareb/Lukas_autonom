@@ -423,6 +423,8 @@ try {
     telefonPeer: { nummer: "4915100000002", richtung: "eingehend" }, visibility: "public", allowTools: false, instructions: "business" });
   const businessAccept = fixture.requests.find(r => r.url.endsWith("/business_inbound/accept"));
   assert.match(businessAccept.body.session.instructions, /HAREB DIGITAL/);
+  assert.match(businessAccept.body.session.instructions, /Gründer und Inhaber ist Issa Hareb/);
+  for (const fact of ["TaxiBB Essen", "GuardianGrid", "issahareb.me", "Automatisierung"]) assert.ok(businessAccept.body.session.instructions.includes(fact), "Voice receives public company fact: " + fact);
   assert.match(businessAccept.body.session.instructions, /Ich möchte eine Website/);
   assert.equal(fixture.enquiry.number, "4915100000002");
   const businessSocket = fixture.sockets.at(-1);
@@ -457,7 +459,7 @@ try {
   assert.equal(accepts[0].body.session.input[0].role, "developer");
   assert.ok(accepts[0].body.session.input[0].content[0].text.includes(sipOptions.initialCommentary), "entire brief is present at accept");
   assert.equal(sipSocket.sent.length, 0, "no competing context or greeting during attachment replay");
-  fire(250); await settle();
+  fire(2500); await settle();
   const greeting = sipSocket.sent.filter((e) => e.type === "session.instructions.append" && e.delegation_id === null);
   assert.equal(greeting.length, 1, "phone startup must trigger exactly one greeting instruction");
   assert.match(greeting[0].content, /genau einmal/);
@@ -504,7 +506,7 @@ try {
   } });
   const lazySocket = socketFor("live_lazy_context");
   assert.equal(lazyLoads, 0, "backend instructions stay lazy during acceptance");
-  fire(250);
+  fire(2500);
   assert.ok(lazySocket.sent.some(event => event.type === "session.instructions.append"));
   const beforeLazy = fixture.calls.length;
   input(lazySocket, "Lies deinen Code."); delegate(lazySocket, "lazy_one"); await settle();
@@ -538,6 +540,17 @@ try {
   assert.equal(fixture.calls.length, beforeLatePrompt, "late context after hangup cannot start work");
   assert.equal(cancelledPromptSocket.sent.some(event => event.delegation_id === "lazy_cancel"), false);
 
+  // Real calls delivered first speech after 1.2-1.7 seconds. A 250 ms fallback
+  // was already in flight then and could restart that speech on acknowledgement.
+  await api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_delayed_greeting" });
+  const delayedGreeting = socketFor("live_delayed_greeting");
+  assert.ok(![...timers.values()].some(t => t.milliseconds === 250));
+  assert.ok([...timers.values()].some(t => t.milliseconds === 2500));
+  delayedGreeting.emit({ type: "session.output_audio.delta", delta: Buffer.from([1, 0]).toString("base64"), start_ms: 1200, end_ms: 1201 });
+  assert.ok(![...timers.values()].some(t => t.milliseconds === 2500));
+  assert.equal(delayedGreeting.sent.some(e => e.type === "session.instructions.append"), false);
+  delayedGreeting.emit({ type: "session.closed" });
+
   // Reflected audio precedes text. Reissuing instructions must not cut it off.
   const silentPcm = Buffer.alloc(4800), audiblePcm = Buffer.from(silentPcm);
   audiblePcm.writeInt16LE(1200, 0);
@@ -555,12 +568,12 @@ try {
     const sessionId = "live_phone_audio_" + test.name;
     await api.acceptLiveSipSession({ ...sipOptions, sessionId });
     const active = socketFor(sessionId);
-    const fallback = [...timers.values()].find(timer => timer.milliseconds === 250);
+    const fallback = [...timers.values()].find(timer => timer.milliseconds === 2500);
     assert.ok(fallback, "greeting fallback starts pending");
     active.emit({ type: "session.output_audio.delta", delta: test.delta, ...test.timing });
-    assert.equal([...timers.values()].some(timer => timer.milliseconds === 250), !test.audible,
+    assert.equal([...timers.values()].some(timer => timer.milliseconds === 2500), !test.audible,
       test.name + ": only valid nonzero PCM cancels the pending greeting");
-    if (!test.audible) fire(250);
+    if (!test.audible) fire(2500);
     else fallback.callback(); // An already queued callback must also respect observed audio.
     await settle();
     assert.equal(active.sent.filter(event => event.type === "session.instructions.append").length, test.audible ? 0 : 1,
@@ -587,7 +600,7 @@ try {
     const active = socketFor(sessionId);
     active.emit({ type: role === "user" ? "session.input_transcript.delta" : "session.output_transcript.delta",
       event_id: "first_" + role, delta: "Hallo", start_ms: 0, end_ms: 100 });
-    assert.ok(![...timers.values()].some(timer => timer.milliseconds === 250), "speech cancels pending greeting");
+    assert.ok(![...timers.values()].some(timer => timer.milliseconds === 2500), "speech cancels pending greeting");
     assert.equal(active.sent.some(event => event.type === "session.instructions.append"), false);
     active.emit({ type: "session.closed" });
   }
@@ -596,7 +609,7 @@ try {
   const longAccept = fixture.requests.find(r => r.url.endsWith("/live_phone_long_brief/accept"));
   assert.ok(longAccept.body.session.input[0].content[0].text.endsWith("AUFTRAG_ENDE"), "do not truncate startup to four streamed chunks");
   socketFor("live_phone_long_brief").emit({ type: "session.closed" });
-  assert.ok(![...timers.values()].some(timer => timer.milliseconds === 250), "close cancels pending greeting");
+  assert.ok(![...timers.values()].some(timer => timer.milliseconds === 2500), "close cancels pending greeting");
   fixture.failSockets = 1;
   await assert.rejects(api.acceptLiveSipSession({ ...sipOptions, sessionId: "live_phone_attach_failure" }), (error) => error.accepted === true);
   assert.ok(fixture.requests.some((r) => r.url.endsWith("/live_phone_attach_failure/hangup")));

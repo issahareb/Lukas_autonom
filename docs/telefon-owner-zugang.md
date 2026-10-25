@@ -43,3 +43,15 @@ und erste Audio-/Text-Ereignisse. Sie enthalten keine Gesprächsinhalte.
 Eine Bestätigung beweist noch keine hörbare Ausgabe auf dem Telefon.
 Die Startdiagnose prüft zusätzlich lesend, ob der konfigurierte GitHub-Zugang
 eine echte Quelldatei vom laufenden Branch lesen kann.
+
+## Firmenwissen und Rufnummernformate
+
+Der eingehende Sprachkontext enthält den öffentlich freigegebenen Gründernamen
+Issa Hareb, Leistungen und Referenzen. Öffentliche Firmendaten erfordern keine
+Owner-Freigabe; private Erinnerungen bleiben getrennt. Die Rufnummernverarbeitung
+vereinheitlicht deutsche Inlandsnummern mit +49 und 0049. Bestehende Kontakte
+werden dabei nicht automatisch migriert oder freigeschaltet. Im Dashboard müssen
+aktuelle Nummer, private Kontaktstufe und konfigurierte Owner-ID zusammenpassen.
+
+Ein privater Kontakt und die Owner-ID sind getrennte Einstellungen. Ein anderer
+Kontakt mit ähnlichem Namen oder eine mündliche Identitätsbehauptung reicht nicht.

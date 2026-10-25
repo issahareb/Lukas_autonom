@@ -20,3 +20,15 @@ Referenzen:
 - https://developers.openai.com/api/docs/guides/voice-sip
 
 `npm run typecheck` umfasst die TeXML-Webhooks und die isolierte Anbieterprüfung für HD, Region, Nummernbindung, Verifikation und Fehlerfälle; es werden keine Testanrufe ausgelöst.
+
+## Begrüßungs-Fallback
+
+Die Annahme enthält bereits den Begrüßungsauftrag. Die zusätzliche Startanweisung
+wartet jetzt 2,5 Sekunden auf beobachtete Sprache statt 250 Millisekunden. Erste
+Audioausgabe oder erkannte Sprache stoppt diesen Fallback; auch ein bereits
+eingeplanter Callback prüft den Zustand erneut. Das reduziert konkurrierende
+Begrüßungsanweisungen. Es ist kein Nachweis für die Beseitigung späterer
+Paketverluste, Carrier-Aussetzer oder sämtlicher Modellunterbrechungen.
+
+Ein echter Telefonvergleich bleibt erforderlich. Reflektierte Audioereignisse
+auf dem Steuerkanal belegen nicht die beim Anrufer gehörte RTP-Audioqualität.

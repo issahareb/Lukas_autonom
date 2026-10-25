@@ -766,8 +766,8 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       await attachSideband(state);
       if (state.ended || state.closing) throw new LiveSessionError("Die SIP-Sitzung wurde bereits beendet.", true);
       if (options.initialCommentary?.trim() && !state.phoneSpeechObserved) {
-        // Sideband attachment replays recent events. Let that replay arrive before
-        // asking for a greeting, otherwise an already speaking model is interrupted.
+        // The accept payload already requests a greeting. Allow initial speech to arrive
+        // before this fallback: a 250 ms injection can be acknowledged mid-greeting.
         const phoneState = state;
         phoneState.phoneGreetingTimer = setTimeout(() => {
           phoneState.phoneGreetingTimer = undefined;
@@ -779,7 +779,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
           if (delivered) markPhoneStartup(phoneState, "greetingSentMs");
           logger.info({ sessionId: phoneState.id, phase: "phone_greeting", delivered,
             sentAfterMs: phoneState.phoneStartup?.greetingSentMs ?? null }, "Telefon-Sprachstart");
-        }, 250);
+        }, 2500);
         phoneState.phoneGreetingTimer.unref();
       }
       logger.info({ sessionId: state.id, phase: "phone_ready", startupContext: Boolean(options.initialCommentary?.trim()),
