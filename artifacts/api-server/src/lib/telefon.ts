@@ -297,9 +297,9 @@ export async function nimmAn(callId: string, vonNummer: string, kontext?: Telefo
     telefonKontextId: kontext?.id,
     telefonPeer: { nummer: normalisiere(vonNummer), richtung: ausgehend ? "ausgehend" : "eingehend" },
     onTelefonEnd: speichereEnde,
-    telefonBusiness: !ausgehend,
+    telefonBusiness: !ausgehend && ownerContactId === undefined,
     // Build the private backend prompt only when the first task needs it.
-    instructions: async () => (await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined)) + "\n\n" + await inboundHistory + (!ausgehend ? "\n\n" + HAREB_DIGITAL_TELEFON + "\n" + telefonRueckrufKontext(normalisiere(vonNummer)) : ""),
+    instructions: async () => (await anweisungen(stufe, name, anlass, kontext?.aufnahme === true, kontext?.mithoeren === true, ownerContactId !== undefined)) + "\n\n" + await inboundHistory + (!ausgehend && ownerContactId === undefined ? "\n\n" + HAREB_DIGITAL_TELEFON + "\n" + telefonRueckrufKontext(normalisiere(vonNummer)) : ""),
     visibility: stufe === "privat" ? "private" : "public",
     initialCommentary: (ausgehend
       ? `Du hast selbst angerufen. Begrüße ${name || "den Gesprächspartner"} kurz. Anlass: ${(anlass || "der vereinbarte Rückruf").slice(0, 1000)}`

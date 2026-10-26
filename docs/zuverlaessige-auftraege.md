@@ -94,3 +94,40 @@ müssen ausdrücklich als noch nicht unterstützt behandelt werden. Die
 Freitext-Ergebnisheuristik ersetzt langfristig keine strukturierten Ergebnisse
 für jedes einzelne Werkzeug. Die neue Migration ist additiv; ein Rollback des
 Codes lässt die Tabelle und gespeicherte Aufträge bestehen.
+
+## Ergänzung 26.10.: Informationen am Owner-Telefon
+
+Die Oberfläche konnte Telefonanfragen lesen, aber im Agenten-Werkzeugkasten
+fehlte ein entsprechender Datenbankabruf. Zusätzlich wurde jeder eingehende
+Anruf als Firmenempfang behandelt, einschließlich des freigegebenen Owners.
+Dadurch bekamen Owner-Sitzungen widersprüchliche Rollenhinweise.
+
+Neu ist das gemeinsame, rein lesende Werkzeug `lese_anfragen` für privaten
+Chat und Owner-Telefon. Es liefert Telefon- und Website-Anfragen mit Quelle,
+Zeitfenster, Anzahl, Status und begrenzten Zusammenfassungen. Default: letzte
+30 Tage, alle Bearbeitungsstände, fünf Einträge; weitere Seiten und bis zu
+90 Tage sind möglich. Abgelehnte Telefonweitergaben sind ausgeschlossen.
+Ungeklärte/fehlgeschlagene Auswertungen werden separat ausgewiesen. E-Mail und
+WhatsApp sind andere Datenquellen; das Ergebnis behauptet keine vollständige
+kanalübergreifende Postfachauskunft. Kundentext bleibt untrusted Inhalt.
+
+Die Owner-Prüfung ist jetzt identisch für die hörbare Rollenbeschreibung und
+die Backend-Werkzeugfreigabe. Nur nach der bestehenden serverseitigen Prüfung
+bekommt die Sprachsitzung den privaten Assistentenmodus. Sie startet dann keine
+Kundenanfrage-Erfassung und erhält keine Empfangsanweisungen zur Qualifizierung
+eines Neukunden. Öffentliche/fremde Anrufe behalten ihre getrennten Regeln.
+Es werden keine Kontaktdaten oder Zugriffsrechte aufgrund gesprochener
+Identitätsbehauptungen geändert.
+
+Tests: tatsächliche PostgreSQL-Abfragen einschließlich Quelle, Consent,
+Zeitfenster, offener Auswertung, Zählung und Pagination; Datenbankfehler werden
+nicht zu einem leeren Ergebnis. Die SIP-Tests prüfen den Owner-Modus bereits
+im Accept-Payload und die Verweigerung für fremde/ungültige Owner-Kontexte.
+Zusätzliche Betriebslogs nennen nur `ownerTools` und `businessReception`, keine
+Nummern oder Gesprächsinhalte. In der letzten geprüften Produktions-Startdiagnose
+vom 24.10. war die Owner-Konfiguration eindeutig, privat und aktiviert. Das
+beweist nicht, wie ein konkreter späterer Anruf zugeordnet wurde.
+
+Diese Ergänzung ist Code mit getesteten Schnittstellen, kein bereits
+bestätigter Modell-/Telefon-End-to-End-Erfolg. Die produktive Freischaltung
+und der echte Owner-Anruf bleiben ein eigener Abnahmeschritt.

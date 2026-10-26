@@ -112,6 +112,7 @@ export const TOOL_RISK: Record<string, RiskTier> = {
   mcp_find_tool: "R0",
   read_diagnostics: "R0",
   read_usage: "R0",
+  lese_anfragen: "R0",
 
   // Ein Code-Vorschlag schreibt nur in unsere eigene Datenbank — geschrieben
   // wird erst, wenn Issa im Dashboard auf "Annehmen" klickt. Diese Entscheidung

@@ -397,7 +397,7 @@ try {
     const sessionId = "live_owner_phone_" + test.name;
     await api.acceptLiveSipSession({
       sessionId, instructions: "OWNER_PRIVATE_BACKEND", visibility: test.visibility,
-      allowTools: test.allowTools, telefonKontextId: test.contextId, telefonOwnerContactId: test.contactId,
+      allowTools: test.allowTools, telefonKontextId: test.contextId, telefonOwnerContactId: test.contactId, telefonBusiness: true,
     });
     const active = socketFor(sessionId);
     input(active, "Lies deinen Code im Repository Lukas_autonom.");
@@ -413,6 +413,11 @@ try {
     } else assert.deepEqual(call.tools, [], test.name + " must not grant owner tools");
     const accept = fixture.requests.find(r => r.url.endsWith("/" + sessionId + "/accept"));
     assert.ok(!JSON.stringify(accept.body).includes("OWNER_PRIVATE_BACKEND"));
+    if (test.enabled) {
+      assert.match(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/);
+      assert.match(accept.body.session.instructions, /lese_anfragen/);
+      assert.doesNotMatch(accept.body.session.instructions, /Deine Aufgabe ist eine qualifizierte Anfrage/);
+    } else assert.doesNotMatch(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/, test.name);
     active.emit({ type: "session.closed", reason: "remote_hangup" });
   }
   delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;

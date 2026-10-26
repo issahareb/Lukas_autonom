@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 
 const GRUPPEN: Array<[RegExp, string[]]> = [
+  [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
   [/such|recherch|aktuell|quelle|preis|kostet|website|webseite|https?:|internet|öffnungszeit/i, ["web_search", "fetch_url", "browse_page", "browser_do"]],
   [/repo|package\.json|quellcode|programmier|build|typecheck|skript|python|javascript|typescript|implement|debug|reparier/i, ["github_list_repos", "github_read_path", "github_search_code", "execute_command", "propose_code_change", "fix_error"]],
   [/mail|postfach|posteingang/i, ["email_search", "email_read", "email_send"]],

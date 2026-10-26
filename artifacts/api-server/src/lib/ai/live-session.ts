@@ -245,6 +245,16 @@ function rememberAcceptedSip(id: string) {
   acceptedSip.set(id, now + 24 * 60 * 60 * 1000);
   if (acceptedSip.size > 10_000) acceptedSip.delete(acceptedSip.keys().next().value!);
 }
+/** Identical owner gate for the audible role and backend tool access. */
+function ownerPhoneTools(options: LiveSessionOptions): boolean {
+  return options.visibility === "private" && options.allowTools === true &&
+    Number.isSafeInteger(options.telefonOwnerContactId) && options.telefonOwnerContactId! > 0 &&
+    String(options.telefonOwnerContactId) === process.env.LUKAS_TELEFON_OWNER_CONTACT_ID?.trim() &&
+    Boolean(options.telefonKontextId) &&
+    (process.env.LUKAS_TELEFON_STRENG ?? "false").trim().toLowerCase() !== "true";
+}
+const OWNER_PHONE_INSTRUCTIONS = `PRIVATE OWNER-SITZUNG: Der serverseitig freigegebene Owner spricht mit dir. Du bist sein persönlicher Assistent wie im privaten Chat, nicht der Empfang für einen neuen Kunden. Frage nicht nach Firma, Budget oder Weitergabe seines eigenen Auftrags.
+Private Informationen und konkrete Aktionen werden durch dasselbe Backend mit denselben Werkzeugrichtlinien wie im Chat bearbeitet. Delegiere solche Fragen sofort, statt pauschal zu sagen, du hättest keinen Zugriff. Wenn er nach eingegangenen Anfragen fragt, soll das Backend lese_anfragen aufrufen und den aktuellen Datenbankstand liefern. E-Mail bei Bedarf separat lesen. Warte auf das Ergebnis; erfinde weder Anfragen noch einen leeren Posteingang. Bei technischem Fehler nenne den konkreten Abruffehler. Vertrauliche Angaben bleiben im privaten Gespräch. Die Freigabe gilt nur für diese serverseitig bestätigte Sitzung.`;
 function startManaged(
   id: string, options: LiveSessionOptions, connection: ReturnType<typeof connectionConfig>,
   config: { model: string; voice: string }, transport: "webrtc" | "sip",
@@ -252,13 +262,8 @@ function startManaged(
   const state: ManagedSession = {
     id, token: randomBytes(32).toString("hex"),
     options: { ...options,
-      allowTools: options.visibility === "private" && options.allowTools === true &&
-        (transport === "webrtc" || (
-          Number.isSafeInteger(options.telefonOwnerContactId) && options.telefonOwnerContactId! > 0 &&
-          String(options.telefonOwnerContactId) === process.env.LUKAS_TELEFON_OWNER_CONTACT_ID?.trim() &&
-          Boolean(options.telefonKontextId) &&
-          (process.env.LUKAS_TELEFON_STRENG ?? "false").trim().toLowerCase() !== "true"
-        )),
+      allowTools: transport === "sip" ? ownerPhoneTools(options)
+        : options.visibility === "private" && options.allowTools === true,
     },
     connection, ...config, transport, controller: new AbortController(),
     conversationId: -randomInt(1, 2_147_483_648), socketGeneration: 0,
@@ -746,7 +751,9 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
           phoneMemory = await preparePhoneMemory(options.sessionId, options.telefonPeer, options.visibility);
         } catch { logger.warn({ phase: "lookup_failed" }, "Telefon-Gedächtnis nicht geladen"); }
       }
-      if (options.telefonBusiness && options.telefonPeer?.richtung === "eingehend") {
+      const ownerSession = ownerPhoneTools(options);
+      const businessReception = options.telefonBusiness && !ownerSession;
+      if (businessReception && options.telefonPeer?.richtung === "eingehend") {
         try {
           const { preparePhoneEnquiry } = await import("../telefon-anfragen");
           phoneEnquiry = await preparePhoneEnquiry(options.sessionId, options.telefonPeer.nummer, options.telefonKontextId,
@@ -756,10 +763,11 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       await apiRequest(connection, "/live/sessions/" + encodeURIComponent(options.sessionId) + "/accept", {
         // Startup context is available before the first generated phoneme.
         // Runtime thinking appends arrive gradually and must not carry the initial brief.
-        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])], options.telefonBusiness ? "\n\n" + HAREB_DIGITAL_TELEFON + "\n" + telefonRueckrufKontext(options.telefonPeer?.nummer ?? "") + (!phoneEnquiry ? "\nACHTUNG: Der Anfragenspeicher ist gerade nicht erreichbar. Berate trotzdem zu den Leistungen, aber sage nicht, dass die Anfrage gespeichert oder weitergeleitet wird. Bitte den Anrufer, sie an kontakt@hareb.digital zu senden." : "") : ""),
+        session: sessionConfig(config, false, [...telefonStartInput(options.initialCommentary), ...(phoneMemory?.input ?? [])], ownerSession ? "\n\n" + OWNER_PHONE_INSTRUCTIONS : businessReception ? "\n\n" + HAREB_DIGITAL_TELEFON + "\n" + telefonRueckrufKontext(options.telefonPeer?.nummer ?? "") + (!phoneEnquiry ? "\nACHTUNG: Der Anfragenspeicher ist gerade nicht erreichbar. Berate trotzdem zu den Leistungen, aber sage nicht, dass die Anfrage gespeichert oder weitergeleitet wird. Bitte den Anrufer, sie an kontakt@hareb.digital zu senden." : "") : ""),
       });
       accepted = true; rememberAcceptedSip(options.sessionId);
       state = startManaged(options.sessionId, options, connection, config, "sip");
+      logger.info({ ownerTools: state.options.allowTools === true, businessReception: Boolean(businessReception) }, "Telefon-Zugriffsmodus gesetzt");
       state.phoneMemory = phoneMemory;
       state.phoneEnquiry = phoneEnquiry;
       reservations.delete(reservation);
