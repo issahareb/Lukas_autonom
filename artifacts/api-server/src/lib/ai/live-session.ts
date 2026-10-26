@@ -53,6 +53,8 @@ type ManagedSession = {
   outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
   backendInstructions?: Promise<string>;
+  activeWork?: { id: string; startedAt: number; lastNoticeAt: number };
+  commentaryAcks: Map<string, { delegationId: string | null; sentAt: number; timer: ReturnType<typeof setTimeout> }>;
   phoneGreetingEventId?: string;
   phoneStartup?: {
     greetingSentMs: number | null; greetingAcceptedMs: number | null;
@@ -267,7 +269,7 @@ function startManaged(
     },
     connection, ...config, transport, controller: new AbortController(),
     conversationId: -randomInt(1, 2_147_483_648), socketGeneration: 0,
-    lifetime: undefined, reconnectAttempts: 0, reconnects: 0,
+    lifetime: undefined, reconnectAttempts: 0, reconnects: 0, commentaryAcks: new Map(),
     ended: false, seenEvents: new Set(), seenDelegations: new Set(), transcript: [], history: [],
     queue: [], working: false, userCharacters: 0, delegatedCharacters: 0, usageSeconds: 0, createdAt: Date.now(),
   };
@@ -308,10 +310,46 @@ function textChunks(text: string): string[] {
 }
 function commentary(state: ManagedSession, delegationId: string | null, text: string) {
   for (const content of textChunks(text.slice(0, 12_000))) {
-    if (!send(state, { type: "session.commentary.append", delegation_id: delegationId, content })) {
+    const eventId = "commentary_" + randomBytes(8).toString("hex"), sentAt = Date.now();
+    if (!send(state, { type: "session.commentary.append", event_id: eventId, delegation_id: delegationId, content })) {
       throw new LiveSessionError("Die Sprachverbindung wurde unterbrochen.");
     }
+    // An ACK proves context delivery only, never audible playback. Do not retry
+    // a missing ACK: that could speak the same answer twice after reconnect.
+    const timer = setTimeout(() => {
+      state.commentaryAcks.delete(eventId);
+      if (!state.ended && !state.closing) logger.warn({ sessionId: state.id, delegationId,
+        waitedMs: Date.now() - sentAt }, "Live-Antwort ohne Zustellbestätigung");
+    }, 10_000);
+    timer.unref();
+    state.commentaryAcks.set(eventId, { delegationId, sentAt, timer });
+    if (state.commentaryAcks.size > 128) {
+      const oldest = state.commentaryAcks.keys().next().value!;
+      clearTimeout(state.commentaryAcks.get(oldest)!.timer); state.commentaryAcks.delete(oldest);
+    }
   }
+}
+
+function workNotice(state: ManagedSession, requested = false): void {
+  const work = state.activeWork;
+  if (!work || state.ended || state.closing || Date.now() - work.lastNoticeAt < 5_000) return;
+  try {
+    commentary(state, work.id, requested
+      ? "Ich bin noch da. Die Bearbeitung läuft noch; ein bestätigtes Ergebnis liegt noch nicht vor."
+      : "Die Bearbeitung dauert noch. Ein bestätigtes Ergebnis liegt noch nicht vor.");
+    work.lastNoticeAt = Date.now();
+  } catch { /* A disconnected sideband has its own bounded recovery. */ }
+}
+
+/** Bound waiting even if a dependency ignores AbortSignal. No automatic retry. */
+async function waitForWork<T>(job: Promise<T>, signal: AbortSignal): Promise<T> {
+  let abort!: () => void;
+  try {
+    return await Promise.race([job, new Promise<never>((_resolve, reject) => {
+      abort = () => reject(signal.reason);
+      if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
+    })]);
+  } finally { signal.removeEventListener("abort", abort); }
 }
 function thinking(state: ManagedSession, text: string) {
   for (const content of textChunks(text.slice(0, 12_000))) {
@@ -347,34 +385,54 @@ async function drainWork(state: ManagedSession) {
   try {
     while (!state.ended && !state.closing && state.queue.length) {
       const work = state.queue.shift()!;
+      const startedAt = Date.now(), deadline = new AbortController();
+      const signal = AbortSignal.any([state.controller.signal, deadline.signal]);
+      const timeout = setTimeout(() => deadline.abort(new DOMException("Backend deadline", "TimeoutError")), 120_000);
+      timeout.unref();
+      state.activeWork = { id: work.id, startedAt, lastNoticeAt: -Infinity };
+      const progress = [8_000, 30_000].map(delay => {
+        const timer = setTimeout(() => workNotice(state), delay); timer.unref(); return timer;
+      });
+      logger.info({ sessionId: state.id, delegationId: work.id, queued: state.queue.length }, "Live-Auftrag begonnen");
       state.history = retainHistory([...state.history, ...work.messages]);
       try {
-        state.controller.signal.throwIfAborted();
-        const [{ runLukasTurn }, instructions] = await Promise.all([import("../lukas-brain"), backendInstructions(state)]);
-        // A caller can hang up while the backend-only context is still loading.
-        state.controller.signal.throwIfAborted();
-        const recall = await state.phoneMemory?.recall(work.userText).catch(() => "\nKontaktarchiv nicht verfügbar; erfinde keine früheren Absprachen.") ?? "";
-        state.controller.signal.throwIfAborted();
-        const answer = await runLukasTurn({
-          quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
-          history: [...state.history], userText: work.userText,
-          systemPromptOverride: instructions + recall + (state.options.allowTools ? "" :
-            "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung." + (state.options.telefonBusiness ? " Die Annahme einer Geschäftsanfrage ist ausdrücklich erlaubt: Qualifiziere sie mit den Firmeninformationen. Die separate Telefonintegration speichert bestätigte Anfragedaten. Weise Kunden nicht ab und behaupte keine Speicherung ohne technische Bestätigung." : "")),
-          conversationId: state.conversationId,
-          telefonOwnerContactId: state.options.allowTools ? state.options.telefonOwnerContactId : undefined,
-          ...(state.options.allowTools ? {} : { tools: [] }),
-          signal: AbortSignal.any([state.controller.signal, AbortSignal.timeout(120_000)]),
-        });
+        signal.throwIfAborted();
+        const answer = await waitForWork((async () => {
+          const [{ runLukasTurn }, instructions] = await Promise.all([import("../lukas-brain"), backendInstructions(state)]);
+          // A caller can hang up while the backend-only context is still loading.
+          signal.throwIfAborted();
+          const recall = await state.phoneMemory?.recall(work.userText).catch(() => "\nKontaktarchiv nicht verfügbar; erfinde keine früheren Absprachen.") ?? "";
+          signal.throwIfAborted();
+          return runLukasTurn({
+            quelle: state.transport === "sip" ? "telefon" : state.options.visibility === "public" ? "portfolio" : "sprache",
+            history: [...state.history], userText: work.userText,
+            systemPromptOverride: instructions + recall + (state.options.allowTools ? "" :
+              "\n\nIn dieser Sprachsitzung stehen keine Werkzeuge zur Verfügung. Beantworte Wissensfragen; führe keine Aktionen aus und behaupte keine Ausführung." + (state.options.telefonBusiness ? " Die Annahme einer Geschäftsanfrage ist ausdrücklich erlaubt: Qualifiziere sie mit den Firmeninformationen. Die separate Telefonintegration speichert bestätigte Anfragedaten. Weise Kunden nicht ab und behaupte keine Speicherung ohne technische Bestätigung." : "")),
+            conversationId: state.conversationId,
+            telefonOwnerContactId: state.options.allowTools ? state.options.telefonOwnerContactId : undefined,
+            ...(state.options.allowTools ? {} : { tools: [] }),
+            signal,
+          });
+        })(), signal);
         if (state.ended || state.closing) return;
         state.history = retainHistory([...state.history, { role: "assistant", content: answer.slice(0, 12_000) }]);
         commentary(state, work.id, answer || "Die Bearbeitung hat noch kein bestätigtes Ergebnis geliefert.");
+        logger.info({ sessionId: state.id, delegationId: work.id, elapsedMs: Date.now() - startedAt },
+          "Live-Auftrag: Ergebnis an Sprachmodell gesendet");
       } catch (error) {
         if (state.ended || state.controller.signal.aborted) return;
-        logger.warn({ sessionId: state.id, delegationId: work.id, errorName: error instanceof Error ? error.name : "Error" },
+        logger.warn({ sessionId: state.id, delegationId: work.id, elapsedMs: Date.now() - startedAt,
+          errorName: error instanceof Error ? error.name : "Error" },
           "Live-Delegation fehlgeschlagen");
+        const failure = (deadline.signal.aborted ? "Das Zeitlimit der Bearbeitung wurde erreicht. " : "") +
+          "Der Auftrag konnte nicht vollständig abgeschlossen werden. Bereits begonnene Aktionen können trotzdem ausgeführt worden sein; behaupte keinen Erfolg und wiederhole sie nicht ohne vorherige Statusprüfung.";
+        state.history = retainHistory([...state.history, { role: "assistant", content: failure }]);
         try {
-          commentary(state, work.id, "Der Auftrag konnte nicht vollständig abgeschlossen werden. Bereits begonnene Aktionen können trotzdem ausgeführt worden sein; behaupte keinen Erfolg.");
+          commentary(state, work.id, failure);
         } catch { void terminateSession(state, "delegation_connection_lost").catch(() => {}); return; }
+      } finally {
+        clearTimeout(timeout); for (const timer of progress) clearTimeout(timer);
+        state.activeWork = undefined;
       }
     }
   } finally { state.working = false; }
@@ -412,6 +470,16 @@ function observe(state: ManagedSession, event: Json) {
     return;
   }
   if (state.closing || state.controller.signal.aborted) return;
+  if (event.type === "session.commentary.appended") {
+    const eventId = typeof event.client_event_id === "string" ? event.client_event_id : "";
+    const pending = state.commentaryAcks.get(eventId);
+    if (pending) {
+      clearTimeout(pending.timer); state.commentaryAcks.delete(eventId);
+      logger.info({ sessionId: state.id, delegationId: pending.delegationId,
+        acknowledgmentDelayMs: Date.now() - pending.sentAt }, "Live-Antwort: Kontext zugestellt, Wiedergabe unbestätigt");
+    }
+    return;
+  }
   if (event.type === "error") {
     const diagnostic = liveApiFailure("/live/sessions/" + encodeURIComponent(state.id) + "/attach",
       0, { error: event.error }, state.connection);
@@ -466,6 +534,9 @@ function observe(state: ManagedSession, event: Json) {
     state.phoneEnquiry?.observe({ role, text: event.delta, startMs: event.start_ms, endMs: event.end_ms });
     state.transcript.push({ role, text: event.delta, endMs: event.end_ms });
     if (role === "user") state.userCharacters += event.delta.length;
+    if (role === "user" && /^(?:(?:hallo|hey|lukas)[\s,.!?]*)*(?:(?:bist du|sind sie) (?:noch )?da[\s,.!?]*)?$/i.test(event.delta.trim()) && event.delta.trim()) {
+      workNotice(state, true);
+    }
     while (state.transcript.length > 1024 || state.transcript.reduce((n, row) => n + row.text.length, 0) > 40_000) {
       state.transcript.shift();
     }
@@ -608,6 +679,8 @@ function finishSession(state: ManagedSession, reason: string) {
       .finally(() => phoneMemoryWrites.delete(write));
   }
   state.queue = []; state.transcript = []; state.history = [];
+  for (const pending of state.commentaryAcks.values()) clearTimeout(pending.timer);
+  state.commentaryAcks.clear(); state.activeWork = undefined;
   if (sessions.get(state.id) === state) sessions.delete(state.id);
   try { state.socket?.close(1000); } catch {}
   logger.info({ sessionId: state.id, model: state.model, visibility: state.options.visibility,

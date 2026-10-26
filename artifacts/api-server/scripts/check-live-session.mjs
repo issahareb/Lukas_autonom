@@ -179,6 +179,51 @@ try {
   assert.ok(runningSignal.aborted); assert.equal(fixture.calls.length, beforeCancel + 1);
   assert.ok(!cancelSocket.sent.some((event) => event.type === "session.commentary.append")); fixture.backend = null;
 
+  // A slow dependency must not leave the caller without progress, even before
+  // the brain starts. A status question does not repeat the underlying action.
+  let releaseWaitingContext;
+  const waitingContext = new Promise(resolve => { releaseWaitingContext = resolve; });
+  const waiting = await api.createLiveWebRtcSession({ ...createOptions, instructions: () => waitingContext });
+  const waitingSocket = socketFor(waiting.sessionId), beforeWaiting = fixture.calls.length;
+  input(waitingSocket, "Prüfe die Anfragen."); delegate(waitingSocket, "waiting_context"); await settle();
+  fire(8000);
+  const progressReply = waitingSocket.sent.find(e => e.type === "session.commentary.append");
+  assert.ok(progressReply); assert.match(progressReply.content, /bestätigtes Ergebnis liegt noch nicht vor/);
+  assert.equal(fixture.calls.length, beforeWaiting);
+  waitingSocket.emit({ type: "session.commentary.appended", client_event_id: "wrong_id" });
+  assert.equal(fixture.logs.filter(l => l.data.sessionId === waiting.sessionId && l.message.includes("Kontext zugestellt")).length, 0);
+  waitingSocket.emit({ type: "session.commentary.appended", client_event_id: progressReply.event_id });
+  waitingSocket.emit({ type: "session.commentary.appended", client_event_id: progressReply.event_id });
+  assert.equal(fixture.logs.filter(l => l.data.sessionId === waiting.sessionId && l.message.includes("Kontext zugestellt")).length, 1);
+  const beforeHello = waitingSocket.sent.length, helloNow = Date.now;
+  Date.now = () => helloNow() + 6000;
+  try { input(waitingSocket, "Hallo, bist du noch da?"); } finally { Date.now = helloNow; }
+  assert.ok(waitingSocket.sent.slice(beforeHello).some(e => e.content?.includes("Ich bin noch da")));
+  assert.equal(fixture.calls.length, beforeWaiting);
+  fire(120000); await settle();
+  assert.ok(waitingSocket.sent.some(e => e.content?.includes("nicht vollständig abgeschlossen")));
+  releaseWaitingContext("PRIVATE_LATE_CONTEXT"); await settle();
+  assert.equal(fixture.calls.length, beforeWaiting, "late context cannot start work after deadline");
+  assert.ok(!JSON.stringify(fixture.logs).includes("PRIVATE_LATE_CONTEXT"));
+  await api.closeLiveSession(waiting.sessionId, waiting.closeToken);
+
+  // Even a backend that ignores cancellation cannot emit its stale result.
+  let releaseStuck;
+  fixture.backend = () => new Promise(resolve => { releaseStuck = resolve; });
+  const stuck = await api.createLiveWebRtcSession(createOptions), stuckSocket = socketFor(stuck.sessionId);
+  input(stuckSocket, "Prüfe den Status."); delegate(stuckSocket, "stuck_backend"); await settle();
+  fire(120000); await settle();
+  assert.ok(fixture.calls.at(-1).signal.aborted);
+  assert.ok(stuckSocket.sent.some(e => e.content?.includes("Bereits begonnene Aktionen")));
+  releaseStuck("STALE_RESULT_MUST_NOT_SPEAK"); await settle();
+  assert.ok(!JSON.stringify(stuckSocket.sent).includes("STALE_RESULT_MUST_NOT_SPEAK"));
+  fire(10000);
+  assert.ok(fixture.logs.some(l => l.data.sessionId === stuck.sessionId && l.message === "Live-Antwort ohne Zustellbestätigung"));
+  await api.closeLiveSession(stuck.sessionId, stuck.closeToken); fixture.backend = null;
+  assert.equal([...timers.values()].some(t => [8000, 30000, 120000, 10000].includes(t.milliseconds)), false,
+    "progress, deadline and delivery timers are cleared after hangup");
+  console.log("Live work watchdog passed: progress, hello status, whole-job deadline, late-result suppression and correlated delivery ACKs.");
+
   const reconnectSession = await api.createLiveWebRtcSession(createOptions);
   const requestsBefore = fixture.requests.length;
   const actualNow = Date.now;

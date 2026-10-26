@@ -131,3 +131,42 @@ beweist nicht, wie ein konkreter späterer Anruf zugeordnet wurde.
 Diese Ergänzung ist Code mit getesteten Schnittstellen, kein bereits
 bestätigter Modell-/Telefon-End-to-End-Erfolg. Die produktive Freischaltung
 und der echte Owner-Anruf bleiben ein eigener Abnahmeschritt.
+
+## Rückmeldungen bei langen Telefonaufträgen
+
+Die Live-Delegation hatte während des Backend-Abrufs keine Statusrückmeldung.
+Ihr 120-Sekunden-Signal galt erst ab dem Modellaufruf; ein hängender Aufbau des
+privaten Kontexts davor konnte unbegrenzt warten. Ein geschriebenes
+`session.commentary.append` wurde zudem nicht mit seiner Anbieterbestätigung
+korreliert.
+
+Jetzt umfasst das Zeitlimit den gesamten Auftrag, einschließlich Kontext und
+Gedächtnisabruf. Nach acht und dreißig Sekunden kann die Sitzung einen ehrlichen
+Zwischenstand an das Sprachmodell senden. Eine kurze Anwesenheitsfrage erhält
+während der Arbeit unmittelbar Statuskontext, ohne einen weiteren Backendauftrag
+auszulösen. Diese Hinweise sind auf höchstens einen in fünf Sekunden begrenzt.
+Verspätete Resultate nach Timeout oder Auflegen werden nicht mehr ausgespielt;
+begonnene externe Aktionen können dennoch stattgefunden haben. Daher gibt es
+keine automatische Wiederholung, und die Ungewissheit bleibt im Gesprächskontext.
+
+Jede Antwort erhält eine Ereignis-ID. Passende `session.commentary.appended`-
+Ereignisse messen die Zustellzeit; fehlende Bestätigungen werden nach zehn
+Sekunden protokolliert. Eine Zustellbestätigung ist ausdrücklich kein Nachweis
+hörbarer Wiedergabe. Inhalt, Schlüssel und Telefonnummern stehen nicht in diesen
+neuen Diagnoseeinträgen. Alle Timer werden bei Sitzungsende aufgeräumt.
+
+Die Telefon-Konfigurationsdiagnose zeigt nun die tatsächlich für SIP ausgewählte
+Stimme, einschließlich `LUKAS_TELEFON_LIVE_VOICE`, statt nur der Dashboard-Stimme.
+Stimme, Codec und Telnyx-Routing wurden durch diese Ergänzung nicht geändert.
+
+Geprüft mit simuliertem Live-Anbieter: hängender Kontext, hängendes Backend,
+Statusfrage ohne zweiten Auftrag, Timeout vor Modellstart, Unterdrückung später
+Ergebnisse, passende/fremde/doppelte Zustellbestätigungen und Timer-Cleanup.
+Die bisherigen SIP-, Telefonmedien-, Telnyx- und Konfigurationstests bestehen.
+Vollständiger Typecheck mit 128 UI-Tests und API-Produktionsbuild erfolgreich.
+Ein erneuter realer Modell-/Telefon-Abnahmetest steht weiter aus. Ein hörbarer
+Qualitätsgewinn oder die konkrete Ursache eines früheren Aussetzers ist damit
+nicht nachgewiesen.
+
+API-Vertrag geprüft am 26.10.2026:
+https://developers.openai.com/api/docs/guides/live-delegation
