@@ -18,6 +18,59 @@ tags:
   - name: trades
     description: LUKAS trade history and bankroll data (VPS trading system)
 paths:
+  /lukas/telefon/rueckrufe:
+    get:
+      operationId: getScheduledCallbacks
+      tags: [lukas]
+      summary: Private durable callback plans and separate call outcomes
+      security:
+        - LukasBearer: []
+      responses:
+        "200":
+          description: Latest 30 callback plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, faellig_am, status, ergebnis]
+                  properties:
+                    id: { type: string }
+                    kontakt_id: { type: [integer, "null"] }
+                    faellig_am: { type: string, format: date-time }
+                    status: { type: string, enum: [geplant, startet, gestartet, storniert, blockiert, unklar, verpasst] }
+                    ergebnis: { type: string }
+                    anruf_id: { type: [string, "null"] }
+                    anruf_status: { type: [string, "null"] }
+                    updated_at: { type: string, format: date-time }
+        "401": { description: Owner authentication required }
+        "503": { description: Storage or authentication configuration unavailable }
+  /lukas/telefon/rueckrufe/{id}/stornieren:
+    post:
+      operationId: cancelScheduledCallback
+      tags: [lukas]
+      summary: Cancel a pending callback; never claims to stop an active call
+      security:
+        - LukasBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Plan cancelled before dispatch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string }
+                  status: { type: string, const: storniert }
+        "401": { description: Owner authentication required }
+        "409": { description: Missing plan, dispatch already started or storage unavailable; not cancelled }
   /public/website-events:
     post:
       operationId: ingestWebsiteEvents

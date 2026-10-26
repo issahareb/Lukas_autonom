@@ -1,3 +1,4 @@
+import { startRueckrufe, stopRueckrufe } from "./lib/rueckrufe";
 import { inspectTelefonOwnerContact } from "./lib/telefon-owner";
 import { inspectTelefonCodeAccess } from "./lib/telefon-code-diagnose";
 import { inspectRecentTelefonMedia } from "./lib/telefon-medien-diagnose";
@@ -110,6 +111,7 @@ const server = app.listen(port, (err) => {
       });
   }
 
+  startRueckrufe();
   startMoltbookWorker();
   startAutonomy();
   startSelbstheilung();
@@ -130,6 +132,6 @@ const server = app.listen(port, (err) => {
     stopSelbstheilung();
     stopConsolidationWorker();
     stopSandboxCleanup();
-    return shutdownLiveSessions();
+    return Promise.all([stopRueckrufe(), shutdownLiveSessions()]).then(() => {});
   });
 });

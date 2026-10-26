@@ -5,11 +5,12 @@ import Telefon from "./telefon";
 
 const kontakt = { id: 7, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true,
   aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: "2026-10-04T10:00:00Z" };
-function setup(nummern: unknown[] = [], anrufe: unknown[] = []) {
+function setup(nummern: unknown[] = [], anrufe: unknown[] = [], rueckrufe: Array<Record<string, unknown>> = []) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     calls.push({ url: String(url), init });
-    const body = String(url).endsWith("/telnyx") ? {} : String(url).endsWith("/sms") ? { sms: [], bereit: false }
+    if (String(url).endsWith("/stornieren")) rueckrufe.forEach(r => { r.status = "storniert"; });
+    const body = String(url).endsWith("/rueckrufe") ? rueckrufe : String(url).endsWith("/telnyx") ? {} : String(url).endsWith("/sms") ? { sms: [], bereit: false }
       : { nummern, anrufe, bereit: { webhook: true, anrufen: true }, anbieter: "telnyx" };
     return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   });
@@ -76,4 +77,19 @@ describe("Telefonkontakte", () => {
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("button", { name: /Aufnahme anhören/ })).toBeVisible();
   });
+});
+
+it("zeigt fällige Rückrufe und storniert sie ohne einen Anruf auszulösen", async () => {
+  localStorage.setItem("lukas_token", "test-owner");
+  const calls = setup([kontakt], [], [{ id: "callback-test", kontakt_id: 7, status: "geplant", faellig_am: "2026-10-26T18:00:00Z", ergebnis: "" }]);
+  render(<Telefon />);
+  const cancel = await screen.findByRole("button", { name: "Rückruf stornieren" });
+  await userEvent.click(cancel);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Rückruf stornieren" })).toBeNull());
+  expect(screen.getByText(/storniert/)).toBeVisible();
+  const request = calls.find(c => c.url.endsWith("/callback-test/stornieren"));
+  expect(request?.init?.method).toBe("POST");
+  expect((request?.init?.headers as Record<string, string>).Authorization).toBe("Bearer test-owner");
+  expect(calls.some(c => c.url.includes("testanruf"))).toBe(false);
+  localStorage.removeItem("lukas_token");
 });

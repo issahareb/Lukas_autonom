@@ -1,10 +1,11 @@
 import type OpenAI from "openai";
 
 const GRUPPEN: Array<[RegExp, string[]]> = [
+  [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
   [/such|recherch|aktuell|quelle|preis|kostet|website|webseite|https?:|internet|öffnungszeit/i, ["web_search", "fetch_url", "browse_page", "browser_do"]],
   [/repo|package\.json|quellcode|programmier|build|typecheck|skript|python|javascript|typescript|implement|debug|reparier/i, ["github_list_repos", "github_read_path", "github_search_code", "execute_command", "propose_code_change", "fix_error"]],
   [/mail|postfach|posteingang/i, ["email_search", "email_read", "email_send"]],
-  [/telefon|anruf|anruf(en)?|gespräch|gespraech|kontakt|ruf.*an/i, ["telefon_status", "telefon_kontakte", "telefon_hinweis", "ruf_an"]],
+  [/telefon|anruf|anruf(en)?|gespräch|gespraech|kontakt|r[uü]ckruf|zur[uü]ck|ruf.*an/i, ["telefon_status", "telefon_kontakte", "telefon_hinweis", "ruf_an", "plane_rueckruf", "rueckruf_status", "storniere_rueckruf"]],
   [/ziel|plan|aufgab|fortschritt/i, ["create_goal", "update_goal"]],
   [/merk|speicher|erinner|gedächtnis|gedaechtnis/i, ["save_memory", "query_memory"]],
   [/tagebuch|rückblick|recap/i, ["write_diary"]],

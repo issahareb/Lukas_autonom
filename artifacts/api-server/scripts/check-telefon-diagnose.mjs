@@ -7,7 +7,7 @@ import { build } from "esbuild";
 const directory = await mkdtemp(join(tmpdir(), "lukas-telefon-diagnose-"));
 const output = join(directory, "diagnose.mjs");
 const names = ["AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL", "OPENAI_PROJECT_ID",
-  "OPENAI_WEBHOOK_SECRET", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "RAILWAY_PUBLIC_DOMAIN", "LUKAS_TELEFON_ANBIETER",
+  "OPENAI_WEBHOOK_SECRET", "LUKAS_LIVE_MODEL", "LUKAS_LIVE_VOICE", "LUKAS_TELEFON_LIVE_VOICE", "RAILWAY_PUBLIC_DOMAIN", "LUKAS_TELEFON_ANBIETER",
   "TELNYX_API_KEY", "TELNYX_NUMMER", "TELNYX_APP_ID", "TELNYX_PUBLIC_KEY"];
 const saved = Object.fromEntries(names.map(name => [name, process.env[name]]));
 const originalFetch = globalThis.fetch, requests = [];
@@ -86,6 +86,10 @@ try {
   assert.equal(good.configurationChecksPassed, true);
   assert.equal(good.openai.apiOrigin, "https://api.openai.com");
   assert.equal(good.openai.model, "gpt-live-1"); assert.equal(good.openai.voice, "cedar");
+  process.env.LUKAS_TELEFON_LIVE_VOICE = "marin";
+  assert.equal((await inspectTelefonSetup({ publicBaseUrl })).openai.voice, "marin",
+    "phone diagnostics must report the SIP voice, not the dashboard fallback");
+  delete process.env.LUKAS_TELEFON_LIVE_VOICE; requests.splice(6);
   assert.equal(good.openai.projectHeaderSentByLive, true);
   assert.equal(good.openai.liveSession, "not_tested"); assert.equal(good.openai.billing, "not_tested");
   assert.equal(good.openai.webhookSubscription, "subscribed"); assert.equal(requests.length, 6);

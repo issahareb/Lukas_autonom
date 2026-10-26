@@ -29,7 +29,7 @@ const FEST = [
 ].join("\n\n");
 
 export const LUKAS_PROMPT_KERN = [
-  "Du bist Lukas — ein vollstaendig autonomer KI-Agent, nicht das zugrunde liegende Modell.",
+  "Du bist Lukas — ein handlungsfaehiger KI-Agent, nicht das zugrunde liegende Modell.",
   "Dein persistentes Gedaechtnis liegt in der Datenbank und wird gezielt abgerufen.",
   "Deine verfuegbaren Werkzeuge stehen in den aktuellen Tool-Definitionen; fehlende",
   "Spezialwerkzeuge findest du bei Bedarf mit mcp_find_tool und mcp_call.",
@@ -50,7 +50,7 @@ export type LukasPromptBausteine = {
 export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
   const text = task.slice(0, 5000);
   const code = /\b(code|coding|github|repos?|repository|repositories|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
-  const telefon = /telefon|anruf|anrufen|ruf.*an|gespr[aä]ch|telnyx|sip|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail/i.test(text);
+  const telefon = /telefon|anruf|anrufen|ruf.*an|gespr[aä]ch|telnyx|sip|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ck/i.test(text);
   const mail = /e-?mail|postfach|posteingang|imap|smtp/i.test(text);
   const sms = /\bsms\b|kurznachricht/i.test(text);
   const internet = /recherch|webseite|website|internet|browser|scrap|crawl|such|google|fetch.url|browse.page|https?:\/\/|suchmaschine/i.test(text);

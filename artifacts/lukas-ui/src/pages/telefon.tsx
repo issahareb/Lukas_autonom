@@ -588,6 +588,35 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
   );
 }
 
+type Rueckruf = { id: string; kontakt_id: number | null; faellig_am: string; status: string; ergebnis: string; anruf_status?: string };
+function RueckrufListe({ kontakte }: { kontakte: Nummer[] }) {
+  const [rows, setRows] = useState<Rueckruf[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try { const data = await api("/rueckrufe"); if (!Array.isArray(data)) throw new Error("Ungültige Rückrufliste"); setRows(data); setError(""); }
+    catch { setError("Rückrufstatus gerade nicht erreichbar."); }
+  }, []);
+  useEffect(() => { void load(); const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 5000); return () => window.clearInterval(timer); }, [load]);
+  const cancel = async (id: string) => {
+    setBusy(id);
+    try { await api("/rueckrufe/" + encodeURIComponent(id) + "/stornieren", { method: "POST", body: "{}" }); await load(); }
+    catch { setError("Nicht storniert. Der Auftrag könnte bereits gestartet sein; Status prüfen."); }
+    finally { setBusy(null); }
+  };
+  return <section aria-label="Rückrufaufträge" className="space-y-3 rounded-2xl bg-secondary/30 p-4">
+    <h2 className="font-medium">Rückrufaufträge</h2>
+    {error && <p role="alert" className="text-sm text-amber-300">{error}</p>}
+    {!rows.length && !error && <p className="text-sm text-muted-foreground">Hier erscheinen dauerhaft eingeplante Rückrufe.</p>}
+    {rows.slice(0, 10).map(r => <div key={r.id} className="space-y-1 border-t border-border pt-3 text-sm">
+      <p>{kontakte.find(k => k.id === r.kontakt_id)?.name || "Kontakt"} · {new Date(r.faellig_am).toLocaleString("de-DE")} · {r.status}</p>
+      {r.ergebnis && <p className="break-words text-muted-foreground">{r.ergebnis}</p>}
+      {r.anruf_status && <p>Gesprächsstatus: {r.anruf_status}</p>}
+      {r.status === "geplant" && <Button variant="outline" disabled={busy !== null} onClick={() => void cancel(r.id)}>Rückruf stornieren</Button>}
+    </div>)}
+  </section>;
+}
+
 export default function Telefon() {
   const [daten, setDaten] = useState<Antwort | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -682,6 +711,7 @@ export default function Telefon() {
       <div><strong>{!daten ? "Telefonübersicht" : laufend.length ? `${laufend.length} ${laufend.length === 1 ? "Gespräch läuft" : "Gespräche laufen"}` : "Dein direkter Draht"}</strong><p>{daten ? `${kontakte.length} Kontakte · ${aufnahmen.length} fertige Aufnahmen bei den letzten Anrufen` : fehler ? "Stand gerade nicht erreichbar" : "Kontakte und Gespräche werden geladen …"}</p></div>
       <span className="phone-summary-icon"><Phone size={22} aria-hidden="true" /></span>
     </section>
+    <RueckrufListe kontakte={daten?.nummern ?? []} />
     <Tabs value={bereich} onValueChange={wechsel} className="space-y-4">
       <div ref={navigation} className="sticky top-0 z-10 space-y-3 bg-background/95 pb-3 pt-1 backdrop-blur-xl">
         <TabsList aria-label="Telefonbereiche" className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
