@@ -4,17 +4,24 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { Fehlergrenze } from "@/components/fehlergrenze";
 import { LukasAvatar } from "@/components/lukas-avatar";
-import { LogOut, X, Grid2X2, ArrowUpRight, Search, ChevronRight } from "lucide-react";
-import { navigation, navigationGroups, mobileNavigation } from "@/lib/navigation";
+import { LogOut, X, Grid2X2, Menu, ArrowUpRight, Search, ChevronRight } from "lucide-react";
+import { navigation, navigationGroups } from "@/lib/navigation";
+import { AppNavigationContext } from "./app-navigation";
 import "./app-shell.css";
 import "./workspace.css";
 import "./app-motion.css";
+import "./hareb-shell.css";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: health, isError: healthError } = useHealthCheck();
   const [mehr, setMehr] = useState(false);
   const [suche, setSuche] = useState("");
+  const menuOpener = useRef<HTMLElement | null>(null);
+  const openMenu = () => {
+    menuOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setMehr(true);
+  };
   const shell = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null);
   const current = navigation.find((n) => n.href === location);
@@ -69,6 +76,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </span>
   );
   return (
+    <AppNavigationContext.Provider value={openMenu}>
     <div ref={shell} className="app-shell" data-tone={current?.tone ?? "mint"} data-page={location}>
       <aside className="app-sidebar" aria-label="Desktop-Navigation">
         <Link href="/" className="app-brand">
@@ -99,60 +107,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <header className="app-mobile-header">
+        <button type="button" className="app-menu-toggle" aria-label="Menü öffnen" aria-expanded={mehr} aria-haspopup="dialog" onClick={openMenu}><Menu size={22} /></button>
         <Link href="/" className="app-mobile-brand">
           <LukasAvatar className="app-brand-image" />
-          {location === "/" ? "Lukas" : title}
+          {location === "/chat" || location === "/" ? "Lukas" : title}
         </Link>
         {status}
       </header>
       <main className="app-main" id="arbeitsbereich">
         <div className="app-topbar">
           <span className="app-breadcrumb">Lukas <ChevronRight size={13} /> {current?.group} <ChevronRight size={13} /> <strong>{title}</strong></span>
-          <button type="button" className="app-jump" onClick={() => setMehr(true)}><Search size={15} /> Bereich wechseln <Grid2X2 size={14} /></button>
+          <button type="button" className="app-jump" onClick={openMenu}><Search size={15} /> Bereich wechseln <Grid2X2 size={14} /></button>
         </div>
         <div className="app-scroll" ref={scroll}>
           <div className="app-route" key={location}><Fehlergrenze schluessel={location}>{children}</Fehlergrenze></div>
         </div>
       </main>
       <Dialog.Root open={mehr} onOpenChange={setMehr}>
-        <nav className="app-tabbar" aria-label="Hauptnavigation">
-          {navigation.filter(n => mobileNavigation.includes(n.href)).map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-current={location === n.href ? "page" : undefined}
-            >
-              <span>
-                <n.icon size={21} aria-hidden="true" />
-              </span>
-              {n.label}
-            </Link>
-          ))}
-          <Dialog.Trigger asChild>
-            <button
-              type="button"
-              className={
-                !navigation.filter(n => mobileNavigation.includes(n.href)).some((n) => n.href === location)
-                  ? "is-current"
-                  : ""
-              }
-              aria-label="Weitere Bereiche öffnen"
-            >
-              <span>
-                <Grid2X2 size={21} aria-hidden="true" />
-              </span>
-              Mehr
-            </button>
-          </Dialog.Trigger>
-        </nav>
         <Dialog.Portal>
           <Dialog.Overlay className="app-sheet-overlay" />
-          <Dialog.Content className="app-sheet">
+          <Dialog.Content className="app-sheet app-drawer" onCloseAutoFocus={event => {
+            event.preventDefault();
+            if (menuOpener.current?.isConnected) menuOpener.current.focus();
+            else shell.current?.querySelector<HTMLButtonElement>(".app-menu-toggle")?.focus();
+          }}>
             <div className="app-sheet-handle" aria-hidden="true" />
             <div className="app-sheet-heading">
               <div>
-                <Dialog.Title>Dein Lukas</Dialog.Title>
-                <Dialog.Description>Alles an einem Ort.</Dialog.Description>
+                <LukasAvatar className="app-menu-avatar" />
+                <Dialog.Title>Lukas</Dialog.Title>
+                <Dialog.Description>Hareb Digital / Dein Arbeitsraum</Dialog.Description>
               </div>
               <Dialog.Close
                 className="app-sheet-close"
@@ -182,5 +166,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </Dialog.Portal>
       </Dialog.Root>
     </div>
+    </AppNavigationContext.Provider>
   );
 }

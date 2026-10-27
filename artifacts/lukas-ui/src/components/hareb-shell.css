@@ -1,0 +1,43 @@
+/* Hareb Digital's source tokens: app/globals.css. Manrope, paper, ink, lime. */
+@font-face { font-family: "Manrope"; font-style:normal; font-weight:200 800; font-display:swap; src:url('/fonts/manrope-latin.woff2') format('woff2'); }
+.app-shell, .app-drawer { --hd-paper:#f3f1eb; --hd-ink:#20211e; --hd-muted:#62645c; --hd-line:#d3d3c9; --hd-lime:#d4ed8a; font-family:"Manrope",Arial,sans-serif; }
+.app-shell { --app-font-sans:"Manrope",Arial,sans-serif; --area:var(--hd-lime); background:var(--hd-paper); }
+.app-shell :is(.app-sidebar,.app-mobile-header,.app-topbar) { background:var(--hd-paper); color:var(--hd-ink); border-color:var(--hd-line); }
+.app-shell :is(.app-brand,.app-mobile-brand,.app-breadcrumb strong) { color:var(--hd-ink); }
+.app-shell :is(.app-brand small,.app-nav-heading,.app-sidebar-link,.app-breadcrumb,.app-connection) { color:var(--hd-muted); }
+.app-shell .app-sidebar-link[aria-current="page"] { background:var(--hd-lime); color:var(--hd-ink); border-radius:4px; box-shadow:none; }
+.app-shell .app-nav-dot { background:var(--hd-ink); }
+.app-shell .app-sidebar-link:hover { background:#20211e09; color:var(--hd-ink); }
+.app-shell .app-jump { background:transparent; color:var(--hd-muted); border-color:var(--hd-line); }
+.app-shell .app-connection.is-online > span { background:#4f642b; }
+.app-shell .app-sidebar-bottom { border-color:var(--hd-line); }
+.app-menu-toggle,.chat-header-button { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; background:transparent; border:0; color:var(--hd-ink); border-radius:50%; }
+.app-menu-toggle:hover,.chat-header-button:hover { background:#20211e09; }
+.app-mobile-brand { margin-right:auto; }
+.app-menu-avatar { width:62px; height:62px; margin-bottom:12px; }
+.app-drawer.app-sheet { inset:0 auto 0 0; transform:none; width:min(360px,calc(100vw - 36px)); height:100dvh; max-height:none; border-radius:0; border:0; padding: max(24px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom)); background:var(--hd-paper); color:var(--hd-ink); box-shadow:12px 0 80px #0002; }
+.app-drawer.app-sheet[data-state="open"] { animation:lukas-drawer-in .25s cubic-bezier(.2,.7,.2,1); }
+.app-drawer .app-sheet-handle { display:none; }
+.app-drawer .app-sheet-heading { align-items:flex-start; margin-bottom:24px; }
+.app-drawer .app-sheet-heading h2 { font-size:30px; font-weight:600; letter-spacing:-.055em; }
+.app-drawer .app-sheet-heading p { color:var(--hd-muted); font-size:11px; }
+.app-drawer .app-sheet-close { background:transparent; color:var(--hd-ink); }
+.app-drawer .app-menu-search { background:transparent; border:1px solid var(--hd-line); color:var(--hd-muted); border-radius:4px; }
+.app-drawer input { color:var(--hd-ink); }
+.app-drawer .app-menu-groups h3 { color:var(--hd-muted); font-size:10px; letter-spacing:.12em; margin:24px 0 8px; text-transform:uppercase; }
+.app-drawer .app-sheet-grid { grid-template-columns:1fr; gap:3px; }
+.app-drawer .app-sheet-grid a { min-height:48px; border-radius:4px; border:0; background:transparent; color:var(--hd-ink); font-size:14px; padding:10px 12px; }
+.app-drawer .app-sheet-grid a > svg { color:var(--hd-muted); }
+.app-drawer .app-sheet-grid a[aria-current="page"] { background:var(--hd-lime); color:var(--hd-ink); }
+.app-drawer .app-sheet-grid a:hover { background:#20211e09; }
+.app-drawer .app-sheet-logout { color:var(--hd-muted); margin-top:24px; border-top:1px solid var(--hd-line); width:100%; }
+.app-shell :is(a,button):focus-visible,.app-drawer :is(a,button,input):focus-visible { outline:2px solid #4f642b; outline-offset:3px; }
+@keyframes lukas-drawer-in { from {transform:translateX(-100%)} to {transform:translateX(0)} }
+@media(max-width:767px) {
+ .app-shell { grid-template-rows:auto minmax(0,1fr); }
+ .app-shell .app-mobile-header { gap:8px; padding:6px 12px; padding-top:max(6px,env(safe-area-inset-top)); min-height:60px; }
+ .app-mobile-brand .app-brand-image { width:42px; height:42px; }
+ .app-shell:has(.chat-page[data-chat-view="thread"]) { grid-template-rows:minmax(0,1fr); }
+ .app-shell:has(.chat-page[data-chat-view="thread"]) .app-mobile-header { display:none; }
+}
+@media(prefers-reduced-motion:reduce) { .app-drawer.app-sheet[data-state="open"] { animation:none; } }

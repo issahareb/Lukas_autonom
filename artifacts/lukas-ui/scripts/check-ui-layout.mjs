@@ -58,9 +58,12 @@ try {
     if (i === 79) throw new Error("Vite preview did not start");
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  browser = await chromium.launch();
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined });
   for (const [name, width, height] of [["mobil", 390, 844], ["desktop", 1440, 1000], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, reducedMotion: name === "desktop" ? "no-preference" : "reduce" });
+    await context.addInitScript(() => {
+      if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Mikrofonzugriff nicht erlaubt", "NotAllowedError"); } });
+    });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -125,6 +128,25 @@ try {
     await noOverflow(page, "Chat " + name);
     const box = await input.boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height < height, "Composer remains in the viewport");
+    if (width < 768) {
+      assert.equal(await page.locator(".app-tabbar").count(), 0, "No bottom navigation takes chat space");
+      assert.equal(await page.locator(".chat-voice-bar").count(), 0, "No separate voice bar");
+      assert.equal(await page.locator(".app-mobile-header").isVisible(), false, "One header in a chat");
+      const canvas = await page.locator(".chat-scroll").boundingBox();
+      assert.ok(canvas.height > height * .72, "At least 72% of the viewport belongs to conversation");
+      assert.equal(await page.locator(".chat-composer").getByRole("button", { name: "Sprachchat starten" }).count(), 1);
+      await page.getByRole("button", { name: "Menü öffnen" }).click();
+      await page.getByRole("dialog").waitFor();
+      if (name === "mobil") await screenshot(page, "chat-menue-mobil");
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.getByRole("button", { name: "Menü öffnen" }).evaluate(el => el === document.activeElement), true, "Focus returns to menu trigger");
+      await page.setViewportSize({ width, height: 430 });
+      await input.focus();
+      const shortComposer = await page.locator(".chat-composer").boundingBox();
+      assert.ok(shortComposer.y + shortComposer.height <= 430, "Composer stays visible in a keyboard-sized viewport");
+      await page.setViewportSize({ width, height });
+    }
     await input.fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-" + name);
     assert.equal(await page.getByRole("button", { name: "Nachricht kopieren", exact: true }).count(), messages.length);
@@ -133,11 +155,15 @@ try {
     if (width < 768) await page.getByRole("button", { name: "Zurück zur Liste" }).click();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-liste-" + name);
-    await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
+    await page.locator(".chat-sidebar").getByRole("button", { name: "Neuer Chat", exact: true }).click();
     await page.getByRole("heading", { name: "Was hast du vor?" }).waitFor();
     await page.getByRole("button", { name: "Was ist heute wichtig?", exact: false }).click();
     assert.equal(await page.getByRole("textbox", { name: "Nachricht an Lukas" }).inputValue(), "Was ist heute wichtig?");
     assert.equal(sent, 0, "A suggestion must only fill the draft");
+    await page.getByRole("button", { name: "Sprachchat starten" }).click();
+    await page.locator(".chat-composer .chat-voice-status").waitFor();
+    assert.ok((await page.locator(".chat-voice-status").innerText()).length > 0, "Voice permission errors remain visible next to the composer");
+    assert.equal(await page.getByRole("button", { name: "Sprachchat starten" }).count(), 1, "Voice can be retried after denied permission");
     await page.goto(origin + "/telefon");
     await page.getByRole("heading", { name: "Deine Kontakte" }).waitFor();
     const firstContact = await page.getByRole("heading", { name: "Max Muster", exact: true }).boundingBox();
@@ -185,7 +211,7 @@ try {
     await page.getByText("file_read", { exact: true }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Erlauben", exact: true }).count(), 0);
     if (width < 768) {
-      await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
+      await page.getByRole("button", { name: "Menü öffnen" }).click();
       await page.getByRole("searchbox", { name: "Bereiche suchen" }).fill("Verbindungen");
       await page.getByRole("dialog").getByRole("link", { name: "Verbindungen", exact: true }).click();
       await page.getByRole("heading", { name: "Verbindungen", exact: true }).waitFor();

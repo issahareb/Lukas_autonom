@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Check, Copy, Plus, Trash2, ArrowUp, MessageSquare, Loader2, ArrowLeft, Search,
-  Paperclip, X, FileText, Film, ImageIcon, File as FileIcon, ArrowDown, Square,
+  Paperclip, X, FileText, Film, ImageIcon, File as FileIcon, ArrowDown, Square, Menu, SquarePen, AudioLines, MicOff,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { takeCompleteLines, parseSseData } from "@/lib/sse";
@@ -19,7 +19,8 @@ import { warteSchritt, GEDULD_MS } from "@/lib/geduld";
 import { ToolSteps, type ToolStep } from "@/components/tool-steps";
 import { ChatContent } from "@/components/chat-content";
 import { LukasAvatar } from "@/components/lukas-avatar";
-import { VoicePanel } from "@/components/voice-panel";
+import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
+import { useAppNavigation } from "@/components/app-navigation";
 import "./chat.css";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -168,6 +169,11 @@ const TOOL_TEXT: Record<string, string> = {
 
 export default function Chat() {
   const qc = useQueryClient();
+  const openMenu = useAppNavigation();
+  const voice = useSprachsitzung();
+  const voiceRunning = voice.aktiv || voice.status === "verbindet";
+  const autoVoice = new URLSearchParams(window.location.search).get("voice") === "auto";
+  useEffect(() => { if (autoVoice) void voice.starten(); }, [autoVoice, voice.starten]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [conversationSearch, setConversationSearch] = useState("");
@@ -550,7 +556,6 @@ export default function Chat() {
     }
   };
 
-  const autoVoice = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("voice") === "auto";
   const allMessages = activeConv?.messages ?? [];
   const isMobile = useIsMobile();
   const showList = !isMobile || activeId === null;
@@ -559,10 +564,6 @@ export default function Chat() {
 
   return (
     <div className="chat-page" data-chat-view={activeId ? "thread" : "list"}>
-      <div className="chat-voice-bar">
-        <div className="chat-voice-brand"><LukasAvatar /><div>Lukas<small>Dein Gesprächsraum</small></div></div>
-        <VoicePanel autoStart={autoVoice} />
-      </div>
       <div className="chat-workspace">
         {showList && (
           <aside className="chat-sidebar" aria-label="Gespräche">
@@ -604,13 +605,11 @@ export default function Chat() {
             {activeId ? (
               <>
                 <div className="chat-thread-heading">
-                  {isMobile && (
-                    <button onClick={() => setActiveId(null)} className="chat-back-button" aria-label="Zurück zur Liste" data-testid="button-back-to-list">
-                      <ArrowLeft className="w-5 h-5" />
-                    </button>
-                  )}
-                  <LukasAvatar className="chat-thread-avatar" />
-                  <div className="chat-thread-title"><span>{activeConv?.title ?? "Gespräch wird geladen …"}</span><small>{streaming ? "Lukas arbeitet an deiner Antwort" : wartetAufNachzuegler ? "Antwort wird nachgeladen" : "Mit Lukas weiterdenken"}</small></div>
+                  {isMobile && <button type="button" onClick={openMenu} className="app-menu-toggle" aria-label="Menü öffnen" aria-haspopup="dialog"><Menu size={22} /></button>}
+                  <LukasAvatar className="chat-thread-avatar" mood={voice.status === "spricht" ? "speaking" : voice.aktiv ? "listening" : streaming || voice.status === "verbindet" ? "thinking" : "idle"} />
+                  <div className="chat-thread-title"><span>Lukas</span><small>{streaming ? "Denkt nach …" : voiceRunning ? "Sprachchat aktiv" : activeConv?.title ?? "Gespräch"}</small></div>
+                  {isMobile && <button type="button" onClick={() => setActiveId(null)} className="chat-header-button" aria-label="Zurück zur Liste" title="Gespräche"><MessageSquare size={20} /></button>}
+                  <button type="button" onClick={handleNew} disabled={createConvo.isPending} className="chat-header-button" aria-label="Neuer Chat" title="Neuer Chat"><SquarePen size={20} /></button>
                 </div>
 
                 <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll">
@@ -746,12 +745,15 @@ export default function Chat() {
                       </div>
                     )}
 
-                    <div className="chat-composer">
+                    <div className="chat-composer" data-voice-active={voiceRunning}>
+                      <VoiceStatus voice={voice} />
+                      <div className="chat-composer-controls">
                       <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
                       <button onClick={() => fileInputRef.current?.click()} disabled={streaming || uploading} className="chat-attach-button" aria-label="Datei anhängen" data-testid="button-attach">
                         <Paperclip className="w-5 h-5" />
                       </button>
                       <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Schreibe Lukas …" aria-label="Nachricht an Lukas" rows={1} disabled={streaming} className="chat-input" />
+                      <VoiceButton voice={voice} />
                       {streaming ? (
                         <button onClick={handleCancel} className="chat-send-button chat-send-button--stop" aria-label="Antwort stoppen" data-testid="button-stop-response">
                           <Square className="w-5 h-5 fill-current" />
@@ -761,6 +763,7 @@ export default function Chat() {
                           <ArrowUp className="w-5 h-5" />
                         </button>
                       )}
+                    </div>
                     </div>
                     <p className="chat-composer-hint">Enter zum Senden · Shift+Enter für eine neue Zeile</p>
                   </div>
@@ -778,6 +781,25 @@ export default function Chat() {
           </div>
         )}
       </div>
+      {!activeId && <div className="chat-list-voice"><VoiceStatus voice={voice} /><div><span>Lieber sprechen?</span><VoiceButton voice={voice} /></div></div>}
     </div>
   );
+}
+
+
+type VoiceSession = ReturnType<typeof useSprachsitzung>;
+function VoiceButton({ voice }: { voice: VoiceSession }) {
+  const running = voice.aktiv || voice.status === "verbindet";
+  return <button type="button" className={"chat-voice-button" + (running ? " is-active" : "")} onClick={running ? voice.beenden : voice.starten} aria-label={voice.status === "verbindet" ? "Sprachaufbau abbrechen" : running ? "Sprachchat beenden" : "Sprachchat starten"} aria-pressed={running} data-testid={running ? "button-voice-stop" : "button-voice-start"}>
+    {voice.status === "verbindet" ? <Loader2 size={20} className="animate-spin" /> : running ? <MicOff size={20} /> : <AudioLines size={22} />}
+  </button>;
+}
+function VoiceStatus({ voice }: { voice: VoiceSession }) {
+  const running = voice.aktiv || voice.status === "verbindet";
+  if (!running && !voice.fehler && !voice.zeilen.length) return null;
+  const label = voice.status === "verbindet" ? "Verbindung wird aufgebaut …" : voice.status === "spricht" ? "Lukas spricht" : voice.aktiv ? "Ich höre dir zu" : "Sprachchat beendet";
+  return <div className="chat-voice-details">
+    <div className="chat-voice-status" role="status"><span className={running ? "is-live" : ""} />{voice.fehler || label}</div>
+    {voice.zeilen.length > 0 && <details><summary>Gespräch mitlesen</summary><div className="chat-voice-transcript">{voice.zeilen.map((line, i) => <p key={i}><strong>{line.role === "user" ? "Du" : "Lukas"}</strong> {line.text}</p>)}</div></details>}
+  </div>;
 }
