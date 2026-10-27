@@ -21,6 +21,7 @@ import { ChatContent } from "@/components/chat-content";
 import { LukasAvatar } from "@/components/lukas-avatar";
 import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import { useAppNavigation } from "@/components/app-navigation";
+import { expressionFromSteps, type Expression } from "@/lib/expression";
 import "./chat.css";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -83,12 +84,14 @@ function Bubble({
   zeit,
   wartet,
   copyText,
+  expression = "neutral",
   children,
 }: {
   own: boolean;
   zeit?: string;
   wartet?: boolean;
   copyText?: string;
+  expression?: Expression;
   children: React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
@@ -108,7 +111,7 @@ function Bubble({
         own ? "chat-message--own items-end" : "chat-message--assistant items-start"
       }`}
     >
-      {!own && <div className="chat-author"><LukasAvatar /><strong>Lukas</strong></div>}
+      {!own && <div className="chat-author"><LukasAvatar expression={expression} /><strong>Lukas</strong></div>}
       <div
         className={`chat-bubble min-w-0 ${
           own
@@ -174,6 +177,7 @@ export default function Chat() {
   const voiceRunning = voice.aktiv || voice.status === "verbindet";
   const autoVoice = new URLSearchParams(window.location.search).get("voice") === "auto";
   useEffect(() => { if (autoVoice) void voice.starten(); }, [autoVoice, voice.starten]);
+  const [faceOverride, setFaceOverride] = useState<{ id: number; expression: Expression } | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [conversationSearch, setConversationSearch] = useState("");
@@ -475,6 +479,11 @@ export default function Chat() {
           // eigene, anklickbare Schritte.
           if (parsed.tool) setLiveTool(String(parsed.tool));
           if (parsed.step) {
+            const step = parsed.step as ToolStep;
+            if (step.ok && ["set_expression", "mcp_call"].includes(step.tool)) {
+              const selected = expressionFromSteps([step]);
+              try { if (JSON.parse(step.result).surface === "lukas-web-chat") setFaceOverride({ id: activeId, expression: selected }); } catch {}
+            }
             setLiveSteps((prev) => [...prev, parsed.step as ToolStep]);
             setLiveTool(null);
           }
@@ -557,6 +566,7 @@ export default function Chat() {
   };
 
   const allMessages = activeConv?.messages ?? [];
+  const face = faceOverride?.id === activeId ? faceOverride.expression : expressionFromSteps([...allMessages.flatMap(m => (m as { steps?: ToolStep[] }).steps ?? []), ...liveSteps]);
   const isMobile = useIsMobile();
   const showList = !isMobile || activeId === null;
   const showChat = !isMobile || activeId !== null;
@@ -606,7 +616,7 @@ export default function Chat() {
               <>
                 <div className="chat-thread-heading">
                   {isMobile && <button type="button" onClick={openMenu} className="app-menu-toggle" aria-label="Menü öffnen" aria-haspopup="dialog"><Menu size={22} /></button>}
-                  <LukasAvatar className="chat-thread-avatar" mood={voice.status === "spricht" ? "speaking" : voice.aktiv ? "listening" : streaming || voice.status === "verbindet" ? "thinking" : "idle"} />
+                  <LukasAvatar className="chat-thread-avatar" expression={face} mood={voice.status === "spricht" ? "speaking" : voice.aktiv ? "listening" : streaming || voice.status === "verbindet" ? "thinking" : "idle"} />
                   <div className="chat-thread-title"><span>Lukas</span><small>{streaming ? "Denkt nach …" : voiceRunning ? "Sprachchat aktiv" : activeConv?.title ?? "Gespräch"}</small></div>
                   {isMobile && <button type="button" onClick={() => setActiveId(null)} className="chat-header-button" aria-label="Zurück zur Liste" title="Gespräche"><MessageSquare size={20} /></button>}
                   <button type="button" onClick={handleNew} disabled={createConvo.isPending} className="chat-header-button" aria-label="Neuer Chat" title="Neuer Chat"><SquarePen size={20} /></button>
@@ -633,7 +643,7 @@ export default function Chat() {
                       return (
                         <Fragment key={m.id}>
                         {(index === 0 || new Date(m.createdAt).toDateString() !== new Date(allMessages[index - 1].createdAt).toDateString()) && <div className="chat-date-divider"><span>{relativeDay(m.createdAt)}</span></div>}
-                        <Bubble own={own} zeit={chatTime(m.createdAt)} copyText={m.content}>
+                        <Bubble own={own} zeit={chatTime(m.createdAt)} copyText={m.content} expression={expressionFromSteps(steps)}>
                           {own ? <div className="text-[15px] leading-7 whitespace-pre-wrap break-words">{renderWithLinks(m.content)}</div> : <ChatContent text={m.content} />}
                           {files.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -678,7 +688,7 @@ export default function Chat() {
                     )}
 
                     {streaming && (
-                      <Bubble own={false}>
+                      <Bubble own={false} expression={face}>
                         {streamContent ? (
                           <div className="chat-streaming-content">
                             <ChatContent text={streamContent} />

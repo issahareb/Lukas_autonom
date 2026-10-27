@@ -32,6 +32,10 @@ import { zugangFuer } from "./zugaenge";
 import { nurEinmal, fingerabdruck } from "./versandsperre";
 
 export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  { type: "function", function: {
+    name: "set_expression", description: "Steuere den Gesichtsausdruck deines sichtbaren Robotergesichts im Webchat. Auf Wünsche wie 'guck böse' wirklich dieses Tool nutzen. Unabhängig von deiner inneren Stimmung; spielerische Mimik ist erlaubt. Bleibt im Gespräch bis zur nächsten Änderung.",
+    parameters: { type: "object", properties: { expression: { type: "string", enum: ["neutral", "happy", "sad", "angry", "frustrated", "surprised", "curious", "sleepy", "wink"] } }, required: ["expression"], additionalProperties: false }
+  } },
   {
     type: "function",
     function: {
@@ -1208,6 +1212,11 @@ export async function executeLukasTool(
   if (name.startsWith(MCP_TOOL_PREFIX)) return await runMcpTool(name, input);
 
   switch (name) {
+    case "set_expression": {
+      const expression = input.expression;
+      if (typeof expression !== "string" || !["neutral", "happy", "sad", "angry", "frustrated", "surprised", "curious", "sleepy", "wink"].includes(expression)) throw new Error("Unbekannter Gesichtsausdruck");
+      return JSON.stringify({ ok: true, expression, surface: "lukas-web-chat" });
+    }
     case "save_memory": {
       const [row] = await db
         .insert(memoriesTable)

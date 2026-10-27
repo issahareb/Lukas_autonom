@@ -329,3 +329,6 @@
 #arbeitsbereich .chat-page .chat-composer { background:#d4ed8a; border-color:#b5c97b; }
 #arbeitsbereich .chat-page .chat-input,#arbeitsbereich .chat-page .chat-input::placeholder { color:#20211e; }
 #arbeitsbereich .chat-page .chat-voice-button { background:#20211e; color:#d4ed8a; }
+.chat-page .chat-author .lukas-avatar { width:36px; height:36px; }
+.chat-page .chat-thread-avatar { width:52px; height:52px; }
+@media(max-width:767px) { .chat-page .chat-thread-avatar { width:48px; height:48px; } }

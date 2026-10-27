@@ -338,8 +338,13 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     const previousUserText = previousRoutingTask(history, String(content));
     const systemPrompt = await buildSystemPrompt(String(content).slice(0, 1000), { routingTask: previousUserText ?? undefined });
 
+    let expression = "neutral";
+    for (const message of history) for (const step of (message.steps ?? []) as ToolStep[]) {
+      if (!step.ok || !["set_expression", "mcp_call"].includes(step.tool)) continue;
+      try { const result = JSON.parse(step.result); if (result.ok === true && result.surface === "lukas-web-chat" && ["neutral","happy","sad","angry","frustrated","surprised","curious","sleepy","wink"].includes(result.expression)) expression = result.expression; } catch {}
+    }
     const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPrompt + `\nAktueller sichtbarer Gesichtsausdruck dieses Webchats: ${expression}.` },
       ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     ];
 

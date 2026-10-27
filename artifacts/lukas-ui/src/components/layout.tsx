@@ -38,6 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const update = () => {
       const h = viewport?.height ?? window.innerHeight;
       shell.current?.style.setProperty("--app-viewport-height", `${h}px`);
+      shell.current?.style.setProperty("--app-viewport-top", `${viewport?.offsetTop ?? 0}px`);
       const el = document.activeElement;
       const editing =
         el instanceof HTMLElement &&
@@ -49,11 +50,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     };
     update();
     viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
+    window.addEventListener("scroll", update);
     window.addEventListener("resize", update);
     document.addEventListener("focusin", update);
     document.addEventListener("focusout", update);
     return () => {
       viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
+      window.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
       document.removeEventListener("focusin", update);
       document.removeEventListener("focusout", update);

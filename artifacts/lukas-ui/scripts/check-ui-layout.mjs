@@ -146,6 +146,15 @@ try {
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({ state: "hidden" });
       assert.equal(await page.getByRole("button", { name: "Menü öffnen" }).evaluate(el => el === document.activeElement), true, "Focus returns to menu trigger");
+      await page.evaluate(() => {
+        Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>64 });
+        window.visualViewport.dispatchEvent(new Event("scroll"));
+      });
+      assert.equal(await page.locator(".app-shell").evaluate(el => getComputedStyle(el).top), "64px", "Shell follows Safari visual viewport panning");
+      await page.evaluate(() => {
+        Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>0 });
+        window.visualViewport.dispatchEvent(new Event("scroll"));
+      });
       await page.setViewportSize({ width, height: 430 });
       await input.focus();
       const shortComposer = await page.locator(".chat-composer").boundingBox();

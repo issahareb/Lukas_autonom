@@ -60,6 +60,7 @@ export const TOOL_RISK: Record<string, RiskTier> = {
   update_goal: "R1",
   write_diary: "R1",
   feel: "R1",
+  set_expression: "R1",
   set_status: "R1",
   // Die Sandbox ist ein isolierter Wegwerf-Container ohne Produktions-Secrets
   // und per reset_sandbox jederzeit zurücksetzbar — deshalb R1 und nicht R3.

@@ -21,7 +21,7 @@ const GRUPPEN: Array<[RegExp, string[]]> = [
 export function waehleWerkzeuge(tools: OpenAI.Chat.Completions.ChatCompletionTool[], task?: string) {
   if (task === undefined) return tools;
   // Discovery remains available, so a missed synonym does not remove a capability.
-  const names = new Set(["web_search", "query_memory", "mcp_find_tool", "mcp_call", "ask_subagent", "melde_dich_bei_issa"]);
+  const names = new Set(["set_expression", "web_search", "query_memory", "mcp_find_tool", "mcp_call", "ask_subagent", "melde_dich_bei_issa"]);
   for (const [pattern, group] of GRUPPEN) if (pattern.test(task)) group.forEach(n => names.add(n));
   return tools.filter(t => t.type === "function" && names.has(t.function.name));
 }

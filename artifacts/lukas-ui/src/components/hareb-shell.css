@@ -41,3 +41,9 @@
  .app-shell:has(.chat-page[data-chat-view="thread"]) .app-mobile-header { display:none; }
 }
 @media(prefers-reduced-motion:reduce) { .app-drawer.app-sheet[data-state="open"] { animation:none; } }
+/* Safari pans the visual viewport independently when focusing a textarea. */
+html:has(.app-shell),body:has(.app-shell) { height:100%; overflow:hidden; background:#f3f1eb; }
+@media(max-width:767px) {
+ .app-shell { top:var(--app-viewport-top,0px); bottom:auto; height:var(--app-viewport-height,100dvh); }
+ .app-shell .app-route,.app-shell .chat-main { animation:none; transform:none; }
+}
