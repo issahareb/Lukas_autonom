@@ -105,10 +105,14 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
+    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(212, 237, 138)");
+    assert.equal(await page.locator(".home-composer textarea").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
+    assert.equal(await page.locator(".home-conversation h1").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
+    assert.equal(await page.locator(".home-orb, .home-conversation img").count(), 0, "No old black-backed orb remains");
     const hero = await page.locator(".home-conversation").boundingBox();
     const shortcuts = await page.locator(".home-shortcuts").boundingBox();
-    const orb = await page.locator(".home-orb .orb").boundingBox();
-    assert.ok(orb.width >= 265, "The hero orb must remain prominent on narrow phones");
+    const orb = await page.locator(".home-character .lukas-avatar").boundingBox();
+    assert.ok(orb.width >= 160, "The robot must remain visible on narrow phones");
     assert.ok(shortcuts.y >= hero.y + hero.height, "Tools belong after the conversation hero");
     await page.getByRole("button", { name: "Deinen Arbeitsraum entdecken" }).click();
     if (name === "desktop" || name === "mobil") await screenshot(page, "arbeitsraum-" + name);

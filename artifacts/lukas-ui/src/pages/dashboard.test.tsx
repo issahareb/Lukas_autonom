@@ -6,7 +6,7 @@
  * nicht, ob es hübsch ist (das kann kein Test), sondern ob die Aussagen
  * stimmen:
  *
- *  1. Der Orb zeigt den Zustand, in dem Lukas WIRKLICH ist. Ein Orb, der
+ *  1. Der Charakter zeigt den Zustand, in dem Lukas WIRKLICH ist. Ein Charakter, der
  *     "hört zu" zeigt, während das Mikro aus ist, ist schlimmer als gar
  *     keine Anzeige.
  *  2. Die Taste rechts wechselt mit dem, was man tut. Wer tippt, will
@@ -87,9 +87,9 @@ beforeEach(() => {
 });
 
 describe("Startseite", () => {
-  it("zeigt den Orb in Ruhe, solange nichts läuft", () => {
+  it("zeigt den Charakter in Ruhe, solange nichts läuft", () => {
     render(<Dashboard />);
-    expect(screen.getByTestId("orb-ruhe")).toBeTruthy();
+    expect(document.querySelector('.home-character [data-mood="idle"]')).toBeTruthy();
     expect(screen.getByLabelText("Lukas wartet")).toBeTruthy();
   });
 
@@ -97,11 +97,11 @@ describe("Startseite", () => {
     sprachStand.status = "hoert";
     sprachStand.aktiv = true;
     const { rerender } = render(<Dashboard />);
-    expect(screen.getByTestId("orb-hoert")).toBeTruthy();
+    expect(document.querySelector('.home-character [data-mood="listening"]')).toBeTruthy();
 
     sprachStand.status = "spricht";
     rerender(<Dashboard />);
-    expect(screen.getByTestId("orb-spricht")).toBeTruthy();
+    expect(document.querySelector('.home-character [data-mood="speaking"]')).toBeTruthy();
   });
 
   it("bietet die Stimme an, solange nichts getippt ist", () => {

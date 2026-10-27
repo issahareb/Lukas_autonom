@@ -326,3 +326,6 @@
 .app-shell[data-page="/chat"] .chat-page .chat-conversation-item.is-selected .chat-conversation-select { color:#20211e; }
 .app-shell[data-page="/chat"] .chat-page .chat-conversation-item.is-selected .chat-conversation-select > svg { color:#4f642b; background:transparent; }
 .chat-page .chat-sidebar-heading > div > span { color:#62645c; background:transparent; }
+#arbeitsbereich .chat-page .chat-composer { background:#d4ed8a; border-color:#b5c97b; }
+#arbeitsbereich .chat-page .chat-input,#arbeitsbereich .chat-page .chat-input::placeholder { color:#20211e; }
+#arbeitsbereich .chat-page .chat-voice-button { background:#20211e; color:#d4ed8a; }
