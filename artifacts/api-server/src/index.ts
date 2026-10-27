@@ -70,6 +70,8 @@ const server = app.listen(port, (err) => {
     void import("./lib/browser-service").then(async ({ browserServiceCall }) => {
       const result = await browserServiceCall<{ ok: boolean; status?: number }>("render", { url: "https://example.com", scrolls: 0 });
       logger.info({ ok: result.ok, status: result.status, backend: "railway" }, "Browser-Verbindung ohne VPS geprüft");
+      const search = await browserServiceCall<{ ok: boolean; results?: unknown[] }>("search", { query: "Hareb Digital Webdesign" });
+      logger.info({ ok: search.ok, results: search.results?.length ?? 0, backend: "railway" }, "Browser-Websuche geprüft");
     }).catch(() => logger.warn("Railway-Browserprüfung fehlgeschlagen; kein VPS-Rückfall"));
   }
 
