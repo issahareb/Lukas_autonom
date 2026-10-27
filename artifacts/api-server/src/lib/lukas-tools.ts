@@ -1,3 +1,4 @@
+import { webSearch } from "./web-search";
 import { waehleWerkzeuge } from "./werkzeug-auswahl";
 import type OpenAI from "openai";
 import { db } from "@workspace/db";
@@ -173,7 +174,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "browse_page",
       description:
-        "Öffne eine Seite in einem ECHTEN Browser statt sie nur abzurufen. Nimm das immer dann, wenn fetch_url wenig oder nur Rohdaten liefert, und immer bei Galerien, Feeds, Suchergebnissen und allem, was sich erst im Browser aufbaut (Higgsfield, Instagram, TikTok, YouTube …). Der Browser wartet bis die Seite fertig ist, scrollt bis nichts mehr nachkommt und drückt vorhandene \"Mehr laden\"-Schaltflächen — du bekommst also die ganze Liste, nicht nur die ersten Kacheln. Zurück kommen Text, Links und die Adressen aller Bilder und Videos. Lange Seiten kommen in Abschnitten; am Ende steht, wie du weiterliest. Der allererste Aufruf nach einem Neustart dauert einige Minuten, danach geht es schnell.",
+        "Öffne eine Seite in einem ECHTEN Browser statt sie nur abzurufen. Nimm das immer dann, wenn fetch_url wenig oder nur Rohdaten liefert, und immer bei Galerien, Feeds, Suchergebnissen und allem, was sich erst im Browser aufbaut (Higgsfield, Instagram, TikTok, YouTube …). Der Browser wartet bis die Seite fertig ist, scrollt bis nichts mehr nachkommt und drückt vorhandene \"Mehr laden\"-Schaltflächen — du bekommst also die ganze Liste, nicht nur die ersten Kacheln. Zurück kommen Text, Links und die Adressen aller Bilder und Videos. Lange Seiten kommen in Abschnitten; am Ende steht, wie du weiterliest. Der konfigurierte Railway-Browser funktioniert unabhängig vom VPS. Bei Anmelde- oder Bot-Prüfungen den tatsächlichen Seitenzustand melden.",
       parameters: {
         type: "object",
         properties: {
@@ -197,7 +198,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "web_search",
       description:
-        "Durchsuche das Web nach aktuellen Informationen. Nutze das für Fragen zu aktuellen Ereignissen oder Fakten, die du nicht sicher weißt.",
+        "Durchsuche das Web nach aktuellen Informationen. Nutze zuerst diese eingebaute Suche statt MCP-Discovery. Bei Anbieterfehlern nutzt sie den unabhängigen Railway-Browser ohne VPS. Nutze das für aktuelle Ereignisse und unsichere Fakten.",
       parameters: {
         type: "object",
         properties: {
@@ -968,38 +969,6 @@ async function leseDiagnose(stunden: number): Promise<string> {
   );
 }
 
-async function webSearch(query: string): Promise<string> {
-  const res = await fetch(
-    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-    {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LukasAgent/1.0)" },
-      signal: AbortSignal.timeout(15000),
-    },
-  );
-  if (!res.ok) throw new Error(`Suche fehlgeschlagen (HTTP ${res.status})`);
-  const html = await res.text();
-  const results: string[] = [];
-  const linkRegex =
-    /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-  const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-  const links: Array<{ url: string; title: string }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = linkRegex.exec(html)) !== null && links.length < 8) {
-    let href = m[1];
-    const uddg = href.match(/uddg=([^&]+)/);
-    if (uddg) href = decodeURIComponent(uddg[1]);
-    links.push({ url: href, title: stripHtml(m[2]) });
-  }
-  const snippets: string[] = [];
-  while ((m = snippetRegex.exec(html)) !== null && snippets.length < 8) {
-    snippets.push(stripHtml(m[1]));
-  }
-  for (let i = 0; i < links.length; i++) {
-    results.push(`${i + 1}. ${links[i].title}\n   ${links[i].url}\n   ${snippets[i] ?? ""}`);
-  }
-  if (results.length === 0) return "Keine Suchergebnisse gefunden.";
-  return results.join("\n\n");
-}
 
 async function getTradingStats(): Promise<string> {
   const stats = await queryRows<{ status: string; count: string; total_pnl: string | null }>(

@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 
 const GRUPPEN: Array<[RegExp, string[]]> = [
-  [/such|recherch|aktuell|quelle|preis|kostet|website|webseite|https?:|internet|öffnungszeit/i, ["web_search", "fetch_url", "browse_page", "browser_do"]],
+  [/such|recherch|aktuell|quelle|preis|kostet|website|webseite|https?:|internet|öffnungszeit|browser|kommend|protest|nachricht|news/i, ["web_search", "fetch_url", "browse_page", "browser_do"]],
   [/repo|package\.json|quellcode|programmier|build|typecheck|skript|python|javascript|typescript|implement|debug|reparier/i, ["github_list_repos", "github_read_path", "github_search_code", "execute_command", "propose_code_change", "fix_error"]],
   [/mail|postfach|posteingang/i, ["email_search", "email_read", "email_send"]],
   [/telefon|anruf|anruf(en)?|gespräch|gespraech|kontakt|ruf.*an/i, ["telefon_status", "telefon_kontakte", "telefon_hinweis", "ruf_an"]],
@@ -21,7 +21,7 @@ const GRUPPEN: Array<[RegExp, string[]]> = [
 export function waehleWerkzeuge(tools: OpenAI.Chat.Completions.ChatCompletionTool[], task?: string) {
   if (task === undefined) return tools;
   // Discovery remains available, so a missed synonym does not remove a capability.
-  const names = new Set(["query_memory", "mcp_find_tool", "mcp_call", "ask_subagent", "melde_dich_bei_issa"]);
+  const names = new Set(["web_search", "query_memory", "mcp_find_tool", "mcp_call", "ask_subagent", "melde_dich_bei_issa"]);
   for (const [pattern, group] of GRUPPEN) if (pattern.test(task)) group.forEach(n => names.add(n));
   return tools.filter(t => t.type === "function" && names.has(t.function.name));
 }
@@ -35,7 +35,7 @@ export function werkzeugeNachFehler(tools: OpenAI.Chat.Completions.ChatCompletio
   const text = error instanceof Error ? error.message : String(error);
   if (!zugangsFehler(name, error)) return tools;
   const blocked = /VPS_SSH_KEY|authentication methods failed/.test(text)
-    ? new Set(["execute_command", "execute_on_host", "reset_sandbox", "browse_page", "browser_do"])
+    ? new Set(["execute_command", "execute_on_host", "reset_sandbox", ...(process.env.LUKAS_BROWSER_URL?.trim() ? [] : ["browse_page", "browser_do"])])
     : /EMAIL_USER|EMAIL_APP_PASSWORD/.test(text)
     ? new Set(["email_search", "email_read", "email_send"])
     : new Set([name]);

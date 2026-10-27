@@ -1,0 +1,32 @@
+import { build } from 'esbuild';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import assert from 'node:assert/strict';
+const dir=mkdtempSync(join(process.cwd(),'.browser-service-check-'));
+const stub=join(dir,'stub.mjs');const output=join(dir,'entry.mjs');
+writeFileSync(stub,'export const sshExec=()=>{throw Error("SSH MUST NOT RUN")};export const shQuote=x=>x;export const logger={info(){},warn(){}};');
+await build({stdin:{contents:'export { renderPage, bedienePage } from "./src/lib/browser"; export { webSearch } from "./src/lib/web-search"; export { waehleWerkzeuge, werkzeugeNachFehler } from "./src/lib/werkzeug-auswahl";',resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'esm',outfile:output,plugins:[{name:'no-ssh',setup(b){b.onResolve({filter:/(code-sandbox|logger)$/},()=>({path:stub}));}}]});
+const oldFetch=globalThis.fetch;const oldUrl=process.env.LUKAS_BROWSER_URL;const oldToken=process.env.LUKAS_BROWSER_TOKEN;
+try{
+ const {renderPage,bedienePage,webSearch,waehleWerkzeuge,werkzeugeNachFehler}=await import(output);
+ process.env.LUKAS_BROWSER_URL='http://browser.internal:8080';process.env.LUKAS_BROWSER_TOKEN='test-token-only';
+ let calls=[];
+ globalThis.fetch=async(url,options)=>{calls.push({url:String(url),options}); if(String(url).includes('duckduckgo')) return new Response('blocked',{status:403});return Response.json({ok:true,results:[{title:'Verified source',url:'https://example.com/news',snippet:'Current information'}],text:'Rendered JS',schritte:[]});};
+ assert.equal((await renderPage('https://example.com',0)).text,'Rendered JS');
+ assert.equal(calls[0].url,'http://browser.internal:8080/render');
+ assert.equal(calls[0].options.headers.Authorization,'Bearer test-token-only');
+ assert.equal(JSON.parse(calls[0].options.body).scrolls,0);
+ await bedienePage('same-session',[{art:'tippe',wahl:'#password',text:'{{PASSWORT}}'}],{PASSWORT:'test-secret'});
+ assert.equal(JSON.parse(calls.at(-1).options.body).sitzung,'same-session');
+ assert.match(await webSearch('kommende Proteste'),/Verified source/);
+ assert.equal(calls.at(-1).url,'http://browser.internal:8080/search');
+ globalThis.fetch=async()=>{throw Error('fetch failed')};
+ await assert.rejects(()=>renderPage('https://example.com'),/Railway-Browser/);
+ await assert.rejects(()=>bedienePage('test',[{art:'klicke',wahl:'Submit'}]),/keine automatische Wiederholung/i);
+ assert.match(await webSearch('news'),/Keine Suchergebnisse verifiziert/);
+ const tools=['web_search','browse_page','browser_do','execute_command'].map(name=>({type:'function',function:{name}}));
+ assert.ok(waehleWerkzeuge(tools,'Was steht morgen an?').some(t=>t.function.name==='web_search'));
+ const after=werkzeugeNachFehler(tools,'execute_command',Error('VPS_SSH_KEY fehlt'));
+ assert.ok(after.some(t=>t.function.name==='browser_do'));assert.ok(!after.some(t=>t.function.name==='execute_command'));
+ console.log('PASS independent browser: RPC, session routing, no SSH fallback, search recovery and tool selection.');
+}finally{globalThis.fetch=oldFetch;if(oldUrl===undefined)delete process.env.LUKAS_BROWSER_URL;else process.env.LUKAS_BROWSER_URL=oldUrl;if(oldToken===undefined)delete process.env.LUKAS_BROWSER_TOKEN;else process.env.LUKAS_BROWSER_TOKEN=oldToken;rmSync(dir,{recursive:true,force:true});}

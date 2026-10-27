@@ -66,6 +66,13 @@ const server = app.listen(port, (err) => {
     logger.warn("LUKAS_API_TOKEN fehlt — die private API ist UNGESCHÜTZT. Vor echtem Betrieb setzen!");
   }
 
+  if (process.env.LUKAS_BROWSER_URL && process.env.LUKAS_BROWSER_STARTUP_CHECK === "true") {
+    void import("./lib/browser-service").then(async ({ browserServiceCall }) => {
+      const result = await browserServiceCall<{ ok: boolean; status?: number }>("render", { url: "https://example.com", scrolls: 0 });
+      logger.info({ ok: result.ok, status: result.status, backend: "railway" }, "Browser-Verbindung ohne VPS geprüft");
+    }).catch(() => logger.warn("Railway-Browserprüfung fehlgeschlagen; kein VPS-Rückfall"));
+  }
+
   // Resolve the configured owner without logging phone numbers or private content.
   // This only reads configuration, contact metadata and one repository file.
   void inspectTelefonOwnerContact().then(async owner => {

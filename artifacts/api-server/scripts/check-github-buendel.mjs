@@ -66,6 +66,7 @@ export const fingerabdruck = (...teile) => teile.map(String).join("|");
 export const executeCommand = async () => ""; export const resetSandbox = async () => "";
 export const executeOnHost = async () => "";
 export const renderPage = async () => "";
+export const webSearch = async () => "";
 export const createProposal = async () => ({});
 export const runSubagent = async () => ""; export const subagentUebersicht = async () => "";
 export const createSubagent = async () => ""; export const fixError = async () => "";
