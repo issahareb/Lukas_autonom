@@ -116,6 +116,7 @@ try {
     await question.fill("Ein Gedanke vom Dashboard");
     await page.getByRole("button", { name: "Senden", exact: true }).click();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).waitFor();
+    assert.equal(await page.locator(".chat-new-button").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(32, 33, 30)", "New chat uses the Hareb ink button, not legacy mint");
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("STUDIO");
     assert.equal(await page.locator(".chat-conversation-select").count(), 1, "Search should narrow the conversation list");
     const select = page.locator(".chat-conversation-select").filter({ hasText: "Ideen für das Studio" });

@@ -322,7 +322,7 @@
  .chat-page .chat-jump-latest { bottom:86px; }
 }
 @media(prefers-reduced-motion:reduce) { .chat-page button { transition:none; } }
-.app-shell[data-page="/chat"] .chat-page :is(.chat-new-button,.chat-welcome-action) { background:#20211e; color:#f3f1eb; }
+#arbeitsbereich .chat-page :is(.chat-new-button,.chat-welcome-action) { background:#20211e; color:#f3f1eb; }
 .app-shell[data-page="/chat"] .chat-page .chat-conversation-item.is-selected .chat-conversation-select { color:#20211e; }
 .app-shell[data-page="/chat"] .chat-page .chat-conversation-item.is-selected .chat-conversation-select > svg { color:#4f642b; background:transparent; }
 .chat-page .chat-sidebar-heading > div > span { color:#62645c; background:transparent; }
