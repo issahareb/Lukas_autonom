@@ -139,8 +139,11 @@ export function sshDiagnose(err: unknown): string {
   const code = (err as { code?: string } | null)?.code ?? "";
   const wo = `${process.env.VPS_SSH_HOST ?? "?"}:${process.env.VPS_SSH_PORT ?? "22"}`;
 
-  const nachsatz =
-    ` Betroffen ist damit ALLES, was auf dem Droplet läuft — Sandbox, Browser, ` +
+  const nachsatz = process.env.LUKAS_BROWSER_URL?.trim()
+    ? ` Betroffen sind die VPS-Shell und die VPS-Sandbox. Der separate Railway-Browser ` +
+      `ist davon unabhängig: browse_page, browser_do und web_search bleiben verfügbar. ` +
+      `Wiederhole keine SSH-Versuche; melde das Zugangsproblem über melde_dich_bei_issa.`
+    : ` Betroffen ist damit ALLES, was auf dem Droplet läuft — Sandbox, Browser, ` +
     `Seiten bedienen. Probier nicht die anderen Werkzeuge durch, die scheitern ` +
     `am selben Punkt. Das kannst du nicht selbst reparieren: sag es Issa über ` +
     `melde_dich_bei_issa.`;

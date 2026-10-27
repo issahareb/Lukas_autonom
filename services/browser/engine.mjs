@@ -4,6 +4,21 @@ import { mkdir, readFile, writeFile, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { publicTarget } from './proxy.mjs';
 
+export async function extractSearchResults(page, kind) {
+  return page.evaluate(kind => {
+    const nodes = kind === 'bing' ? [...document.querySelectorAll('li.b_algo')] : kind === 'google' ? [...document.querySelectorAll('a:has(h3)')] : [...document.querySelectorAll('.result')];
+    return nodes.map(item => {
+      const anchor = kind === 'bing' ? item.querySelector('h2 a') : kind === 'google' ? item : item.querySelector('a.result__a');
+      if (!anchor) return null;
+      let url = anchor.href;
+      try { const parsed = new URL(url); url = parsed.searchParams.get('uddg') || (parsed.pathname === '/url' ? parsed.searchParams.get('q') || parsed.searchParams.get('url') : '') || url; } catch { return null; }
+      const title = (kind === 'google' ? item.querySelector('h3') : anchor)?.textContent?.trim();
+      const snippet = (kind === 'bing' ? item.querySelector('p') : kind === 'ddg' ? item.querySelector('.result__snippet') : null)?.textContent?.trim() || '';
+      return title && /^https?:\/\//.test(url) ? {title, url, snippet} : null;
+    }).filter(Boolean).slice(0,8);
+  }, kind);
+}
+
 export function createEngine(proxyPort, dataDir, configureContext = async () => {}) {
   const sessions = new Map();
   let active = 0;
@@ -97,14 +112,27 @@ export function createEngine(proxyPort, dataDir, configureContext = async () => 
       timer = setTimeout(() => { void close(state.key); }, 150000);
       let page = state.page;
       let status = null;
-      if (operation === 'render' || operation === 'search') {
-        const url = operation === 'search' ? 'https://www.bing.com/search?q=' + encodeURIComponent(String(input.query || '').slice(0,1000)) : input.url;
-        status = await navigate(page, url);
-        if (status && status >= 400) return { ok: false, status, fehler: `Website antwortet mit HTTP ${status}.` };
-        if (operation === 'search') {
-          const results = await page.locator('li.b_algo').evaluateAll(items => items.slice(0,8).map(item => ({ title: item.querySelector('h2')?.textContent?.trim(), url: item.querySelector('h2 a')?.href, snippet: item.querySelector('p')?.textContent?.trim() || '' })).filter(r => r.title && r.url));
-          return results.length ? { ok: true, results } : { ok: false, fehler: 'Suchanbieter liefert keine lesbaren Treffer oder verlangt eine Browserprüfung. Keine Ergebnisse verifiziert.' };
+      if (operation === 'search') {
+        const query = encodeURIComponent(String(input.query || '').slice(0,1000));
+        const providers = [
+          {kind:'bing',url:'https://www.bing.com/search?q='+query,selector:'li.b_algo h2 a'},
+          {kind:'google',url:'https://www.google.com/search?q='+query,selector:'a:has(h3)'},
+          {kind:'ddg',url:'https://html.duckduckgo.com/html/?q='+query,selector:'a.result__a'},
+        ];
+        for (const provider of providers) {
+          try {
+            status = await navigate(page, provider.url);
+            if (status && status >= 400) continue;
+            await page.locator(provider.selector).first().waitFor({state:'visible',timeout:5000}).catch(()=>{});
+            const results = await extractSearchResults(page, provider.kind);
+            if (results.length) return {ok:true,results,provider:provider.kind};
+          } catch { /* Try a different public search provider; never solve a challenge. */ }
         }
+        return {ok:false,fehler:'Die Suchanbieter liefern keine lesbaren Treffer oder verlangen eine Browserprüfung. Keine Ergebnisse verifiziert.'};
+      }
+      if (operation === 'render') {
+        status = await navigate(page, input.url);
+        if (status && status >= 400) return { ok: false, status, fehler: `Website antwortet mit HTTP ${status}.` };
         const scrolls = Math.max(0, Math.min(20, Number(input.scrolls) || 0));
         let height = 0;
         for (let i=0; i<scrolls; i++) {

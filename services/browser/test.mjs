@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { publicTarget, startProxy } from './proxy.mjs';
-import { createEngine } from './engine.mjs';
+import { createEngine, extractSearchResults } from './engine.mjs';
+import { chromium } from 'playwright';
 import { startServer } from './server.mjs';
 
 test('network validation rejects internal, mapped, rebinding and non-web destinations',async()=>{
@@ -43,4 +44,20 @@ test('real Chromium: JS, multi-call state, secret redaction, persistence and iso
     await engine.close();engine=createEngine(proxy.address().port,dir,fixture);
     r=await engine.run('operate',{sitzung:'first',schritte:[{art:'warte',ms:1}]});assert.equal(r.ok,true);assert.match(r.text,/kept across calls/);
   }finally{await engine.close();await new Promise(resolve=>proxy.close(resolve));await rm(dir,{recursive:true,force:true});}
+});
+
+
+test('real Chromium extracts source links from all fallback providers',async()=>{
+  const browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE_PATH || undefined,args:['--disable-dev-shm-usage']});
+  try {
+    const page=await browser.newPage();
+    for(const [kind,html] of [
+      ['bing','<li class="b_algo"><h2><a href="https://example.com/news">Source title</a></h2><p>Source snippet</p></li>'],
+      ['google','<a href="https://www.google.com/url?q=https%3A%2F%2Fexample.com%2Fnews"><h3>Source title</h3></a>'],
+      ['ddg','<div class="result"><a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fnews">Source title</a><a class="result__snippet">Source snippet</a></div>']]) {
+      await page.setContent(html);const results=await extractSearchResults(page,kind);
+      assert.equal(results.length,1);assert.equal(results[0].url,'https://example.com/news');assert.equal(results[0].title,'Source title');
+    }
+    await page.setContent('<h1>Verify you are human</h1>');assert.deepEqual(await extractSearchResults(page,'bing'),[]);
+  }finally{await browser.close();}
 });

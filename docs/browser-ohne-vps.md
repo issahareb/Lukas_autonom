@@ -30,8 +30,8 @@ nicht verfügbar. Geheimnisse werden erst im Browser-Dienst eingesetzt, im Text
 redigiert und Screenshots für Sitzungen mit hinterlegten Geheimnissen unterdrückt.
 
 `web_search` ist auch ohne Such-Schlüsselwort verfügbar. Scheitert die direkte
-DuckDuckGo-Suche oder liefert sie keine lesbaren Treffer, wird Bing im Browser
-verwendet. CAPTCHA/Anmeldeschranken werden nicht umgangen; fehlende verifizierte
+DuckDuckGo-Suche oder liefert sie keine lesbaren Treffer, werden Bing, Google und DuckDuckGo im Browser
+versucht, bis verifizierbare Treffer vorliegen. CAPTCHA/Anmeldeschranken werden nicht umgangen; fehlende verifizierte
 Ergebnisse werden als Fehler gemeldet. Dies repariert keinen fremden MCP-Server.
 
 Prüfungen: `npm test --prefix services/browser` startet echten Chromium gegen

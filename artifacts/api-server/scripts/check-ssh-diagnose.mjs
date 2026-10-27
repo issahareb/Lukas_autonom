@@ -23,6 +23,9 @@ import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Legacy diagnostics first, then verify the independent browser below.
+delete process.env.LUKAS_BROWSER_URL;
+
 const dir = mkdtempSync(join(process.cwd(), ".ssh-check-"));
 const out = join(dir, "s.mjs");
 const attrappe = join(dir, "a.mjs");
@@ -163,6 +166,11 @@ for (const [msg, code] of faelle) {
     /readyTimeout:\s*Math\.min\(Math\.max\(timeoutMs/.test(quelle),
   );
 }
+
+process.env.LUKAS_BROWSER_URL = "http://browser.internal:8080";
+const unabhängig = sshDiagnose(new Error("All configured authentication methods failed"));
+pruefe("VPS-Fehler erklärt den Railway-Browser nicht für ausgefallen", /bleiben verfügbar/.test(unabhängig) && !/Sandbox, Browser/.test(unabhängig));
+delete process.env.LUKAS_BROWSER_URL;
 
 if (fehler > 0) process.exit(1);
 console.log(
