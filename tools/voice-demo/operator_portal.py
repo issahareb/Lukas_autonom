@@ -38,6 +38,12 @@ class Operator:
         self.prepared=False;self.prepare_attempts=0
         self.recording=None;self.transcription_task=None;self.test_task=None
         self.diagnostics=None;self.archive_ready=False;self.test_actions=set()
+        self.pc_ticket=None;self.pc_ticket_until=0;self.pc_session=None;self.pc_task=None;self.pc_uses=0
+        self.pc_connector=None;self.pc_transcribe=safe_transcribe
+
+    def pc_ticket_valid(self,request):
+        ticket=request.cookies.get('pc_voice','')
+        return bool(self.pc_ticket and time.monotonic()<self.pc_ticket_until and secrets.compare_digest(ticket,self.pc_ticket))
 
     @web.middleware
     async def secure(self,request,handler):
@@ -50,12 +56,15 @@ class Operator:
             credentials=base64.b64decode(token,validate=True).decode()
             good=scheme.lower()=='basic' and secrets.compare_digest(credentials,'issa:'+self.password)
         except Exception:good=False
+        if request.path=='/pc/stream' and self.pc_ticket_valid(request):good=True
         if not good:
             self.failed_logins[peer]=attempts+[now]
             return web.Response(status=401,headers={'WWW-Authenticate':'Basic realm="LUKAS Demo", charset="UTF-8"'})
-        if request.method=='POST':
+        if request.method=='POST' or request.path=='/pc/stream':
             origin=request.headers.get('Origin','')
-            if urlsplit(origin).netloc!=request.host or request.content_type!='application/json':
+            parsed=urlsplit(origin)
+            local=parsed.hostname in ('localhost','127.0.0.1','::1')
+            if (parsed.scheme!='https' and not (local and parsed.scheme=='http')) or parsed.netloc!=request.host or (request.method=='POST' and request.content_type!='application/json'):
                 return web.Response(status=403,text='Origin rejected')
         try:response=await handler(request)
         except web.HTTPException:raise
@@ -64,7 +73,7 @@ class Operator:
             response=web.json_response({'error':'Bedienung angehalten. Status prüfen.'},status=409)
         response.headers.update({'Cache-Control':'no-store','Referrer-Policy':'no-referrer',
             'X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY',
-            'Content-Security-Policy':"default-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"})
+            'Content-Security-Policy':"default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"})
         return response
 
     async def guard(self,route):
@@ -99,6 +108,11 @@ class Operator:
         ARCHIVE.mkdir(parents=True,exist_ok=True,mode=0o700);ARCHIVE.chmod(0o700)
         self.archive_ready=archive_mounted() or os.getenv('DEMO_ALLOW_LOCAL_STORAGE')=='1'
         self.diagnostics=Diagnostics(ARCHIVE.parent/'network-diagnostics.json')
+        self.identity=json.loads(os.environ.pop('DEMO_APPLICANT_JSON'))
+        self.consent=json.loads(os.environ.pop('DEMO_CONSENT_JSON'))
+        if os.getenv('DEMO_PC_ONLY')=='1':
+            self.monitor_task=asyncio.create_task(self.monitor())
+            return  # The operator opens Eva in their own browser, never here.
         self.pw=await async_playwright().start()
         proxy=os.environ.get('HTTPS_PROXY')
         self.browser=await self.pw.chromium.launch(executable_path='/usr/bin/chromium',
@@ -109,8 +123,6 @@ class Operator:
         await ctx.route('https://career.corporatellm.de/**',self.guard)
         self.page=await ctx.new_page();self.surface=EvaSurface(self.page)
         await self.diagnostics.attach(self.page)
-        self.identity=json.loads(os.environ.pop('DEMO_APPLICANT_JSON'))
-        self.consent=json.loads(os.environ.pop('DEMO_CONSENT_JSON'))
         try:await self.prepare()
         except Exception as exc:self.failure=type(exc).__name__
         self.monitor_task=asyncio.create_task(self.monitor())
@@ -169,6 +181,8 @@ class Operator:
     async def action(self,request):
         data=await request.json();action=request.match_info['action']
         if action=='stop':
+            if self.pc_session:self.pc_session.halt('pc_stop')
+            self.pc_ticket=None
             if self.test_task and not self.test_task.done():
                 self.test_task.cancel();await asyncio.gather(self.test_task,return_exceptions=True)
             self.armed=False;self.closed=True
@@ -178,6 +192,7 @@ class Operator:
             if self.interview!='nicht gestartet':self.interview='abgebrochen'
             return web.json_response({'ok':True})
         async with self.lock:
+            if self.pc_task and not self.pc_task.done():raise web.HTTPConflict(text='PC-Audiotest aktiv.')
             if action=='prepare':
                 await self.prepare()
             elif action in ('recording-test','voice-test','voice-test-baseline'):
@@ -268,7 +283,7 @@ class Operator:
         ident=request.query.get('id')
         if ident:
             import re
-            if not re.fullmatch(r'[0-9TZ]+-(?:interview|test)-[a-f0-9]{8}',ident):raise web.HTTPBadRequest()
+            if not re.fullmatch(r'[0-9TZ]+-(?:interview|test|pc-test)-[a-f0-9]{8}',ident):raise web.HTTPBadRequest()
             root=ARCHIVE/ident
         elif self.recording:root=self.recording.root
         else:
@@ -281,13 +296,15 @@ class Operator:
         if not (root/'README.txt').exists():raise web.HTTPConflict(text='Aufnahme noch nicht abgeschlossen oder nach Absturz unvollständig.')
         data=io.BytesIO()
         with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as archive:
-            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json','content-timing.json','content-review.json','test-report-uncorrected.json'):
+            for name in ('Eva.wav','LUKAS.wav','transcript-draft.jsonl','README.txt','manifest.json','transcript.txt','transcript.json','transcription-status.json','test-report.json','content-timing.json','content-review.json','test-report-uncorrected.json','pc-report.json','pc-status.json'):
                 path=root/name
                 if path.is_file():archive.write(path,name)
         return web.Response(body=data.getvalue(),content_type='application/zip',headers={'Content-Disposition':'attachment; filename=eva-lukas-gespraech.zip'})
 
     async def close(self):
         self.closed=True;self.armed=False
+        if self.pc_session:self.pc_session.halt('operator_shutdown')
+        if self.pc_task:await self.pc_task
         if self.worker:self.worker.halt('operator_shutdown')
         if self.worker_task:await self.worker_task
         if self.recording:await self.finish_recording('operator_shutdown')
@@ -300,15 +317,55 @@ class Operator:
             try:await self.pw.stop()
             except Exception:pass
 
+    async def pc_start(self,request):
+        data=await request.json()
+        if data!={'mode':'test','recording_consent':True}:
+            raise web.HTTPBadRequest(text='Nur ausdrücklich bestätigte Testaufnahmen sind freigegeben.')
+        async with self.lock:
+            if self.pc_ticket and time.monotonic()>=self.pc_ticket_until:self.pc_ticket=None
+            if self.closed or self.worker or self.pc_ticket or (self.pc_task and not self.pc_task.done()) or (self.test_task and not self.test_task.done()):
+                raise web.HTTPConflict(text='Sitzung bereits reserviert oder aktiv.')
+            if self.pc_uses>=3:raise web.HTTPConflict(text='Drei PC-Tests erreicht. Kein automatischer Neustart.')
+            if not self.archive_ready:raise web.HTTPConflict(text='Privates Aufnahme-Volume nicht bereit.')
+            if not hasattr(self,'context_path') or not self.context_path.is_file():raise web.HTTPConflict(text='Privater Kontext nicht bereit.')
+            if self.consent.get('recording_allowed') is not True:raise web.HTTPConflict(text='Aufnahmefreigabe fehlt.')
+            if not os.getenv('OPENAI_API_KEY'):raise web.HTTPConflict(text='OPENAI_API_KEY fehlt im geschützten Worker.')
+            self.pc_uses+=1;self.pc_ticket=secrets.token_urlsafe(32);self.pc_ticket_until=time.monotonic()+60
+            response=web.json_response({'mode':'test','max_seconds':660,'context_available':True})
+            response.set_cookie('pc_voice',self.pc_ticket,max_age=60,path='/pc/stream',httponly=True,samesite='Strict',
+                secure=request.host.split(':')[0] not in ('localhost','127.0.0.1'))
+            return response
+
+    async def pc_stop(self,request):
+        self.pc_ticket=None
+        if self.pc_session:self.pc_session.halt('pc_stop')
+        return web.json_response({'stop_requested':True})
+
+    async def pc_status(self,request):
+        return web.json_response({'mode':'test','real_interview_control':False,'archive_ready':self.archive_ready,
+            'remaining_tests':max(0,3-self.pc_uses),'active':bool(self.pc_task and not self.pc_task.done()),
+            'voice':self.pc_session.status if self.pc_session else {'state':'not_started'}})
+
     def app(self):
         app=web.Application(middlewares=[self.secure],client_max_size=8192)
-        async def index(request):return web.FileResponse(ROOT/'operator.html')
+        async def index(request):return web.FileResponse(ROOT/('pc.html' if os.getenv('DEMO_PC_ONLY')=='1' else 'operator.html'))
         async def js(request):return web.Response(text=ROOT.joinpath('operator-client.txt').read_text(),content_type='application/javascript')
         app.router.add_get('/',index);app.router.add_get('/client.js',js)
         app.router.add_get('/healthz',index);app.router.add_get('/status',self.status)
         app.router.add_get('/conversation.zip',self.download)
         app.router.add_get('/archives',self.archives);app.router.add_get('/diagnostics',self.diagnostic_report)
         app.router.add_get('/screen',self.screen);app.router.add_post('/action/{action}',self.action)
+        from pc_voice import pc_socket
+        async def pc_page(request):return web.FileResponse(ROOT/'pc.html')
+        async def pc_js(request):return web.FileResponse(ROOT/'pc-client.js')
+        async def pc_worklet(request):return web.FileResponse(ROOT/'pc-audio-worklet.js')
+        async def pc_partner(request):return web.FileResponse(ROOT/'pc-partner.html')
+        async def pc_partner_js(request):return web.FileResponse(ROOT/'pc-partner.js')
+        async def pc_stream(request):return await pc_socket(request,self)
+        app.router.add_get('/pc',pc_page);app.router.add_get('/pc-client.js',pc_js);app.router.add_get('/pc-audio-worklet.js',pc_worklet)
+        app.router.add_post('/pc/start',self.pc_start);app.router.add_post('/pc/stop',self.pc_stop)
+        app.router.add_get('/pc/status',self.pc_status);app.router.add_get('/pc/stream',pc_stream)
+        app.router.add_get('/pc/partner',pc_partner);app.router.add_get('/pc-partner.js',pc_partner_js)
         return app
 
 async def main():
@@ -319,8 +376,10 @@ async def main():
     for sig in (signal.SIGINT,signal.SIGTERM):asyncio.get_running_loop().add_signal_handler(sig,stop.set)
     try:
         await operator.open()
-        print('OPERATOR_READY: authenticated browser available; interview not started',flush=True)
-        try:await asyncio.wait_for(stop.wait(),3600)
+        print('OPERATOR_READY: authenticated portal available; interview not started',flush=True)
+        try:
+            if os.getenv('DEMO_PC_ONLY')=='1':await stop.wait()
+            else:await asyncio.wait_for(stop.wait(),3600)
         except asyncio.TimeoutError:
             await operator.close()
             # Keep authenticated archive downloads available; browser/model remain closed.
