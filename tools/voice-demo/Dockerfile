@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=demo:demo *.py *.html *.sh operator-client.txt ./
+COPY --chown=demo:demo *.py *.html *.sh *.js operator-client.txt ./
 RUN chmod +x /app/*.sh
 USER demo
 ENV DEMO_RUNTIME=/tmp/lukas-voice-demo

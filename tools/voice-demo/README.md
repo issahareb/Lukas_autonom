@@ -1,5 +1,11 @@
 # Isolierte LUKAS-Voice-Demo
 
+Windows-PC-Modus: [Start, Voicemeeter-Routing und Stopp](WINDOWS.md).
+Die neue geschützte `/pc`-Seite nutzt den lokalen Browser mit zwei getrennten
+Audiowegen. `/pc/partner` ersetzt Eva beim Routing-Test. `DEMO_PC_ONLY=1`
+verhindert das Laden von Eva im Railway-Browser; der echte Start bleibt gesperrt.
+Prüfstand: [PC-TEST-REPORT.md](PC-TEST-REPORT.md).
+
 Stand 23.10.2026: Docker-Audio und echte OpenAI-Sprachgespräche auf Railway
 getestet. Der echte Eva-Lauf wurde nicht gestartet; die manuelle Sicherheitsprüfung ist offen.
 Ein VPS ist für den getesteten Browser-/Audio-Worker nicht erforderlich.
@@ -69,7 +75,8 @@ Der gleiche GPT-Live-Anbieter wie in LUKAS wird in einem separaten Worker genutz
 Das ist eine isolierte Demo-Persona mit LUKAS-Kontext, keine Freigabe des
 produktiven Owner-Agenten. Es gibt keinen Tool-Dispatcher. Interne Rückfragen
 bekommen ausschließlich geprüfte lokale Fakten, in kurzen API-konformen Teilen.
-Keine zusätzliche dauerhafte Audioaufzeichnung; Test-WAVs sind synthetische Fragen.
+Bei ausdrücklich bestätigten Tests werden beide Tonspuren privat im Volume
+gespeichert. Downloads und automatische Transkripte erfordern Authentifizierung.
 
 ## Eva
 
