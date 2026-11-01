@@ -1,13 +1,40 @@
-.lukas-avatar {
-  overflow: hidden;
-  flex-shrink: 0;
-  background: #10171c;
-}
-
-.lukas-avatar img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-}
+.lukas-avatar { --robot-accent: #d4ed8a; display:inline-flex; width:36px; height:36px; flex-shrink:0; background:transparent !important; overflow:visible; border:0; box-shadow:none !important; }
+.lukas-avatar svg { display:block; width:100%; height:100%; overflow:visible; }
+.lukas-head { transform-origin:40px 43px; animation:lukas-bob 7s ease-in-out infinite; }
+.lukas-eye { transform-box:fill-box; transform-origin:center; animation:lukas-blink 6.8s infinite; }
+.lukas-eye-right { animation-delay:.08s; }
+.lukas-gaze { animation:lukas-look 11s ease-in-out infinite; }
+.lukas-mouth-speaking { display:none; transform-box:fill-box; transform-origin:center; }
+.lukas-avatar[data-mood="speaking"] .lukas-smile { display:none; }
+.lukas-avatar[data-mood="speaking"] .lukas-mouth-speaking { display:block; animation:lukas-talk .32s ease-in-out infinite alternate; }
+.lukas-avatar[data-mood="listening"] .lukas-head { animation:lukas-listen 2.5s ease-in-out infinite; }
+.lukas-avatar[data-mood="thinking"] .lukas-gaze { animation:lukas-think 1.8s ease-in-out infinite; }
+.chat-author .lukas-avatar .lukas-head, .chat-author .lukas-avatar .lukas-gaze, .chat-author .lukas-avatar .lukas-eye { animation:none; }
+@keyframes lukas-blink { 0%,42%,46%,100% {transform:scaleY(1)} 44% {transform:scaleY(.12)} }
+@keyframes lukas-look { 0%,20%,60%,100% {transform:translateX(0)} 27%,40% {transform:translateX(2px)} 70%,80% {transform:translateX(-2px)} }
+@keyframes lukas-bob { 0%,100% {transform:rotate(-3deg)} 50% {transform:rotate(3deg) translateY(-1px)} }
+@keyframes lukas-listen { 0%,100% {transform:rotate(-7deg)} 50% {transform:rotate(-4deg) translateY(-1px)} }
+@keyframes lukas-think { 0%,100% {transform:translate(-2px,-2px)} 50% {transform:translate(2px,-2px)} }
+@keyframes lukas-talk { from {transform:scale(1,.35)} to {transform:scale(.8,1.2)} }
+@media (prefers-reduced-motion:reduce) { .lukas-avatar * {animation:none !important} }
+.lukas-brows,.lukas-frown,.lukas-flat-mouth,.lukas-surprise-mouth { display:none; }
+.lukas-brow-left,.lukas-brow-right { transform-box:fill-box; transform-origin:center; }
+.lukas-avatar:is([data-expression="sad"],[data-expression="angry"],[data-expression="frustrated"]) .lukas-smile { display:none; }
+.lukas-avatar:is([data-expression="sad"],[data-expression="angry"]) .lukas-frown { display:block; }
+.lukas-avatar:is([data-expression="sad"],[data-expression="angry"],[data-expression="frustrated"],[data-expression="curious"]) .lukas-brows { display:block; }
+.lukas-avatar[data-expression="angry"] .lukas-brow-left { transform:rotate(24deg); }
+.lukas-avatar[data-expression="angry"] .lukas-brow-right { transform:rotate(-24deg); }
+.lukas-avatar[data-expression="sad"] .lukas-brow-left { transform:rotate(-22deg); }
+.lukas-avatar[data-expression="sad"] .lukas-brow-right { transform:rotate(22deg); }
+.lukas-avatar[data-expression="frustrated"] .lukas-flat-mouth { display:block; transform:rotate(-8deg); transform-origin:41px 53px; }
+.lukas-avatar[data-expression="frustrated"] .lukas-eye { animation:none; transform:scaleY(.55); }
+.lukas-avatar[data-expression="frustrated"] .lukas-brow-left { transform:rotate(12deg); }
+.lukas-avatar[data-expression="happy"] .lukas-eye { transform:scaleY(.75); }
+.lukas-avatar[data-expression="happy"] .lukas-smile { stroke-width:4px; }
+.lukas-avatar[data-expression="surprised"] .lukas-smile { display:none; }
+.lukas-avatar[data-expression="surprised"] .lukas-surprise-mouth { display:block; }
+.lukas-avatar[data-expression="surprised"] .lukas-eye { animation:none; transform:scale(1.12); }
+.lukas-avatar[data-expression="curious"] .lukas-brow-right { transform:translateY(-3px) rotate(-10deg); }
+.lukas-avatar[data-expression="sleepy"] .lukas-eye { animation:none; transform:scaleY(.25); }
+.lukas-avatar[data-expression="wink"] .lukas-eye-right { animation:none; transform:scaleY(.12); }
+.lukas-avatar[data-mood="speaking"] :is(.lukas-frown,.lukas-flat-mouth,.lukas-surprise-mouth) { display:none; }

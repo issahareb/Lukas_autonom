@@ -19,6 +19,10 @@ import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// This suite exercises the legacy SSH adapter, regardless of deployment env.
+// The independent Railway adapter is covered by check-browser-service.mjs.
+delete process.env.LUKAS_BROWSER_URL;
+
 const dir = mkdtempSync(join(process.cwd(), ".browser-check-"));
 const out = join(dir, "browser.mjs");
 const attrappe = join(dir, "attrappe.mjs");

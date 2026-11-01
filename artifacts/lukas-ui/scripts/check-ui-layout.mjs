@@ -58,9 +58,12 @@ try {
     if (i === 79) throw new Error("Vite preview did not start");
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  browser = await chromium.launch();
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined });
   for (const [name, width, height] of [["mobil", 390, 844], ["desktop", 1440, 1000], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, reducedMotion: name === "desktop" ? "no-preference" : "reduce" });
+    await context.addInitScript(() => {
+      if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Mikrofonzugriff nicht erlaubt", "NotAllowedError"); } });
+    });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -76,6 +79,7 @@ try {
       else if (path === "/api/lukas/telefon") body = { anbieter: "telnyx", bereit: { webhook: true, anrufen: true },
         nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now, mithoerenZustimmung: true, mithoerenQuelle: "email", mithoerenBestaetigtAm: now }],
         anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }, { id: 2, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "verbunden", mithoerenZustimmung: true, createdAt: now }] };
+      else if (path === "/api/lukas/telefon/rueckrufe") body = [];
       else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, konfiguriert: true, freigeschaltet: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
       else if (path === "/api/lukas/mcp") body = { servers: [
         { id: 1, name: "Kalender", slug: "calendar", url: "https://example.com/mcp", status: "connected", tools: [{ name: "read_calendar", description: "Termine lesen" }], selectedTools: [], riskTier: "R2", enabled: true, authorized: true },
@@ -102,10 +106,14 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
+    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(212, 237, 138)");
+    assert.equal(await page.locator(".home-composer textarea").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
+    assert.equal(await page.locator(".home-conversation h1").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
+    assert.equal(await page.locator(".home-orb, .home-conversation img").count(), 0, "No old black-backed orb remains");
     const hero = await page.locator(".home-conversation").boundingBox();
     const shortcuts = await page.locator(".home-shortcuts").boundingBox();
-    const orb = await page.locator(".home-orb .orb").boundingBox();
-    assert.ok(orb.width >= 265, "The hero orb must remain prominent on narrow phones");
+    const orb = await page.locator(".home-character .lukas-avatar").boundingBox();
+    assert.ok(orb.width >= 160, "The robot must remain visible on narrow phones");
     assert.ok(shortcuts.y >= hero.y + hero.height, "Tools belong after the conversation hero");
     await page.getByRole("button", { name: "Deinen Arbeitsraum entdecken" }).click();
     if (name === "desktop" || name === "mobil") await screenshot(page, "arbeitsraum-" + name);
@@ -113,6 +121,7 @@ try {
     await question.fill("Ein Gedanke vom Dashboard");
     await page.getByRole("button", { name: "Senden", exact: true }).click();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).waitFor();
+    assert.equal(await page.locator(".chat-new-button").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(32, 33, 30)", "New chat uses the Hareb ink button, not legacy mint");
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("STUDIO");
     assert.equal(await page.locator(".chat-conversation-select").count(), 1, "Search should narrow the conversation list");
     const select = page.locator(".chat-conversation-select").filter({ hasText: "Ideen für das Studio" });
@@ -125,6 +134,34 @@ try {
     await noOverflow(page, "Chat " + name);
     const box = await input.boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height < height, "Composer remains in the viewport");
+    if (width < 768) {
+      assert.equal(await page.locator(".app-tabbar").count(), 0, "No bottom navigation takes chat space");
+      assert.equal(await page.locator(".chat-voice-bar").count(), 0, "No separate voice bar");
+      assert.equal(await page.locator(".app-mobile-header").isVisible(), false, "One header in a chat");
+      const canvas = await page.locator(".chat-scroll").boundingBox();
+      assert.ok(canvas.height > height * .72, "At least 72% of the viewport belongs to conversation");
+      assert.equal(await page.locator(".chat-composer").getByRole("button", { name: "Sprachchat starten" }).count(), 1);
+      await page.getByRole("button", { name: "Menü öffnen" }).click();
+      await page.getByRole("dialog").waitFor();
+      if (name === "mobil") await screenshot(page, "chat-menue-mobil");
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.getByRole("button", { name: "Menü öffnen" }).evaluate(el => el === document.activeElement), true, "Focus returns to menu trigger");
+      await page.evaluate(() => {
+        Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>64 });
+        window.visualViewport.dispatchEvent(new Event("scroll"));
+      });
+      assert.equal(await page.locator(".app-shell").evaluate(el => getComputedStyle(el).top), "64px", "Shell follows Safari visual viewport panning");
+      await page.evaluate(() => {
+        Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>0 });
+        window.visualViewport.dispatchEvent(new Event("scroll"));
+      });
+      await page.setViewportSize({ width, height: 430 });
+      await input.focus();
+      const shortComposer = await page.locator(".chat-composer").boundingBox();
+      assert.ok(shortComposer.y + shortComposer.height <= 430, "Composer stays visible in a keyboard-sized viewport");
+      await page.setViewportSize({ width, height });
+    }
     await input.fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-" + name);
     assert.equal(await page.getByRole("button", { name: "Nachricht kopieren", exact: true }).count(), messages.length);
@@ -133,11 +170,15 @@ try {
     if (width < 768) await page.getByRole("button", { name: "Zurück zur Liste" }).click();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("");
     if (name === "desktop" || name === "mobil") await screenshot(page, "chat-liste-" + name);
-    await page.getByRole("button", { name: "Neuer Chat", exact: true }).click();
+    await page.locator(".chat-sidebar").getByRole("button", { name: "Neuer Chat", exact: true }).click();
     await page.getByRole("heading", { name: "Was hast du vor?" }).waitFor();
     await page.getByRole("button", { name: "Was ist heute wichtig?", exact: false }).click();
     assert.equal(await page.getByRole("textbox", { name: "Nachricht an Lukas" }).inputValue(), "Was ist heute wichtig?");
     assert.equal(sent, 0, "A suggestion must only fill the draft");
+    await page.getByRole("button", { name: "Sprachchat starten" }).click();
+    await page.locator(".chat-composer .chat-voice-status").waitFor();
+    assert.ok((await page.locator(".chat-voice-status").innerText()).length > 0, "Voice permission errors remain visible next to the composer");
+    assert.equal(await page.getByRole("button", { name: "Sprachchat starten" }).count(), 1, "Voice can be retried after denied permission");
     await page.goto(origin + "/telefon");
     await page.getByRole("heading", { name: "Deine Kontakte" }).waitFor();
     const firstContact = await page.getByRole("heading", { name: "Max Muster", exact: true }).boundingBox();
@@ -185,7 +226,7 @@ try {
     await page.getByText("file_read", { exact: true }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Erlauben", exact: true }).count(), 0);
     if (width < 768) {
-      await page.getByRole("button", { name: "Weitere Bereiche öffnen" }).click();
+      await page.getByRole("button", { name: "Menü öffnen" }).click();
       await page.getByRole("searchbox", { name: "Bereiche suchen" }).fill("Verbindungen");
       await page.getByRole("dialog").getByRole("link", { name: "Verbindungen", exact: true }).click();
       await page.getByRole("heading", { name: "Verbindungen", exact: true }).waitFor();

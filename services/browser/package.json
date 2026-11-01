@@ -1,0 +1,1 @@
+{"name":"lukas-browser-service","private":true,"type":"module","scripts":{"start":"node server.mjs","test":"node --test test.mjs"},"dependencies":{"playwright":"1.63.0","ipaddr.js":"2.2.0"}}

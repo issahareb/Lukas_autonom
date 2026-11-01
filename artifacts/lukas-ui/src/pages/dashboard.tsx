@@ -19,10 +19,9 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { Orb, type OrbZustand } from "@/components/orb";
+import { LukasAvatar, type LukasMood } from "@/components/lukas-avatar";
 import { WartetAufDich } from "@/components/wartet-auf-dich";
 import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
-import { useAudioPegel } from "@/hooks/use-audio-pegel";
 import "./dashboard.css";
 
 export default function Dashboard() {
@@ -31,20 +30,8 @@ export default function Dashboard() {
   const eingabe = useRef<HTMLTextAreaElement>(null);
   const sprache = useSprachsitzung();
   const { data, isError, refetch } = useGetLukasDashboard();
-  const pegel = useAudioPegel({
-    stream: sprache.status === "hoert" ? sprache.mikro : null,
-    element: sprache.aktiv ? sprache.ausgabe : null,
-    aktiv: sprache.aktiv,
-  });
   const tippt = text.trim().length > 0;
-  const zustand: OrbZustand =
-    sprache.status === "spricht"
-      ? "spricht"
-      : sprache.status === "hoert"
-        ? "hoert"
-        : sprache.status === "verbindet"
-          ? "denkt"
-          : "ruhe";
+  const mood: LukasMood = sprache.status === "spricht" ? "speaking" : sprache.aktiv ? "listening" : sprache.status === "verbindet" ? "thinking" : "idle";
   useEffect(() => {
     const el = eingabe.current;
     if (el) {
@@ -89,7 +76,7 @@ export default function Dashboard() {
             <span className="home-eyebrow">Ein Gedanke. Neue Möglichkeiten.</span>
 
           </div>
-          <div className="home-orb"><Orb zustand={zustand} pegel={pegel} groesse="gross" /></div>
+          <div className="home-character" role="img" aria-label={mood === "speaking" ? "Lukas spricht" : mood === "listening" ? "Lukas hört zu" : mood === "thinking" ? "Lukas verbindet" : "Lukas wartet"}><LukasAvatar mood={mood} /></div>
           <p className="home-voice-state" aria-live="polite">{sprachText}</p>
           <h1>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute<span>?</span></>}</h1>
           <p className="home-conversation-description">Ein Ziel, eine Frage, eine neue Idee. Fang einfach an.</p>

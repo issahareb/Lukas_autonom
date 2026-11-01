@@ -50,6 +50,7 @@ const NAMEN: Record<string, { label: string; icon: LucideIcon }> = {
   generate_image: { label: "Bild erzeugt", icon: ImageIcon },
   generate_video: { label: "Video erzeugt", icon: ImageIcon },
   feel: { label: "Gefühlt", icon: Heart },
+  set_expression: { label: "Gesichtsausdruck geändert", icon: Heart },
 };
 
 function beschrifte(tool: string) {

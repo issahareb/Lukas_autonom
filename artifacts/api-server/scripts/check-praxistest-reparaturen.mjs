@@ -48,9 +48,16 @@ try {
   assert.ok(!selected("Was kostet die Jahreskarte im Grugapark 2026? Quelle bitte").some(n => n.startsWith("mcp__")));
   assert.ok(!selected("Lies meine neueste E-Mail von GitHub").includes("github_read_path"));
   assert.ok(selected("Lies meine neueste E-Mail von GitHub").includes("mcp_find_tool"));
+  const browserUrl = process.env.LUKAS_BROWSER_URL;
+  delete process.env.LUKAS_BROWSER_URL;
   const filtered = m.werkzeugeNachFehler(tools, "browse_page", new Error("All configured authentication methods failed")).map(t => t.function.name);
   assert.ok(!filtered.includes("browser_do") && !filtered.includes("execute_command"));
   assert.ok(filtered.includes("fetch_url"));
+  process.env.LUKAS_BROWSER_URL = "http://browser.internal:8080";
+  const independent = m.werkzeugeNachFehler(tools, "execute_command", new Error("All configured authentication methods failed")).map(t => t.function.name);
+  assert.ok(independent.includes("browser_do") && independent.includes("browse_page") && !independent.includes("execute_command"));
+  if (browserUrl === undefined) delete process.env.LUKAS_BROWSER_URL;
+  else process.env.LUKAS_BROWSER_URL = browserUrl;
   assert.ok(m.zugangsFehler("email_search", new Error("E-Mail-Zugang fehlt: EMAIL_USER")));
   assert.ok(selected("Prüfe die SSH-Verbindung einmal").includes("execute_on_host"));
   const afterMailFailure = m.werkzeugeNachFehler(tools, "email_search", new Error("EMAIL_USER fehlt")).map(t => t.function.name);

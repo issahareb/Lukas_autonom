@@ -83,6 +83,7 @@ it("zeigt fällige Rückrufe und storniert sie ohne einen Anruf auszulösen", as
   localStorage.setItem("lukas_token", "test-owner");
   const calls = setup([kontakt], [], [{ id: "callback-test", kontakt_id: 7, status: "geplant", faellig_am: "2026-10-26T18:00:00Z", ergebnis: "" }]);
   render(<Telefon />);
+  await userEvent.click(screen.getByRole("tab", { name: "Rückrufe" }));
   const cancel = await screen.findByRole("button", { name: "Rückruf stornieren" });
   await userEvent.click(cancel);
   await waitFor(() => expect(screen.queryByRole("button", { name: "Rückruf stornieren" })).toBeNull());

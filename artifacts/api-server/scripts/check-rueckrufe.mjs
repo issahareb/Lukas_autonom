@@ -79,10 +79,34 @@ export async function starteAnrufMitStatus(){throw new Error('Real calls forbidd
       await q.fuehreRueckrufeAus(dial);assert.equal((await state(f.id)).status,'verpasst');assert.equal(calls,2);
       const g=await plan();await pool.query("UPDATE lukas_rueckrufe SET status='startet',updated_at=now()-interval '3 minutes' WHERE id=$1",[g.id]);
       await q.fuehreRueckrufeAus(dial);assert.equal((await state(g.id)).status,'unklar');assert.equal(calls,2);
-      const h=await plan();await due();
+      // Simulate hangup after the durable commit; execution must outlive its signal and process.
+      const session=new AbortController();
+      const h=JSON.parse(await q.planeRueckruf({in_minuten:5},{...ctx,signal:session.signal}));
+      session.abort(new Error("Synthetic voice session ended"));await due();
       const child=join(dir,'restart.mjs');writeFileSync(child,`import pg from 'pg';
 import express from 'express';globalThis.__callbackPool=new pg.Pool({connectionString:process.env.BENCH_DATABASE_URL});const q=await import(${JSON.stringify(out)});await q.fuehreRueckrufeAus(async()=>({status:'started',message:'Restart worker accepted',callId:'restart'}));await globalThis.__callbackPool.end();`);
       execFileSync(process.execPath,[child],{env:process.env,timeout:15000});assert.equal((await state(h.id)).anruf_id,'restart');
+      const changed=await plan();await due();
+      const originalNumber=(await pool.query('SELECT nummer FROM lukas_telefon_nummern WHERE id=$1',[contact.id])).rows[0].nummer;
+      await pool.query('UPDATE lukas_telefon_nummern SET nummer=$2 WHERE id=$1',[contact.id,originalNumber+'1']);
+      await q.fuehreRueckrufeAus(dial);assert.equal((await state(changed.id)).status,'blockiert');assert.equal(calls,2);
+      await pool.query('UPDATE lukas_telefon_nummern SET nummer=$2 WHERE id=$1',[contact.id,originalNumber]);
+      const uncertain=await plan();await due();
+      await q.fuehreRueckrufeAus(async()=>{calls++;return {status:'uncertain',message:'Provider acceptance unknown'};});
+      await Promise.all([q.fuehreRueckrufeAus(dial),q.fuehreRueckrufeAus(dial)]);
+      assert.equal((await state(uncertain.id)).status,'unklar');assert.equal(calls,3);
+      const racing=await plan();await due();
+      let releaseDial,announceClaim;
+      const held=new Promise(r=>{releaseDial=r;});const claimed=new Promise(r=>{announceClaim=r;});
+      const dispatch=q.fuehreRueckrufeAus(async()=>{calls++;announceClaim();await held;return {status:'started',message:'Synthetic accepted'};});
+      await claimed;
+      try {
+        assert.equal((await state(racing.id)).status,'startet','Claim is committed before dialing');
+        await assert.rejects(()=>q.storniereRueckruf(racing.id));
+        await q.fuehreRueckrufeAus(dial);assert.equal(calls,4,'Second worker cannot dial claimed job');
+      } finally {releaseDial();await dispatch;}
+      assert.equal((await state(racing.id)).status,'gestartet');
+      console.log('OK — Hangup signal + new process preserves committed job; changed number blocked; uncertain provider result never retried; cancellation after claim rejected without duplicate call.');
       const {rows:[notifications]}=await pool.query("SELECT count(*)::int AS n FROM lukas_meldungen WHERE betreff LIKE 'Rückrufauftrag %'");assert.ok(notifications.n>=6);
       console.log('OK — PostgreSQL: persistent plan, parallel deduplication/claim, not early, cancellation, revocation, unknown/no retry, expiry, crashed dispatch, separate-process recovery, visible outcomes. No real telephone call.');
     } finally {

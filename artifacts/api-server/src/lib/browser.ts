@@ -1,3 +1,4 @@
+import { browserServiceConfigured, browserServiceCall } from "./browser-service";
 import { sshExec, shQuote } from "./code-sandbox";
 import { BROWSER_SCRIPT } from "./browser-script";
 import { BROWSER_OPERATOR_SCRIPT } from "./browser-operator-script";
@@ -11,7 +12,11 @@ import { logger } from "./logger";
  * Browser. Lukas hat deshalb wahrheitsgemaess gemeldet, er sehe die Prompts und
  * Assets nicht. Er konnte sie nicht sehen.
  *
- * WO das laeuft: in einem eigenen Container auf Issas Droplet, nicht auf
+ * Mit LUKAS_BROWSER_URL laufen Lesen und Bedienen im separaten Railway-Dienst
+ * ohne SSH/VPS. Nur Installationen OHNE diese Konfiguration nutzen den
+ * folgenden alten Droplet-Adapter. Kein stiller Rückfall bei RPC-Fehlern.
+ *
+ * Historischer Adapter: in einem eigenen Container auf Issas Droplet, nicht auf
  * Railway. Zwei Gruende. Erstens ist dort ohnehin schon die Ausfuehrungsumgebung
  * mit SSH-Zugang; ein Browser auf Railway waere ein zweiter Ort mit eigener
  * Installation. Zweitens ist ein Browser, der fremde Seiten oeffnet, genau die
@@ -165,6 +170,7 @@ async function starteContainer(): Promise<void> {
 let laufendeEinrichtung: Promise<void> | null = null;
 
 export async function ensureBrowser(): Promise<void> {
+  if (browserServiceConfigured()) { await browserServiceCall("healthz"); return; }
   if ((await zustand()) === "laeuft" && (await browserBereit())) return;
 
   if (!laufendeEinrichtung) {
@@ -192,6 +198,7 @@ export type BrowseErgebnis = {
  * laden" druecken, und dann Text, Links und Medien herausgeben.
  */
 export async function renderPage(url: string, scrolls = 12): Promise<BrowseErgebnis> {
+  if (browserServiceConfigured()) return browserServiceCall<BrowseErgebnis>("render", { url, scrolls });
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Nur http/https URLs sind erlaubt");
@@ -275,6 +282,7 @@ export async function bedienePage(
   if (schritte.length > 40) {
     return { ok: false, fehler: "Mehr als 40 Schritte auf einmal — teil das in mehrere Aufrufe." };
   }
+  if (browserServiceConfigured()) return browserServiceCall<BedienErgebnis>("operate", { sitzung, schritte, zugang });
   await ensureBrowser();
 
   const ablegen = await sshExec(
