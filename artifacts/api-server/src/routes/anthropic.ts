@@ -1,3 +1,4 @@
+import { istMisserfolg } from "../lib/werkzeug-ergebnis";
 import { mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
 import { zugangsFehler, werkzeugeNachFehler } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
@@ -470,11 +471,11 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
           void fuehleWerkzeug({
             werkzeug: toolCall.name,
             eingabe: input,
-            gelungen: true,
+            gelungen: !istMisserfolg(toolResult),
             runde: iteration,
           });
           schritte.push(
-            zeigeSchritt(toolCall.name, input, toolResult, true, Date.now() - begonnen, sende),
+            zeigeSchritt(toolCall.name, input, toolResult, !istMisserfolg(toolResult), Date.now() - begonnen, sende),
           );
         } catch (err) {
           logger.warn({ err, tool: toolCall.name }, "Lukas tool failed");

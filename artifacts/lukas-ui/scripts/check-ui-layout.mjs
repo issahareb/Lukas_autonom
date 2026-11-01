@@ -79,6 +79,7 @@ try {
       else if (path === "/api/lukas/telefon") body = { anbieter: "telnyx", bereit: { webhook: true, anrufen: true },
         nummern: [{ id: 1, nummer: "4915112345678", name: "Max Muster", stufe: "oeffentlich", darfAngerufenWerden: true, aufnahmeZustimmung: true, aufnahmeQuelle: "homepage", aufnahmeBestaetigtAm: now, mithoerenZustimmung: true, mithoerenQuelle: "email", mithoerenBestaetigtAm: now }],
         anrufe: [{ id: 1, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "beendet", dauer: 34, aufnahmeStatus: "completed", aufnahmeDauer: 34, createdAt: now }, { id: 2, nummer: "4915112345678", richtung: "ausgehend", ergebnis: "verbunden", mithoerenZustimmung: true, createdAt: now }] };
+      else if (path === "/api/lukas/telefon/rueckrufe") body = [];
       else if (path === "/api/lukas/telefon/telnyx") body = { bereit: true, konfiguriert: true, freigeschaltet: true, nummer: "+49201123456", status: "active", hinweis: "Rufnummer aktiv." };
       else if (path === "/api/lukas/mcp") body = { servers: [
         { id: 1, name: "Kalender", slug: "calendar", url: "https://example.com/mcp", status: "connected", tools: [{ name: "read_calendar", description: "Termine lesen" }], selectedTools: [], riskTier: "R2", enabled: true, authorized: true },

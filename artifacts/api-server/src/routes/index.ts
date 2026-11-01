@@ -11,6 +11,7 @@ import whatsappRouter from "./whatsapp";
 import approvalsRouter from "./approvals";
 import proposalsRouter from "./proposals";
 import mcpRouter from "./mcp";
+import rueckrufRouter from "./rueckrufe";
 import telefonRouter from "./telefon";
 import telefonAnfragenRouter from "./telefon-anfragen";
 
@@ -34,6 +35,7 @@ router.use(approvalsRouter);
 router.use(proposalsRouter);
 router.use(mcpRouter);
 router.use(telefonAnfragenRouter);
+router.use(rueckrufRouter);
 router.use(telefonRouter);
 
 export default router;

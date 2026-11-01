@@ -32,6 +32,10 @@ import { zugangFuer } from "./zugaenge";
 import { nurEinmal, fingerabdruck } from "./versandsperre";
 
 export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+{"type": "function", "function": {"name": "lese_anfragen", "description": "Lies tatsächlich eingegangene Telefon- und Website-Kundenanfragen aus der Datenbank, mit Anzahl, Quelle, Zeitpunkt und Zusammenfassung. Für Sind Anfragen eingegangen? immer frisch abrufen, nicht im Gedächtnis raten. Offene Auswertungen werden separat gemeldet. E-Mail separat über email_search. Nur lesend.", "parameters": {"type": "object", "properties": {"tage": {"type": "number", "minimum": 1, "maximum": 90, "description": "Zeitraum bis jetzt, Standard 30 Tage"}, "status": {"type": "string", "enum": ["alle", "offen"]}, "limit": {"type": "number", "minimum": 1, "maximum": 20}, "offset": {"type": "number", "minimum": 0, "maximum": 10000}}}}},
+{"type": "function", "function": {"name": "plane_rueckruf", "description": "Plane einen echten Rückruf dauerhaft. Für in fünf Minuten dieses Werkzeug nutzen, niemals save_memory oder create_goal. Ziel muss gespeicherter, für Anrufe freigegebener Kontakt sein. Am Owner-Telefon nummer weglassen für mich. Erfolg erst nach Speicherbestätigung nennen.", "parameters": {"type": "object", "properties": {"nummer": {"type": "string"}, "in_minuten": {"type": "number", "minimum": 1, "maximum": 43200}, "zeitpunkt": {"type": "string", "description": "ISO 8601 mit expliziter Zeitzone, alternativ zu in_minuten"}, "anlass": {"type": "string"}}, "required": []}}},
+{"type": "function", "function": {"name": "rueckruf_status", "description": "Lies geplante Rückrufe, Fälligkeiten und tatsächliche Ausführungsergebnisse.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+{"type": "function", "function": {"name": "storniere_rueckruf", "description": "Storniere einen noch nicht gestarteten Rückruf anhand seiner ID. Laufende Anrufe werden dadurch nicht beendet.", "parameters": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}}},
   { type: "function", function: {
     name: "set_expression", description: "Steuere den Gesichtsausdruck deines sichtbaren Robotergesichts im Webchat. Auf Wünsche wie 'guck böse' wirklich dieses Tool nutzen. Unabhängig von deiner inneren Stimmung; spielerische Mimik ist erlaubt. Bleibt im Gespräch bis zur nächsten Änderung.",
     parameters: { type: "object", properties: { expression: { type: "string", enum: ["neutral", "happy", "sad", "angry", "frustrated", "surprised", "curious", "sleepy", "wink"] } }, required: ["expression"], additionalProperties: false }
@@ -1188,7 +1192,7 @@ async function githubSearchCode(repoInput: string, query: string): Promise<strin
 export async function executeLukasTool(
   name: string,
   input: Record<string, unknown>,
-  ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal; ownerCallGrant?: OwnerCallGrant } = {},
+  ctx: { rawUserMessage?: string; conversationId?: number; signal?: AbortSignal; telefonOwnerContactId?: number; ownerCallGrant?: OwnerCallGrant } = {},
 ): Promise<string> {
   // Resolve a discovered built-in to its canonical tool, then apply THAT
   // tool's unchanged policy (including raw owner message and call grants).
@@ -1212,6 +1216,22 @@ export async function executeLukasTool(
   if (name.startsWith(MCP_TOOL_PREFIX)) return await runMcpTool(name, input);
 
   switch (name) {
+    case "lese_anfragen": {
+      const { leseAnfragen } = await import("./anfragen-lesen");
+      return await leseAnfragen(input);
+    }
+    case "plane_rueckruf": {
+      const { planeRueckruf } = await import("./rueckrufe");
+      return await planeRueckruf(input, ctx);
+    }
+    case "rueckruf_status": {
+      const { rueckrufStatus } = await import("./rueckrufe");
+      return JSON.stringify(await rueckrufStatus());
+    }
+    case "storniere_rueckruf": {
+      const { storniereRueckruf } = await import("./rueckrufe");
+      return JSON.stringify(await storniereRueckruf(String(input.id ?? "")));
+    }
     case "set_expression": {
       const expression = input.expression;
       if (typeof expression !== "string" || !["neutral", "happy", "sad", "angry", "frustrated", "surprised", "curious", "sleepy", "wink"].includes(expression)) throw new Error("Unbekannter Gesichtsausdruck");

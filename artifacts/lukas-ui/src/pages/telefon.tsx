@@ -588,6 +588,35 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
   );
 }
 
+type Rueckruf = { id: string; kontakt_id: number | null; faellig_am: string; status: string; ergebnis: string; anruf_status?: string };
+function RueckrufListe({ kontakte }: { kontakte: Nummer[] }) {
+  const [rows, setRows] = useState<Rueckruf[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try { const data = await api("/rueckrufe"); if (!Array.isArray(data)) throw new Error("Ungültige Rückrufliste"); setRows(data); setError(""); }
+    catch { setError("Rückrufstatus gerade nicht erreichbar."); }
+  }, []);
+  useEffect(() => { void load(); const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 5000); return () => window.clearInterval(timer); }, [load]);
+  const cancel = async (id: string) => {
+    setBusy(id);
+    try { await api("/rueckrufe/" + encodeURIComponent(id) + "/stornieren", { method: "POST", body: "{}" }); await load(); }
+    catch { setError("Nicht storniert. Der Auftrag könnte bereits gestartet sein; Status prüfen."); }
+    finally { setBusy(null); }
+  };
+  return <section aria-label="Rückrufaufträge" className="space-y-3 rounded-2xl bg-secondary/30 p-4">
+    <h2 className="font-medium">Rückrufaufträge</h2>
+    {error && <p role="alert" className="text-sm text-amber-300">{error}</p>}
+    {!rows.length && !error && <p className="text-sm text-muted-foreground">Hier erscheinen dauerhaft eingeplante Rückrufe.</p>}
+    {rows.slice(0, 10).map(r => <div key={r.id} className="space-y-1 border-t border-border pt-3 text-sm">
+      <p>{kontakte.find(k => k.id === r.kontakt_id)?.name || "Kontakt"} · {new Date(r.faellig_am).toLocaleString("de-DE")} · {r.status}</p>
+      {r.ergebnis && <p className="break-words text-muted-foreground">{r.ergebnis}</p>}
+      {r.anruf_status && <p>Gesprächsstatus: {r.anruf_status}</p>}
+      {r.status === "geplant" && <Button variant="outline" disabled={busy !== null} onClick={() => void cancel(r.id)}>Rückruf stornieren</Button>}
+    </div>)}
+  </section>;
+}
+
 export default function Telefon() {
   const [daten, setDaten] = useState<Antwort | null>(null);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -684,15 +713,16 @@ export default function Telefon() {
     </section>
     <Tabs value={bereich} onValueChange={wechsel} className="space-y-4">
       <div ref={navigation} className="sticky top-0 z-10 space-y-3 bg-background/95 pb-3 pt-1 backdrop-blur-xl">
-        <TabsList aria-label="Telefonbereiche" className="grid h-auto w-full grid-cols-3 rounded-2xl p-1">
+        <TabsList aria-label="Telefonbereiche" className="grid h-auto w-full grid-cols-4 rounded-2xl p-1">
           <TabsTrigger value="kontakte" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Kontakte <span className="text-[10px] opacity-60">{kontakte.length}</span></TabsTrigger>
           <TabsTrigger value="anrufe" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Anrufe {laufend.length > 0 && <span className="size-1.5 rounded-full bg-emerald-400" />}</TabsTrigger>
           <TabsTrigger value="aufnahmen" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Aufnahmen <span className="text-[10px] opacity-60">{aufnahmen.length}</span></TabsTrigger>
+          <TabsTrigger value="rueckrufe" className="min-h-11 rounded-xl px-1 text-xs sm:text-sm">Rückrufe</TabsTrigger>
         </TabsList>
         {laufend.length > 0 && bereich !== "anrufe" && <button onClick={() => wechsel("anrufe")} className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary/10 px-3 text-left text-xs text-primary"><span className="size-2 shrink-0 rounded-full bg-emerald-400" /><span className="min-w-0 flex-1 truncate">{laufend.length === 1 ? `${nameFuer(laufend[0])} · Anruf läuft` : `${laufend.length} Anrufe laufen`}</span><span className="shrink-0">Zum Gespräch →</span></button>}
-        <label className="flex h-11 items-center gap-2 rounded-xl bg-secondary/60 px-3 text-muted-foreground">
+        {bereich !== "rueckrufe" && <label className="flex h-11 items-center gap-2 rounded-xl bg-secondary/60 px-3 text-muted-foreground">
           <Search className="size-4 shrink-0" /><input aria-label="Kontakte oder Anrufe suchen" type="search" value={suche} onChange={e => { setSuche(e.target.value); setSichtbar(8); }} placeholder={bereich === "kontakte" ? "Name oder Rufnummer suchen" : "Nach Kontakt suchen"} className="w-full min-w-0 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground" />
-        </label>
+        </label>}
       </div>
       {fehler && <p role="alert" className="text-sm text-red-400">{fehler}</p>}
       {!daten && !fehler && <p className="py-8 text-center text-sm text-muted-foreground">Telefon wird geladen …</p>}
@@ -712,6 +742,9 @@ export default function Telefon() {
         <div className="phone-contact-grid">{aufnahmeListe.slice(0, sichtbar).map(a => anrufKarte(a, false, true))}</div>
         {daten && !aufnahmeListe.length && leer(suche ? "Keine Aufnahme passt zu deiner Suche." : "Noch keine fertigen Aufnahmen bei den letzten Anrufen.")}
         {mehr(aufnahmeListe.length)}
+      </TabsContent>
+      <TabsContent value="rueckrufe" forceMount hidden={bereich !== "rueckrufe"}>
+        <RueckrufListe kontakte={kontakte} />
       </TabsContent>
     </Tabs>
     <Dialog open={dialog !== null} onOpenChange={open => { if (!open) setDialog(null); }}>

@@ -298,6 +298,8 @@ try {
   assert.match(accepted.initialCommentary, /Issa Hareb, Gründer/);
   assert.equal(accepted.allowTools, true); assert.equal(accepted.telefonOwnerContactId, 17);
   assert.equal(accepted.visibility, "private");
+  assert.equal(accepted.telefonBusiness, false, "Owner is not an incoming customer enquiry");
+  assert.doesNotMatch(accepted.instructions, /Deine Aufgabe ist eine qualifizierte Anfrage/);
   assert.match(accepted.instructions, /github_read_path.*Lukas_autonom/);
   assert.match(accepted.initialCommentary, /freigegebene private Owner-Sitzung/);
   assert.ok(!accepted.initialCommentary.includes("Dies ist ein über den ausdrücklich"),

@@ -1,4 +1,4 @@
-import { sprachModell, sprachStimme } from "./ai/sprach-sitzung";
+import { sprachModell, telefonSprachStimme } from "./ai/sprach-sitzung";
 type Json = Record<string, unknown>;
 type Check = { status: "not_run" | "ok" | "missing_config" | "invalid_config" | "network_error" | "http_error" | "invalid_response"; httpStatus?: number };
 type ReadResult = { check: Check; data?: Json };
@@ -79,7 +79,7 @@ async function inspectOpenAI(): Promise<TelefonSetupReport["openai"]> {
   const connection = openaiConnection();
   let model: string | null = null, voice: string | null = null;
   try { const candidate = sprachModell().trim(); if (/^gpt-live-[A-Za-z0-9.-]{1,100}$/.test(candidate)) model = candidate; } catch {}
-  try { const candidate = sprachStimme().trim(); if (/^[a-z][a-z0-9_-]{0,63}$/.test(candidate)) voice = candidate; } catch {}
+  try { const candidate = telefonSprachStimme().trim(); if (/^[a-z][a-z0-9_-]{0,63}$/.test(candidate)) voice = candidate; } catch {}
   const project = process.env.OPENAI_PROJECT_ID?.trim() ?? "";
   const projectConfigured = /^proj_[A-Za-z0-9_-]+$/.test(project);
   const report: TelefonSetupReport["openai"] = {

@@ -87,12 +87,8 @@ export function kontextAus(werkzeug: string, eingabe: Record<string, unknown>): 
  * "gescheitert" waere schlimmer als ein verpasstes — es wuerde Lukas von etwas
  * abbringen, das funktioniert.
  */
-const MISSERFOLG =
-  /^(Fehler:|Die Seite liess sich nicht bedienen|Abgebrochen —|Für die Sitzung)|nicht zugestellt|fehlgeschlagen|konnte nicht/i;
-
-export function istMisserfolg(ergebnis: string): boolean {
-  return MISSERFOLG.test(ergebnis.trim().slice(0, 200));
-}
+import { istMisserfolg } from "./werkzeug-ergebnis";
+export { istMisserfolg } from "./werkzeug-ergebnis";
 
 /** Die erste Zeile des Grundes — mehr passt in keine Lehre. */
 function grundAus(ergebnis: string): string {
