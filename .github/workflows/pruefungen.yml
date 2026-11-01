@@ -38,7 +38,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -100,7 +100,7 @@ jobs:
 
       # Der Integrationslauf misst gegen ECHTE Abhängigkeiten: eigenes
       # Postgres, zwei echte Prozesse, ein echter Browser, der ganze
-      # Token-Weg. Er startet sein Postgres selbst (nicht der Service oben)
+      # Token-Weg. Er nutzt den wegwerfbaren Postgres-Service dieses Jobs
       # und spielt das Schema über denselben Deploy-Pfad ein wie die
       # Produktion. Lief bisher nur, wenn jemand daran dachte.
       - name: Browser für den Integrationslauf
@@ -108,6 +108,8 @@ jobs:
 
       - name: Integrationslauf (echtes Postgres, echter Browser)
         working-directory: artifacts/api-server
+        env:
+          BENCH_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: npm run bench:integration
 
       # Die Python-Dienste unter vps/ hingen bisher gar nicht an der Pipeline.

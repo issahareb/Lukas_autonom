@@ -8,10 +8,17 @@ HIER="$(cd "$(dirname "$0")" && pwd)"
 API="$HIER/../.."
 cd "$API"
 
-trap '"$HIER/stop-postgres.sh" >/dev/null 2>&1 || true' EXIT
-
-echo "→ Postgres starten"
-URL="$("$HIER/start-postgres.sh")"
+# CI already provisions disposable PostgreSQL 16. Reuse that explicit test
+# connection without assuming the runner image ships initdb/pg_ctl locally.
+# Only stop a database that this script started itself.
+if [ -n "${BENCH_DATABASE_URL:-}" ]; then
+  echo "→ Bereitgestelltes Test-Postgres verwenden"
+  URL="$BENCH_DATABASE_URL"
+else
+  trap '"$HIER/stop-postgres.sh" >/dev/null 2>&1 || true' EXIT
+  echo "→ Postgres starten"
+  URL="$("$HIER/start-postgres.sh")"
+fi
 export BENCH_DATABASE_URL="$URL"
 
 # Denselben Weg wie der Deploy, nicht `push`. Sonst prueft der

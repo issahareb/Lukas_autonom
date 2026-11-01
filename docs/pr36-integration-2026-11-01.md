@@ -17,6 +17,8 @@ Vier Konflikte wurden inhaltlich zusammengeführt: Backend-Prüfkette, Soul, Wer
 
 Der bisherige Oberflächenlauf von PR #36 war tatsächlich rot: Im mobilen Browser war der erste Kontakt wegen der vorgeschalteten Rückrufliste zu weit unten. Rückrufe bekommen deshalb einen eigenen Telefon-Tab. Kontakt-, Anruf- und Aufnahmeansicht bleiben erreichbar. Der Browsertest erhält eine explizite leere Rückrufantwort; der bestehende Stornotest nutzt den neuen Tab.
 
+Außerdem scheiterte der Integrationslauf am inzwischen fehlenden lokalen `initdb` im GitHub-Runner. CI nutzt nun seinen bereits provisionierten, wegwerfbaren PostgreSQL-16-Service über `BENCH_DATABASE_URL`. Ohne diese explizite Testverbindung startet das Skript weiterhin sein eigenes lokales PostgreSQL. Es beendet nur einen selbst gestarteten Server. Die Prüfschritte werden dadurch nicht übersprungen.
+
 ## Testgrenzen und zusätzliche Abnahmefälle
 
 Automatisierte Typ-, Backend-, Sicherheits- und UI-Prüfungen laufen vor einer Freigabe des Hauptbranches. Der endgültige CI-Stand wird im PR mit dem geprüften Commit verknüpft.
