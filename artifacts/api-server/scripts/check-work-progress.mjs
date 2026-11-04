@@ -63,6 +63,10 @@ if(process.argv[2]==='--worker'){
     await assert.rejects(m.withWorkProgress('failed-write','task',async()=>{await m.planWorkBatch([first]);state.failWrites=true;await m.startWorkStep(first);effects++;}),/write failure/);
     state.failWrites=false;assert.equal(effects,0);assert.equal(state.locks.size,0);
     await m.withWorkProgress('new-scope','task',async()=>assert.equal(m.workProgressContext(),''));
+    await m.withWorkProgress('uncertain-write','task',async()=>{
+      await m.planWorkBatch([second]);await m.startWorkStep(second);await m.finishWorkStep(second,'transport failed after dispatch',true);
+    });
+    assert.equal(state.rows.get('uncertain-write').schritte[0].status,'uncertain','a write exception does not prove the effect failed');
     await m.withWorkProgress('one','weiter',async()=>{
       assert.ok(m.workProgressContext());
       await m.withWorkProgress(undefined,'public turn',async()=>assert.equal(m.workProgressContext(),'', 'public/explicit overrides cannot inherit a private journal'));

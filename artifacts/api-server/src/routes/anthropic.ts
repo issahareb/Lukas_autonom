@@ -461,6 +461,11 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
 
         const begonnen = Date.now();
         await startWorkStep(toolCall);
+        if (gestoppt()) {
+          const cancelled = "Abgebrochen — Werkzeug wurde nicht ausgeführt.";
+          await finishWorkStep(toolCall, cancelled, "cancelled");
+          return { role: "tool" as const, tool_call_id: toolCall.id, content: cancelled };
+        }
         try {
           const toolResult = await executeLukasTool(toolCall.name, input, {
             rawUserMessage: String(content),

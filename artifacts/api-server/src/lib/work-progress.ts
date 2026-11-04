@@ -3,6 +3,7 @@ import { isTaskContinuation } from "./ai/model-router";
 import { istMisserfolg } from "./werkzeug-ergebnis";
 import { logger } from "./logger";
 import { isToolFreeTask } from "./werkzeug-auswahl";
+import { isParallelRead } from "./tool-batch";
 
 type Step = { id: string; werkzeug: string; eingabe: string; status: string; ergebnis?: string };
 type Journal = { auftrag: string; status: string; schritte: Step[] };
@@ -68,11 +69,15 @@ export async function startWorkStep(call: Call): Promise<void> {
   await work.save();
 }
 
-export async function finishWorkStep(call: Call, result: string, failed = false): Promise<void> {
+export async function finishWorkStep(call: Call, result: string, failed: boolean | "cancelled" = false): Promise<void> {
   const work = current.getStore(); if (!work) return;
   const step = work.journal.schritte.find(step => step.id === call.id);
   if (!step) throw new Error("Arbeitsschritt fehlt im Journal.");
-  step.status = failed || istMisserfolg(result) ? "failed" : "returned";
+  // A transport exception after a write may mean the provider acted before
+  // its response was lost. Never turn that uncertainty into a retry mandate.
+  step.status = failed === "cancelled" ? "cancelled" : failed
+    ? isParallelRead(call.name) ? "failed" : "uncertain"
+    : istMisserfolg(result) ? "failed" : "returned";
   step.ergebnis = safeText(result, 8000);
   await work.save();
 }
