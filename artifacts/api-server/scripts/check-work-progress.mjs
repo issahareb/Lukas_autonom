@@ -97,6 +97,13 @@ if(process.argv[2]==='--worker'){
         await real.withWorkProgress(scope,'weiter',async()=>{assert.match(real.workProgressContext(),/uncertain/);assert.equal(real.workProgressTask('x'),'Prüfe den Status und bearbeite den Auftrag');});
         const row=(await inspector.query('SELECT status,schritte FROM lukas_arbeitsfortschritt WHERE scope=$1',[scope])).rows[0];
         assert.equal(row.status,'answered');assert.equal(row.schritte[0].status,'uncertain');
+        const conversation=(await inspector.query("INSERT INTO lukas_conversations(title) VALUES('temporary progress privacy fixture') RETURNING id")).rows[0].id;
+        try{
+          await real.withWorkProgress('conversation:'+conversation,'task',async()=>{});
+          assert.equal((await inspector.query('SELECT conversation_id FROM lukas_arbeitsfortschritt WHERE scope=$1',['conversation:'+conversation])).rows[0].conversation_id,conversation);
+          await inspector.query('DELETE FROM lukas_conversations WHERE id=$1',[conversation]);
+          assert.equal((await inspector.query('SELECT scope FROM lukas_arbeitsfortschritt WHERE scope=$1',['conversation:'+conversation])).rows.length,0,'deleting the chat must cascade to its private journal');
+        }finally{await inspector.query('DELETE FROM lukas_conversations WHERE id=$1',[conversation]);}
         console.log('PASS PostgreSQL work progress: deployed schema, real two-process exclusion, SIGKILL lock release and persisted uncertain action after process restart.');
       }finally{if(child)child.kill('SIGKILL');await inspector.query('DELETE FROM lukas_arbeitsfortschritt WHERE scope=$1',[scope]);await inspector.end();}
     }else console.log('SKIP PostgreSQL progress integration: WORK_PROGRESS_SQL_URL not configured; required by the integration workflow.');

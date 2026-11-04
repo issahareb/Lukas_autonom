@@ -111,9 +111,10 @@ export async function withWorkProgress<T>(scope: string | undefined, task: strin
       // Snapshot before queuing the SQL, so parallel finishes cannot overwrite
       // a later result with an older, mutable reference.
       const snapshot = JSON.stringify(journal.schritte);
-      await client.query("INSERT INTO lukas_arbeitsfortschritt(scope,auftrag,status,schritte,updated_at) VALUES($1,$2,$3,$4::jsonb,now()) " +
-        "ON CONFLICT(scope) DO UPDATE SET auftrag=excluded.auftrag,status=excluded.status,schritte=excluded.schritte,updated_at=now()",
-      [scope, journal.auftrag, journal.status, snapshot]);
+      const conversationId = /^conversation:(\d+)$/.exec(scope)?.[1] ?? null;
+      await client.query("INSERT INTO lukas_arbeitsfortschritt(scope,auftrag,status,schritte,updated_at,conversation_id) VALUES($1,$2,$3,$4::jsonb,now(),$5) " +
+        "ON CONFLICT(scope) DO UPDATE SET auftrag=excluded.auftrag,status=excluded.status,schritte=excluded.schritte,conversation_id=excluded.conversation_id,updated_at=now()",
+      [scope, journal.auftrag, journal.status, snapshot, conversationId]);
     };
     await save();
     return await current.run({ journal, recovered, save }, async () => {

@@ -36,6 +36,8 @@ dienen als Architekturquelle; es wurde kein Anbieterwechsel eingebaut.
   wird `uncertain`, ohne gespeicherte Aktionen automatisch erneut auszuführen.
   Eine Toolantwort heißt `returned`, eine formulierte Antwort `answered`:
   keiner dieser Zustände behauptet fachlichen Aufgabenerfolg.
+  Chat-Journale sind per Fremdschlüssel gebunden und werden beim Löschen des
+  Chats mitgelöscht; ein laufender Zug kann sie danach nicht neu anlegen.
 - Das Journal gilt für Owner-Chats und autonome Läufe. Explizite fremde
   Systemprompts erhalten keinen privaten Journalinhalt. Einfache Smalltalkzüge
   umgehen es. Die neue versionierte Migration gehört vor den Serverstart.

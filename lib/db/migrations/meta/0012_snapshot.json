@@ -3399,6 +3399,12 @@
           "primaryKey": true,
           "notNull": true
         },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "auftrag": {
           "name": "auftrag",
           "type": "text",
@@ -3426,7 +3432,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "lukas_arbeitsfortschritt_conversation_id_lukas_conversations_id_fk": {
+          "name": "lukas_arbeitsfortschritt_conversation_id_lukas_conversations_id_fk",
+          "tableFrom": "lukas_arbeitsfortschritt",
+          "tableTo": "lukas_conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
