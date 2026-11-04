@@ -67,6 +67,10 @@ if(process.argv[2]==='--worker'){
       await m.planWorkBatch([second]);await m.startWorkStep(second);await m.finishWorkStep(second,'transport failed after dispatch',true);
     });
     assert.equal(state.rows.get('uncertain-write').schritte[0].status,'uncertain','a write exception does not prove the effect failed');
+    await m.withWorkProgress('uncertain-provider','task',async()=>{
+      await m.planWorkBatch([second]);await m.startWorkStep(second);await m.finishWorkStep(second,'{"status":"uncertain"}');
+    });
+    assert.equal(state.rows.get('uncertain-provider').schritte[0].status,'uncertain','explicit provider uncertainty survives checkpointing');
     await m.withWorkProgress('one','weiter',async()=>{
       assert.ok(m.workProgressContext());
       await m.withWorkProgress(undefined,'public turn',async()=>assert.equal(m.workProgressContext(),'', 'public/explicit overrides cannot inherit a private journal'));

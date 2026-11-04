@@ -73,11 +73,13 @@ export async function finishWorkStep(call: Call, result: string, failed: boolean
   const work = current.getStore(); if (!work) return;
   const step = work.journal.schritte.find(step => step.id === call.id);
   if (!step) throw new Error("Arbeitsschritt fehlt im Journal.");
+  let explicitlyUncertain = false;
+  try { explicitlyUncertain = ["uncertain", "unklar"].includes(JSON.parse(result)?.status); } catch { /* Legacy text result. */ }
   // A transport exception after a write may mean the provider acted before
   // its response was lost. Never turn that uncertainty into a retry mandate.
   step.status = failed === "cancelled" ? "cancelled" : failed
     ? isParallelRead(call.name) ? "failed" : "uncertain"
-    : istMisserfolg(result) ? "failed" : "returned";
+    : explicitlyUncertain ? "uncertain" : istMisserfolg(result) ? "failed" : "returned";
   step.ergebnis = safeText(result, 8000);
   await work.save();
 }
