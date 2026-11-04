@@ -81,6 +81,11 @@ const COMPLEX = /(\b(analysier|analyse|begründ|begruend|vergleich|plan|beweis|r
 const CONTINUATION = /^(?:ja[, ]+)?(?:bitte[, ]+)?(?:weiter|mach(?:e)? (?:das|weiter)|mach mal|umsetzen|setz(?:e)? (?:das )?um|ja bitte|und jetzt|passt das)(?: bitte)?[.!?]*$/i;
 // Eng begrenzte Definitionsfragen. "Was ist die Ursache fuer den Ausfall?" bleibt Analyse.
 const DEFINITION = /^(?:(?:kurz|einfach)[,:]?\s*)?(?:was (?:ist|sind|bedeutet|heißt|heisst)|wofür steht|what (?:is|are)|define|erklär(?:e)? mir(?: kurz)?|erklaer(?:e)? mir(?: kurz)?)\s+(?:(?:ein|eine|einen|der|die|das)\s+)?(?:python|typescript|javascript|json|yaml|react|docker|github|sql|ssh|api|regex|commit|merge|repository|plan|strategie|architektur|konzept)\s*[?.!]*$/i;
+/** Share continuation handling between model, prompt and tool routing. */
+export function isTaskContinuation(userText: string): boolean { return CONTINUATION.test(userText.trim()); }
+export function activeRoutingTask(userText: string, previousUserText?: string): string {
+  return isTaskContinuation(userText) && previousUserText ? previousUserText : userText;
+}
 function profileFor(text: string): ModelProfile {
   if (text.length > 12000) return "long_context";
   if (DEFINITION.test(text.trim())) return "fast";
@@ -104,7 +109,7 @@ export function routeLukasModel(input: RouteInput): ModelRoute {
   const text = input.userText ?? "";
   const tools = new Set(input.usedTools ?? []);
   const continuation = CONTINUATION.test(text.trim()) && input.previousUserText;
-  let profile = profileFor(continuation ? input.previousUserText! : text);
+  let profile = profileFor(activeRoutingTask(text, input.previousUserText));
   let reason = continuation ? "Fortsetzung des bisherigen Auftrags" : "Aufwand der aktuellen Aufgabe";
   if (tools.has("execute_command") || tools.has("github_search_code") ||
       (tools.has("github_read_path") && (profile === "code" || CONTINUATION.test(text.trim())))) {

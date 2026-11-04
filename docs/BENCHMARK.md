@@ -151,3 +151,27 @@ folgenlos (jede Sperre nimmt eine eigene, frische Verbindung), aber wer
 `mitSperre()` je verschachtelt, muss es wissen. Die Attrappe hätte das nie
 gezeigt: dort hatte *ich* die Semantik geschrieben, und ich hatte sie nicht
 so geschrieben.
+
+## Werkzeugauswahl: ergänzender Vergleich (November 2026)
+
+`npm run bench:tools` vergleicht die Definitionen des bisherigen und des aktuellen
+Auswahlpfads anhand identischer Schemas und der echten OpenAI-Request-Serialisierung.
+[Messdaten](tool-routing-results.json) enthalten Toolanzahl, UTF-8-Bytes und lokale
+Auswahl-/Serialisierungszeit pro Fall. Das ergänzt die bisherigen Kategorien,
+ändert aber deren Gewichtung nicht. Schemaabdeckung ist kein Modell-Aufgabenerfolg;
+übertragene Bytes sind keine vom Anbieter abgerechneten Tokens.
+
+Der separate Lauf `npm run bench:tools:live -- --allow-paid` misst echte
+OpenAI-Tokens, Cacheanteile, Median-Latenz und Erfolg anhand überprüfbarer
+Testantworten mit kontrollierten Tooldaten. Er verwendet den bestehenden
+OpenAI-Zugang, läuft höchstens 18 Aufgabenversuche mit je fünf Modellrunden und
+stoppt neue Requests nach 80000 gemeldeten Tokens. Er läuft nicht automatisch in CI.
+Ein Modellwechsel zwischen Vergleichspaaren macht den Vergleich ungültig.
+[Lokaler Live-Status](tool-live-results.json): ohne konfigurierten Zugang
+übersprungen. Produktive Aufgaben-Erfüllung und Eurokosten bleiben ungemessen.
+
+In der bestehenden Produktions-Telemetrie werden die Schema-Zeichen, Schema-Bytes
+und die Toolanzahl nun direkt aus dem OpenAI-Responses-Request übernommen;
+Modell-Tokens, Cacheanteile und Modellaufrufdauer werden weiterhin vom vorhandenen
+Messpfad erfasst. Ein protokollierter Tool-Rückgabewert ist kein Beweis für einen
+fachlich abgeschlossenen Auftrag.

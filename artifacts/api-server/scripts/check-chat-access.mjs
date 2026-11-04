@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Run the actual dashboard HTTP route and tool loop. Only external systems
-// (DB, model, tools and side effects) are stubbed, not the access-error filter.
+// (DB, model, tool execution and side effects) are stubbed. Routing, tool
+// selection, prompt modules and the access-error filter remain real.
 const directory = await mkdtemp(join(process.cwd(), '.chat-access-check-'));
 let server;
 const state = { calls: [], modelCalls: 0, rows: [], statuses: [] };
@@ -45,36 +46,45 @@ const modules = {
         const saved={...row,id:state.rows.length+1,createdAt:new Date()};state.rows.push(saved);return chain([saved]);}})};`,
   'verbrauch-auftrag': `export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
     export const auftragsStatus=status=>globalThis.__chatAccessCheck.statuses.push(status);`,
-  'lukas-tools': `export const allLukasTools=async()=>globalThis.__chatAccessCheck.tools;
+  'lukas-tools': `import {waehleWerkzeuge} from ${JSON.stringify(resolve('src/lib/werkzeug-auswahl.ts'))};
+    export const allLukasTools=async(task,discovered)=>discovered
+      ?globalThis.__chatAccessCheck.tools.filter(t=>discovered.includes(t.function.name))
+      :globalThis.__chatAccessCheck.filterTools?waehleWerkzeuge(globalThis.__chatAccessCheck.tools,task):globalThis.__chatAccessCheck.tools;
     export async function executeLukasTool(name,input){globalThis.__chatAccessCheck.calls.push({name,input});
+      if(globalThis.__chatAccessCheck.execute)return globalThis.__chatAccessCheck.execute(name,input);
       throw new Error(name==='email_search'?'EMAIL_USER fehlt':'VPS_SSH_KEY: All configured authentication methods failed');}`,
   'owner-call-grant': 'export const ownerCallGrantFromMessage=()=>undefined;',
   'bildablage': 'export const nimmBilder=()=>[]; export const entwerteAlteBilder=()=>{}; export const BILD_MARKE="";',
   'lernen': 'export const merkeErfahrung=()=>{};',
   'emotion-engine': 'export const fuehleWerkzeug=()=>{};',
   'reflection': 'export const maybeReflect=()=>{};',
-  'system-prompt': 'export const buildSystemPrompt=async()=>"Test";',
+  'system-prompt': `import {waehleLukasPrompt} from ${JSON.stringify(resolve('src/lib/lukas-prompt-auswahl.ts'))};
+    export const buildSystemPrompt=async(user,opts)=>{
+      const prompt=waehleLukasPrompt([user,opts.routingTask].join(' '));
+      globalThis.__chatAccessCheck.promptModules=prompt.module;
+      return prompt.stabil+prompt.dynamisch;};`,
   'logger': 'export const logger={info(){},warn(){},error(){}};',
   'debug-log': 'export const recordDebugEvent=()=>{};',
   'attachments': 'export const attachmentKind=()=>"text";',
   'video-frames': 'export const extractVideoFrames=async()=>({ok:false});',
   'conversation-memory': 'export const rememberAssistantMessage=()=>{}; export const rememberUserMessage=()=>{};',
-  'model-router': 'export const routeLukasModel=()=>({provider:"openai",model:"test"}); export const previousRoutingTask=()=>undefined;',
   'model-client': 'export const callLukasModel=input=>globalThis.__chatAccessCheck.model(input);',
   'voice-renderer': 'export const renderLukasVoice=async input=>input.draft;',
 };
 try {
   const output=join(directory,'route.mjs');
-  await build({entryPoints:['src/routes/anthropic.ts'],outfile:output,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins:[{
+  const plugins=[{
     name:'chat-access-external-systems',setup(b){
       b.onResolve({filter:/.*/},args=>{
         if(args.kind==='entry-point') return;
         const key=args.path==='@workspace/db'?args.path:args.path.split('/').at(-1);
         if(Object.hasOwn(modules,key)) return {path:key,namespace:'access-stub'};
+        if(args.namespace==='access-stub'&&args.path.startsWith('/')) return {path:args.path,namespace:'file'};
       });
       b.onLoad({filter:/.*/,namespace:'access-stub'},args=>({contents:modules[args.path],loader:'js'}));
     }
-  }]});
+  }];
+  await build({entryPoints:['src/routes/anthropic.ts'],outfile:output,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
   const {default:router}=await import(pathToFileURL(resolve(output)).href);
   const app=express();app.use(express.json());app.use(router);
   await new Promise(resolve=>{server=app.listen(0,'127.0.0.1',resolve);});
@@ -90,6 +100,81 @@ try {
   const answer=state.rows.find(row=>row.role==='assistant');
   assert.equal(answer.steps.length,2);assert.ok(answer.steps.every(step=>step.ok===false));
   console.log('OK — Dashboard HTTP route: mailbox failure preserves independent SSH check, exact errors reach the model and response, both failed steps persist.');
+
+  // Exercise both real entry points. A fresh topic must drop stale prompt
+  // modules AND schemas; repeated continuations must retain the original task.
+  const brainOutput=join(directory,'brain.mjs');
+  await build({entryPoints:['src/lib/lukas-brain.ts'],outfile:brainOutput,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
+  const {runLukasTurn}=await import(pathToFileURL(resolve(brainOutput)).href);
+  const fixtureNames=['github_read_path','github_search_code','execute_command','email_search','email_send',
+    'telefon_kontakte','ruf_an','lese_anfragen','mcp_find_tool','mcp_call','query_memory'];
+  state.tools=fixtureNames.map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}}));
+  state.filterTools=true;
+  let offered;
+  state.model=async input=>{offered=input;return {content:'Antwort.',toolCalls:[]};};
+  const cases=[
+    {before:['Implementiere einen Cache im TypeScript Repo'],current:'Wie viele Website-Anfragen kamen heute rein?',modules:[],has:['lese_anfragen'],missing:['github_read_path','email_search','ruf_an']},
+    {before:['Implementiere einen Cache im TypeScript Repo'],current:'Rufe einen Kontakt an',modules:['telefon'],has:['ruf_an'],missing:['github_read_path','email_search']},
+    {before:['Implementiere einen Cache im TypeScript Repo'],current:'Hallo',modules:[],has:[],missing:['github_read_path','email_search','ruf_an']},
+    {before:['Implementiere einen Cache im TypeScript Repo'],current:'Prüfe mein E-Mail-Postfach',modules:['email'],has:['email_search'],missing:['github_read_path','ruf_an']},
+    {before:['Implementiere einen Cache im TypeScript Repo','weiter','weiter'],current:'Ja, mach das',modules:['code','diagnose'],has:['github_read_path','execute_command'],missing:['email_search','ruf_an']},
+    {before:['Prüfe mein E-Mail-Postfach'],current:'Prüfe das TypeScript Repository und rufe einen Kontakt an',modules:['code','telefon','diagnose'],has:['github_read_path','ruf_an'],missing:['email_search']},
+  ];
+  for(const channel of ['dashboard','brain']) for(const scenario of cases){
+    const history=scenario.before.flatMap(content=>[{role:'user',content},{role:'assistant',content:'Bisherige Antwort.'}]);
+    offered=undefined;state.promptModules=undefined;
+    if(channel==='dashboard'){
+      state.rows=history;
+      const reply=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
+        method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:scenario.current}),signal:AbortSignal.timeout(10000)});
+      assert.equal(reply.status,200);assert.match(await reply.text(),/"done":true/);
+    }else{
+      assert.equal(await runLukasTurn({userText:scenario.current,history:[...history,{role:'user',content:scenario.current}],conversationId:1}),'Antwort.');
+    }
+    const label=channel+': '+scenario.current;
+    const available=offered.tools.map(tool=>tool.function.name);
+    for(const name of scenario.has) assert.ok(available.includes(name),label+' requires '+name);
+    for(const name of scenario.missing) assert.ok(!available.includes(name),label+' must drop '+name);
+    const domainModules=state.promptModules.filter(name=>['code','diagnose','telefon','email'].includes(name));
+    assert.deepEqual(domainModules,scenario.modules,label+' prompt modules');
+    if(scenario.current==='Hallo') assert.deepEqual(available,[],label+' requires no tools');
+    else assert.ok(available.includes('mcp_find_tool')&&available.includes('mcp_call'),label+' keeps discovery');
+  }
+  await runLukasTurn({userText:'Implementiere TypeScript Code',history:[],tools:[],systemPromptOverride:'Public only',conversationId:1});
+  assert.deepEqual(offered.tools,[],'explicitly tool-free turns stay tool-free');
+  assert.equal(offered.messages[0].content,'Public only','explicit prompt override remains authoritative');
+  console.log('OK — 12 real dashboard/brain scenarios: topic changes drop stale tools and prompt modules, repeated continuations and compound tasks retain needed capabilities; overrides remain intact.');
+
+  const turn=async(channel,text)=>{
+    state.rows=[];state.modelCalls=0;
+    if(channel==='brain')return runLukasTurn({userText:text,history:[{role:'user',content:text}],conversationId:1});
+    const response=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
+      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:text}),signal:AbortSignal.timeout(10000)});
+    assert.equal(response.status,200);assert.match(await response.text(),/"done":true/);
+  };
+  state.tools.push({type:'function',function:{name:'save_memory',parameters:{type:'object',properties:{content:{type:'string'}},required:['content']}}});
+  state.tools.push({type:'function',function:{name:'web_search',parameters:{type:'object',properties:{}}}});
+  for(const channel of ['dashboard','brain']){
+    state.execute=async name=>name==='mcp_find_tool'?'■ save_memory [Eigenes Werkzeug]\nSchema: content required':'Erinnerung gespeichert.';
+    state.model=async({tools,messages})=>{
+      const names=tools.map(t=>t.function.name);const n=state.modelCalls++;
+      if(n===0){assert.ok(!names.includes('save_memory'));return {content:'',toolCalls:[{id:'discover',name:'mcp_find_tool',arguments:'{"query":"save_memory"}'}]};}
+      assert.ok(names.includes('save_memory'),'discovery promotes the full definition on '+channel);
+      assert.deepEqual(tools.find(t=>t.function.name==='save_memory').function.parameters.required,['content']);
+      assert.ok(messages.some(m=>m.role==='tool'&&m.tool_call_id==='discover'));
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'Erfasse diese Information für später');
+    let active=0,peak=0;
+    state.execute=async name=>{active++;peak=Math.max(peak,active);await new Promise(r=>setImmediate(r));if(name==='github_read_path')await new Promise(r=>setImmediate(r));active--;return name+' result';};
+    state.model=async({messages})=>{
+      if(state.modelCalls++===0)return {content:'',toolCalls:[{id:'first',name:'github_read_path',arguments:'{}'},{id:'second',name:'web_search',arguments:'{}'}]};
+      assert.deepEqual(messages.filter(m=>m.role==='tool').map(m=>m.tool_call_id),['first','second'],'reverse finishes preserve model correlation');
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'Prüfe das TypeScript Repository und suche aktuelle Quellen');assert.equal(peak,2,'real '+channel+' loop overlaps independent reads');
+  }
+  console.log('PASS real dashboard/brain loops: discovery loads full definitions; independent reads overlap while tool results retain call order.');
 } finally {
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
   delete globalThis.__chatAccessCheck;

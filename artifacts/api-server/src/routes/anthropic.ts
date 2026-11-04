@@ -1,6 +1,8 @@
+import { runToolBatch } from "../lib/tool-batch";
+import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "../lib/work-progress";
 import { istMisserfolg } from "../lib/werkzeug-ergebnis";
 import { mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
-import { zugangsFehler, werkzeugeNachFehler } from "../lib/werkzeug-auswahl";
+import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
 import type OpenAI from "openai";
 import { db } from "@workspace/db";
@@ -18,7 +20,7 @@ import { recordDebugEvent } from "../lib/debug-log";
 import { attachmentKind } from "./attachments";
 import { extractVideoFrames } from "../lib/video-frames";
 import { rememberAssistantMessage, rememberUserMessage } from "../lib/conversation-memory";
-import { routeLukasModel, previousRoutingTask } from "../lib/ai/model-router";
+import { routeLukasModel, previousRoutingTask, activeRoutingTask } from "../lib/ai/model-router";
 import { callLukasModel } from "../lib/ai/model-client";
 import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
@@ -279,6 +281,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, convId));
     if (!conv) return void res.status(404).json({ error: "Conversation not found" });
 
+    return await withWorkProgress(`conversation:${convId}`, String(content), async () => {
     // Ab hier arbeitet er — und zwar unabhaengig davon, ob die Leitung haelt.
     laufendeId = convId;
     laufendeZuege.set(convId, Date.now());
@@ -337,7 +340,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .where(eq(messages.conversationId, convId))
       .orderBy(asc(messages.createdAt));
     const previousUserText = previousRoutingTask(history, String(content));
-    const systemPrompt = await buildSystemPrompt(String(content).slice(0, 1000), { routingTask: previousUserText ?? undefined });
+    const routingTask = workProgressTask(activeRoutingTask(String(content), previousUserText));
+    const systemPrompt = await buildSystemPrompt(routingTask.slice(0, 1000), { routingTask }) + workProgressContext();
 
     let expression = "neutral";
     for (const message of history) for (const step of (message.steps ?? []) as ToolStep[]) {
@@ -356,6 +360,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
 
     const internalDraftPieces: string[] = [];
     const usedTools: string[] = [];
+    const blockedTools = new Set<string>();
+    const discoveredNames = new Set<string>();
     const schritte: ToolStep[] = [];
     const attachmentKinds = pendingAttachments.map((a) => attachmentKind(a.mimeType, a.filename));
 
@@ -396,7 +402,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     // angehaengt hat.
     let bilderGesehen = false;
     const schleife = new Arbeitsschleife();
-    let angeboteneTools = await allLukasTools(String(content) + " " + (previousUserText ?? ""));
+    let angeboteneTools = await allLukasTools(routingTask);
     while (schleife.darfWeiter() && !gestoppt()) {
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
@@ -440,8 +446,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
 
       const hinweise = schleife.hinweise(result.toolCalls);
 
-      for (const toolCall of result.toolCalls) {
-        if (gestoppt()) break;
+      await planWorkBatch(result.toolCalls);
+      const toolMessages = await runToolBatch(result.toolCalls, async (toolCall) => {
+        let message: OpenAI.Chat.Completions.ChatCompletionMessageParam;
         usedTools.push(toolCall.name);
         sende({ tool: toolCall.name });
 
@@ -453,13 +460,15 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
         }
 
         const begonnen = Date.now();
+        await startWorkStep(toolCall);
         try {
           const toolResult = await executeLukasTool(toolCall.name, input, {
             rawUserMessage: String(content),
             conversationId: convId,
             ownerCallGrant,
           });
-          convo.push({ role: "tool", tool_call_id: toolCall.id, content: toolResult });
+          await finishWorkStep(toolCall, toolResult);
+          message = { role: "tool", tool_call_id: toolCall.id, content: toolResult };
           // Ausgang merken — siehe lib/lernen.ts. Kein Modellaufruf, keine
           // Deutung, nur was passiert ist.
           void merkeErfahrung({
@@ -480,7 +489,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
         } catch (err) {
           logger.warn({ err, tool: toolCall.name }, "Lukas tool failed");
           const grund = `Fehler: ${err instanceof Error ? err.message : String(err)}`;
-          angeboteneTools = werkzeugeNachFehler(angeboteneTools, toolCall.name, err);
+          const remainingTools = werkzeugeNachFehler(angeboteneTools, toolCall.name, err);
+          for (const tool of angeboteneTools) if (tool.type === "function" && !remainingTools.includes(tool)) blockedTools.add(tool.function.name);
+          angeboteneTools = remainingTools;
           if (zugangsFehler(toolCall.name, err)) {
             auftragsStatus("blockiert");
             hinweise.push({ role: "system", content: "Ein Werkzeug wurde aufgerufen, sein Zugang ist jedoch blockiert. Nenne die konkrete Ursache aus dem Werkzeugergebnis und die fehlende Voraussetzung. Behaupte nicht, das Werkzeug sei grundsätzlich nicht vorhanden oder der Versuch sei nicht erfolgt. Keine Wiederholung oder sachfremde Reparaturversuche; andere unabhängige Teilaufträge mit ihren verfügbaren Werkzeugen weiterführen." });
@@ -494,11 +505,12 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
            * browse_page zwanzigmal am selben Container gescheitert ist.
            */
           recordDebugEvent(`tool:${toolCall.name}`, err);
-          convo.push({
+          await finishWorkStep(toolCall, grund, true);
+          message = {
             role: "tool",
             tool_call_id: toolCall.id,
             content: grund,
-          });
+          };
           void merkeErfahrung({
             werkzeug: toolCall.name,
             eingabe: input,
@@ -520,6 +532,15 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
             });
           }
         }
+        return message;
+      }, { stopped: gestoppt });
+      convo.push(...toolMessages);
+      if (result.toolCalls.some(call => call.name === "mcp_find_tool")) {
+        const ids = new Set(result.toolCalls.filter(call => call.name === "mcp_find_tool").map(call => call.id));
+        for (const message of toolMessages) if (message.role === "tool" && ids.has(message.tool_call_id)) {
+          for (const name of discoveredToolNames(String(message.content))) if (discoveredNames.size < 8) discoveredNames.add(name);
+        }
+        if (discoveredNames.size) angeboteneTools = mergeDiscoveredTools(angeboteneTools, await allLukasTools(undefined, [...discoveredNames]), blockedTools);
       }
 
       /*
@@ -560,6 +581,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
      */
     if (gestoppt()) {
       auftragsStatus("abgebrochen");
+      workProgressStatus("cancelled");
       stoppWuensche.delete(convId);
       if (draft) {
         await db.insert(messages).values({
@@ -586,6 +608,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
      */
     let abschluss = draft;
     if (nochAmArbeiten) {
+      workProgressStatus("interrupted");
       logger.info(
         { conversationId: convId, usedTools, runden: schleife.rundenZahl },
         "Zug endete mitten in der Arbeit — Abschluss ohne Werkzeuge",
@@ -677,6 +700,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     sende({ done: true });
     if (!res.writableEnded) res.end();
     maybeReflect();
+    });
   } catch (err: unknown) {
     auftragsStatus("fehler");
     logger.error({ err }, "Chat error");

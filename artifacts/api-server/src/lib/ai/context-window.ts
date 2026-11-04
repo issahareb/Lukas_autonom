@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import { logger } from "../logger";
 import { BILD_MARKE } from "../bildablage";
+import { activeRoutingTask, previousRoutingTask } from "./model-router";
 
 /*
  * Wie viel Gespraech ueberhaupt mitgeschickt wird.
@@ -54,15 +55,23 @@ function maxContextChars(messages: OpenAI.Chat.Completions.ChatCompletionMessage
   // Die letzten echten Nutzer-Nachrichten bestimmen die Tiefe. Ein kurzes
   // "weiter" nach einer Code-Recherche darf den erforderlichen Kontext
   // nicht wegwerfen. Die History und alle Memories bleiben unveraendert.
-  const letzte = messages.filter((m) => m.role === "user").slice(-3);
-  const aufgabe = letzte.map(m => typeof m.content === "string" ? m.content : "").join(" ").slice(-4000);
+  const users = messages.filter(m => m.role === "user" && !isToolImage(m));
+  const current = users.at(-1);
+  const text = typeof current?.content === "string" ? current.content : Array.isArray(current?.content)
+    ? current.content.filter(p => p.type === "text").map(p => (p as { text: string }).text).join("\n") : "";
+  const aufgabe = activeRoutingTask(text, previousRoutingTask(users, text)).slice(-4000);
   const komplex = /repo|github|typescript|javascript|python|code|programmier|implementier|skript|debug|deploy|fehler|recherch|analys|strategie|architektur|verglei|audit|projekt|website|webseite|https?:|datei|dokument|konzept|mehrere|schritt.fuer.schritt/i.test(aufgabe) ||
-    letzte.some(m => typeof m.content !== "string");
+    Boolean(current && typeof current.content !== "string");
   if (!komplex) return DEFAULT_MAX_CONTEXT_CHARS;
   const configured = Number(process.env.LUKAS_CONTEXT_COMPLEX_MAX_CHARS ?? DEFAULT_COMPLEX_CONTEXT_CHARS);
   return Number.isFinite(configured) && configured > 0
     ? Math.max(DEFAULT_MAX_CONTEXT_CHARS, Math.floor(configured))
     : DEFAULT_COMPLEX_CONTEXT_CHARS;
+}
+
+function isToolImage(message: OpenAI.Chat.Completions.ChatCompletionMessageParam): boolean {
+  return Array.isArray(message.content) && message.content.some((p: any) =>
+    p?.type === "text" && String(p.text ?? "").includes(BILD_MARKE));
 }
 
 /**
@@ -86,8 +95,7 @@ export function fitLukasContext(
   // zusammengehoerigen Werkzeugaufrufe/-ergebnisse bleiben beieinander.
   const groups: typeof nonSystem[] = [];
   for (const message of nonSystem) {
-    const toolImage = Array.isArray(message.content) && message.content.some((p: any) =>
-      p?.type === "text" && String(p.text ?? "").includes(BILD_MARKE));
+    const toolImage = isToolImage(message);
     if ((message.role === "user" && !toolImage) || groups.length === 0) groups.push([]);
     groups[groups.length - 1].push(message);
   }

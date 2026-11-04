@@ -20,7 +20,13 @@ export async function starteAnrufMitStatus(){throw new Error('Real calls forbidd
   await build({stdin:{contents:'export * from "./src/lib/werkzeug-auswahl.ts"; export * from "./src/lib/werkzeug-ergebnis.ts"; export * from "./src/lib/lukas-prompt-auswahl.ts";',resolveDir:process.cwd(),loader:'ts'},outfile:pure,bundle:true,format:'esm',platform:'node',logLevel:'silent'});
   const {waehleWerkzeuge,istMisserfolg,waehleLukasPrompt}=await import(pure);
   const tools=['plane_rueckruf','ruf_an','storniere_rueckruf','rueckruf_status'].map(name=>({type:'function',function:{name}}));
-  for(const text of ['Ruf mich in fünf Minuten zurück','Rückruf absagen','Bitte in 5 min zurückrufen']) assert.equal(waehleWerkzeuge(tools,text).length,4);
+  for(const [text,expected] of [
+    ['Ruf mich in fünf Minuten zurück',['plane_rueckruf','rueckruf_status']],
+    ['Rückruf absagen',['storniere_rueckruf','rueckruf_status']],
+    ['Bitte in 5 min zurückrufen',['plane_rueckruf','rueckruf_status']],
+    ['Wie ist der Status meiner geplanten Rückrufe?',['rueckruf_status']],
+    ['Rufe einen Kontakt an',['ruf_an']],
+  ]) assert.deepEqual(waehleWerkzeuge(tools,text).map(t=>t.function.name).sort(),expected.sort(),text);
   for(const text of ['Diese Nummer ist nicht zum Anrufen freigegeben.','Zum Anrufen fehlen noch Zugangsdaten.','{"status":"uncertain"}','{"status":"blockiert"}']) assert.equal(istMisserfolg(text),true);
   assert.equal(istMisserfolg('{"status":"geplant","id":"abc"}'),false);
   assert.equal(istMisserfolg('Datei erfolgreich gespeichert.'),false);
