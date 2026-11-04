@@ -47,7 +47,7 @@ async function run(api,fixture,variant,repetition){
     }
   }
   let parsed;try{parsed=JSON.parse(final.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch{}
-  return {fixture:fixture.id,variant,repetition,models:[...models],inputTokens,outputTokens,cachedInputTokens:snapshot()-cachedBefore,latencyMs:performance.now()-start,rounds:rounds+1,toolCalls:used.length,success:fixture.tools.every(t=>used.includes(t))&&parsed?.[fixture.field]===fixture.expected};
+  return {fixture:fixture.id,variant,repetition,models:[...models],inputTokens,outputTokens,cachedInputTokens:snapshot()-cachedBefore,latencyMs:performance.now()-start,rounds:Math.min(rounds+1,5),toolCalls:used.length,success:fixture.tools.every(t=>used.includes(t))&&parsed?.[fixture.field]===fixture.expected};
 }
 try{
   globalThis.__toolBenchServers=[];
@@ -61,5 +61,5 @@ try{
   const median=values=>values.length?[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)]:null;
   const variants=Object.fromEntries(['before','after'].map(variant=>{const group=rows.filter(r=>r.variant===variant),success=group.filter(r=>r.success);return [variant,{runs:group.length,successes:success.length,successRate:group.length?success.length/group.length:null,medianLatencyMs:median(group.map(r=>r.latencyMs)),inputTokens:group.reduce((s,r)=>s+r.inputTokens,0),outputTokens:group.reduce((s,r)=>s+r.outputTokens,0),tokensPerSuccessfulTask:success.length?group.reduce((s,r)=>s+r.inputTokens+r.outputTokens,0)/success.length:null}];}));
   const comparable=rows.every(r=>{const pair=rows.filter(p=>p.fixture===r.fixture&&p.repetition===r.repetition);return pair.length===2&&r.models.length===1&&pair.every(p=>p.models.length===1&&p.models[0]===r.models[0]);});
-  save({status:'measured',provider:'openai',comparableSameModels:comparable,variants,rows,limitations:['Real model usage and wall-clock latency; tool answers are controlled fixtures, not production end-to-end verification.','No Euro price is inferred. Provider models, cache behavior and task mix affect costs.','At most 18 paired task runs, five rounds each, stop new requests after 80000 reported tokens.']});
+  save({status:'measured',provider:'openai',comparableSameModels:comparable,variants,rows,limitations:['Real model usage and wall-clock latency; tool answers are controlled fixtures, not production end-to-end verification.','No Euro price is inferred. Provider models, cache behavior and task mix affect costs.','At most 18 task attempts (9 pairs), five rounds each, stop new requests after 80000 reported tokens.']});
 }finally{rmSync(before.dir,{recursive:true,force:true});rmSync(after.dir,{recursive:true,force:true});delete globalThis.__toolBenchServers;delete globalThis.__toolBenchRequests;}
