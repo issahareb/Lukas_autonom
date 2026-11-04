@@ -1,0 +1,457 @@
+{
+  "generatedAt": "2026-11-04T00:54:22.429Z",
+  "baselineRef": "0f7e3a0",
+  "mode": "offline-real-request-schema-capture",
+  "cases": [
+    {
+      "id": "greeting",
+      "task": "Hallo",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 7,
+        "utf8Bytes": 5322,
+        "selectionAndSerializationMedianMs": 0.011977999999999156,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "definitions": 0,
+        "utf8Bytes": 2,
+        "selectionAndSerializationMedianMs": 0.0002709999999979118,
+        "names": []
+      }
+    },
+    {
+      "id": "missing-context",
+      "task": null,
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 42,
+        "utf8Bytes": 31854,
+        "selectionAndSerializationMedianMs": 0.07513199999993958,
+        "names": [
+          "lese_anfragen",
+          "plane_rueckruf",
+          "rueckruf_status",
+          "storniere_rueckruf",
+          "set_expression",
+          "save_memory",
+          "create_goal",
+          "update_goal",
+          "write_diary",
+          "feel",
+          "set_status",
+          "fetch_url",
+          "browse_page",
+          "web_search",
+          "query_memory",
+          "get_moltbook_activity",
+          "get_trading_stats",
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "ask_subagent",
+          "read_usage",
+          "read_diagnostics",
+          "telefon_hinweis",
+          "telefon_status",
+          "telefon_kontakte",
+          "ruf_an",
+          "melde_dich_bei_issa",
+          "fix_error",
+          "mcp_find_tool",
+          "mcp_call",
+          "list_subagents",
+          "create_subagent",
+          "propose_code_change",
+          "email_search",
+          "email_read",
+          "email_send",
+          "execute_command",
+          "browser_do",
+          "send_sms",
+          "execute_on_host",
+          "reset_sandbox"
+        ]
+      },
+      "after": {
+        "definitions": 2,
+        "utf8Bytes": 1403,
+        "selectionAndSerializationMedianMs": 0.008311999999932596,
+        "names": [
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "website-requests",
+      "task": "Wie viele Website-Anfragen kamen heute rein?",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 11,
+        "utf8Bytes": 10512,
+        "selectionAndSerializationMedianMs": 0.022383000000104403,
+        "names": [
+          "lese_anfragen",
+          "set_expression",
+          "fetch_url",
+          "browse_page",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call",
+          "browser_do"
+        ]
+      },
+      "after": {
+        "definitions": 3,
+        "utf8Bytes": 2094,
+        "selectionAndSerializationMedianMs": 0.011186999999949876,
+        "names": [
+          "lese_anfragen",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "mail-read",
+      "task": "Lies mein E-Mail-Postfach",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 10,
+        "utf8Bytes": 6884,
+        "selectionAndSerializationMedianMs": 0.01926900000000842,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call",
+          "email_search",
+          "email_read",
+          "email_send"
+        ]
+      },
+      "after": {
+        "definitions": 4,
+        "utf8Bytes": 2142,
+        "selectionAndSerializationMedianMs": 0.010195000000067012,
+        "names": [
+          "mcp_find_tool",
+          "mcp_call",
+          "email_search",
+          "email_read"
+        ]
+      }
+    },
+    {
+      "id": "mail-send",
+      "task": "Schreibe eine E-Mail an einen Kunden",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 10,
+        "utf8Bytes": 6884,
+        "selectionAndSerializationMedianMs": 0.03096600000003491,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call",
+          "email_search",
+          "email_read",
+          "email_send"
+        ]
+      },
+      "after": {
+        "definitions": 5,
+        "utf8Bytes": 2965,
+        "selectionAndSerializationMedianMs": 0.014211000000045715,
+        "names": [
+          "mcp_find_tool",
+          "mcp_call",
+          "email_search",
+          "email_read",
+          "email_send"
+        ]
+      }
+    },
+    {
+      "id": "phone-start",
+      "task": "Rufe einen Kontakt an",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 14,
+        "utf8Bytes": 10719,
+        "selectionAndSerializationMedianMs": 0.04602799999997842,
+        "names": [
+          "plane_rueckruf",
+          "rueckruf_status",
+          "storniere_rueckruf",
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "telefon_hinweis",
+          "telefon_status",
+          "telefon_kontakte",
+          "ruf_an",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "definitions": 5,
+        "utf8Bytes": 5007,
+        "selectionAndSerializationMedianMs": 0.014381000000071253,
+        "names": [
+          "telefon_status",
+          "telefon_kontakte",
+          "ruf_an",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "callback-status",
+      "task": "Prüfe den Status meiner geplanten Rückrufe",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 18,
+        "utf8Bytes": 12668,
+        "selectionAndSerializationMedianMs": 0.025046999999972286,
+        "names": [
+          "plane_rueckruf",
+          "rueckruf_status",
+          "storniere_rueckruf",
+          "set_expression",
+          "create_goal",
+          "update_goal",
+          "set_status",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "read_diagnostics",
+          "telefon_hinweis",
+          "telefon_status",
+          "telefon_kontakte",
+          "ruf_an",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "definitions": 3,
+        "utf8Bytes": 1621,
+        "selectionAndSerializationMedianMs": 0.005258000000026186,
+        "names": [
+          "rueckruf_status",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "memory",
+      "task": "Erinnere dich an meine Vorlieben zu Tensa",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 8,
+        "utf8Bytes": 6016,
+        "selectionAndSerializationMedianMs": 0.012708999999972548,
+        "names": [
+          "set_expression",
+          "save_memory",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "definitions": 3,
+        "utf8Bytes": 1955,
+        "selectionAndSerializationMedianMs": 0.005488000000013926,
+        "names": [
+          "query_memory",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "code-read",
+      "task": "Lies package.json im Repository",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 13,
+        "utf8Bytes": 10679,
+        "selectionAndSerializationMedianMs": 0.020910999999955493,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "fix_error",
+          "mcp_find_tool",
+          "mcp_call",
+          "propose_code_change",
+          "execute_command"
+        ]
+      },
+      "after": {
+        "definitions": 5,
+        "utf8Bytes": 3248,
+        "selectionAndSerializationMedianMs": 0.007661999999982072,
+        "names": [
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "code-fix",
+      "task": "Implementiere einen Cache im TypeScript Repo",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 13,
+        "utf8Bytes": 10679,
+        "selectionAndSerializationMedianMs": 0.020891000000005988,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "fix_error",
+          "mcp_find_tool",
+          "mcp_call",
+          "propose_code_change",
+          "execute_command"
+        ]
+      },
+      "after": {
+        "definitions": 8,
+        "utf8Bytes": 6760,
+        "selectionAndSerializationMedianMs": 0.013881000000083077,
+        "names": [
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "fix_error",
+          "mcp_find_tool",
+          "mcp_call",
+          "propose_code_change",
+          "execute_command"
+        ]
+      }
+    },
+    {
+      "id": "public-research",
+      "task": "Was kostet die Jahreskarte im Grugapark? Quelle bitte",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 10,
+        "utf8Bytes": 9821,
+        "selectionAndSerializationMedianMs": 0.020580999999992855,
+        "names": [
+          "set_expression",
+          "fetch_url",
+          "browse_page",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call",
+          "browser_do"
+        ]
+      },
+      "after": {
+        "definitions": 3,
+        "utf8Bytes": 1836,
+        "selectionAndSerializationMedianMs": 0.008843000000069878,
+        "names": [
+          "web_search",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "face",
+      "task": "Guck böse",
+      "requiredSchemasPresent": true,
+      "before": {
+        "definitions": 7,
+        "utf8Bytes": 5322,
+        "selectionAndSerializationMedianMs": 0.018467999999984386,
+        "names": [
+          "set_expression",
+          "web_search",
+          "query_memory",
+          "ask_subagent",
+          "melde_dich_bei_issa",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "definitions": 3,
+        "utf8Bytes": 1958,
+        "selectionAndSerializationMedianMs": 0.008081999999944856,
+        "names": [
+          "set_expression",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "cases": 12,
+    "beforeSchemaBytes": 127360,
+    "afterSchemaBytes": 30991,
+    "schemaByteReductionPercent": 75.66661432160804,
+    "requiredSchemaCoverage": "12/12",
+    "discoveryAndR3Policy": "passed"
+  },
+  "tokenUsage": null,
+  "liveLatencyMs": null,
+  "realTaskSuccessRate": null,
+  "limitations": [
+    "Schema bytes are measured on the actual serialized OpenAI Responses tool definitions. They are not billed tokens.",
+    "Timing is local selection/serialization time, not provider or end-to-end latency. Hardware and warm-up affect it.",
+    "Required-schema coverage and the discovery contract are deterministic tests, not live model task success. No paid requests were made."
+  ]
+}

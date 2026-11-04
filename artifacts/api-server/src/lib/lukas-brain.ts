@@ -1,6 +1,8 @@
+import { runToolBatch } from "./tool-batch";
+import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "./work-progress";
 import { istMisserfolg } from "./werkzeug-ergebnis";
 import { mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
-import { zugangsFehler, werkzeugeNachFehler } from "./werkzeug-auswahl";
+import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "./werkzeug-auswahl";
 import { randomInt } from "node:crypto";
 import type OpenAI from "openai";
 import { allLukasTools, executeLukasTool } from "./lukas-tools";
@@ -12,7 +14,7 @@ import { fuehleWerkzeug } from "./emotion-engine";
 import { logger } from "./logger";
 import { fehlerText, netzDiagnose } from "./fehlertext";
 import { recordDebugEvent } from "./debug-log";
-import { routeLukasModel, directRoute, previousRoutingTask } from "./ai/model-router";
+import { routeLukasModel, directRoute, previousRoutingTask, activeRoutingTask } from "./ai/model-router";
 import { callLukasModel } from "./ai/model-client";
 import { renderLukasVoice } from "./ai/voice-renderer";
 import type { VerbrauchsQuelle } from "./verbrauch-quelle";
@@ -49,6 +51,8 @@ function fehlerGrund(err: unknown): string {
 
 export async function runLukasTurn(opts: {
   quelle?: VerbrauchsQuelle;
+  /** Stable private job scope for restart recovery, e.g. autonomy. */
+  progressKey?: string;
   history: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   userText: string;
   conversationId?: number;
@@ -62,7 +66,7 @@ export async function runLukasTurn(opts: {
    */
   systemPromptOverride?: string;
   /*
-   * Werkzeuge fuer diesen Durchlauf. Standard: alle. Ein leeres Array heisst
+   * Werkzeuge fuer diesen Durchlauf. Standard: aufgabenabhaengig. Ein leeres Array heisst
    * "reines Gespraech" — das Modell bekommt dann gar nicht erst die
    * Moeglichkeit, etwas auszuloesen. Das ist die harte Grenze fuer Fremde:
    * kein Verlass auf eine Prompt-Anweisung, sondern schlicht keine Werkzeuge
@@ -81,7 +85,9 @@ export async function runLukasTurn(opts: {
    */
   ohneZieleUndTagebuch?: boolean;
 }): Promise<string> {
-  return mitVerbrauchsAuftrag(opts.quelle ?? "sonstige", opts.conversationId, async () => {
+  return mitVerbrauchsAuftrag(opts.quelle ?? "sonstige", opts.conversationId, () => withWorkProgress(
+    opts.systemPromptOverride ? undefined : opts.progressKey ?? (opts.conversationId && opts.conversationId > 0 ? `conversation:${opts.conversationId}` : undefined),
+    opts.userText, async () => {
   opts.signal?.throwIfAborted();
   /*
    * Dashboard-Chats haben eine dauerhafte positive Konversations-ID. Autonome
@@ -96,15 +102,17 @@ export async function runLukasTurn(opts: {
    * unveraendert.
    */
   const conversationId = opts.conversationId ?? -randomInt(1, 2_147_483_648);
+  const previousUserText = previousRoutingTask(opts.history, opts.userText);
+  const routingTask = workProgressTask(activeRoutingTask(opts.userText, previousUserText));
 
   const systemPrompt =
     opts.systemPromptOverride ??
-    (await buildSystemPrompt(opts.userText.slice(0, 1000), {
+    (await buildSystemPrompt(routingTask.slice(0, 1000), {
       ohneZieleUndTagebuch: opts.ohneZieleUndTagebuch,
-      routingTask: previousRoutingTask(opts.history, opts.userText) ?? undefined,
-    }));
+      routingTask,
+    })) + workProgressContext();
   opts.signal?.throwIfAborted();
-  let tools = opts.tools ?? (await allLukasTools(opts.userText + " " + (previousRoutingTask(opts.history, opts.userText) ?? "")));
+  let tools = opts.tools ?? (await allLukasTools(routingTask));
   opts.signal?.throwIfAborted();
   const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -112,8 +120,9 @@ export async function runLukasTurn(opts: {
   ];
 
   const textPieces: string[] = [];
-  const previousUserText = previousRoutingTask(opts.history, opts.userText);
   const usedTools: string[] = [];
+  const blockedTools = new Set<string>();
+  const discoveredNames = new Set<string>();
   let hasAttachments = historyHasMultimodal(opts.history);
 
   /*
@@ -188,7 +197,9 @@ export async function runLukasTurn(opts: {
 
     const hinweise = schleife.hinweise(result.toolCalls);
 
-    for (const tc of result.toolCalls) {
+    await planWorkBatch(result.toolCalls);
+    const toolMessages = await runToolBatch(result.toolCalls, async (tc) => {
+      let message: OpenAI.Chat.Completions.ChatCompletionMessageParam;
       opts.signal?.throwIfAborted();
       usedTools.push(tc.name);
       let input: Record<string, unknown> = {};
@@ -197,6 +208,7 @@ export async function runLukasTurn(opts: {
       } catch {
         // Kaputtes JSON vom Modell — das Tool meldet fehlende Felder selbst.
       }
+      await startWorkStep(tc);
       try {
         opts.signal?.throwIfAborted();
         const toolResult = await executeLukasTool(tc.name, input, {
@@ -208,7 +220,8 @@ export async function runLukasTurn(opts: {
         // An in-flight external effect cannot be undone, but it must not lead
         // to another tool or model call after the session has ended.
         opts.signal?.throwIfAborted();
-        convo.push({ role: "tool", tool_call_id: tc.id, content: toolResult });
+        await finishWorkStep(tc, toolResult);
+        message = { role: "tool", tool_call_id: tc.id, content: toolResult };
         /*
          * Und der Ausgang wird gemerkt. Das ist die ganze Lernschleife: was er
          * getan hat und ob es funktioniert hat. Kostet keinen Modellaufruf, und
@@ -230,7 +243,9 @@ export async function runLukasTurn(opts: {
         opts.signal?.throwIfAborted();
         if (err instanceof Error && err.name === "AbortError") throw err;
         logger.warn({ err, tool: tc.name }, "Lukas tool failed (brain)");
-        tools = werkzeugeNachFehler(tools, tc.name, err);
+        const remainingTools = werkzeugeNachFehler(tools, tc.name, err);
+        for (const tool of tools) if (tool.type === "function" && !remainingTools.includes(tool)) blockedTools.add(tool.function.name);
+        tools = remainingTools;
         if (zugangsFehler(tc.name, err)) {
           auftragsStatus("blockiert");
           hinweise.push({ role: "system", content: "Ein Werkzeug wurde aufgerufen, sein Zugang ist jedoch blockiert. Nenne die konkrete Ursache aus dem Werkzeugergebnis und die fehlende Voraussetzung. Behaupte nicht, das Werkzeug sei grundsätzlich nicht vorhanden oder der Versuch sei nicht erfolgt. Keine Wiederholung oder sachfremde Reparaturversuche; andere unabhängige Teilaufträge mit ihren verfügbaren Werkzeugen weiterführen." });
@@ -244,7 +259,8 @@ export async function runLukasTurn(opts: {
          * lebt read_diagnostics und die Selbstheilung.
          */
         recordDebugEvent(`tool:${tc.name}`, err);
-        convo.push({
+        await finishWorkStep(tc, `Fehler: ${netzDiagnose(err)}`, true);
+        message = {
           role: "tool",
           tool_call_id: tc.id,
           /*
@@ -255,7 +271,7 @@ export async function runLukasTurn(opts: {
            * zweiter Versuch nie klappen konnte.
            */
           content: `Fehler: ${netzDiagnose(err)}`,
-        });
+        };
         // Ein geworfener Fehler ist der eindeutigste Misserfolg, den es gibt —
         // hier wird nichts geraten.
         void merkeErfahrung({
@@ -286,6 +302,15 @@ export async function runLukasTurn(opts: {
           });
         }
       }
+      return message;
+    }, { signal: opts.signal });
+    convo.push(...toolMessages);
+    if (opts.tools === undefined && result.toolCalls.some(call => call.name === "mcp_find_tool")) {
+      const ids = new Set(result.toolCalls.filter(call => call.name === "mcp_find_tool").map(call => call.id));
+      for (const message of toolMessages) if (message.role === "tool" && ids.has(message.tool_call_id)) {
+        for (const name of discoveredToolNames(String(message.content))) if (discoveredNames.size < 8) discoveredNames.add(name);
+      }
+      if (discoveredNames.size) tools = mergeDiscoveredTools(tools, await allLukasTools(undefined, [...discoveredNames]), blockedTools);
     }
 
     /*
@@ -319,6 +344,7 @@ export async function runLukasTurn(opts: {
   opts.signal?.throwIfAborted();
   const abbruch = schleife.abbruchGrund();
   if (abbruch) {
+    workProgressStatus("interrupted");
     logger.warn(
       { runden: schleife.rundenZahl, tokens: schleife.verbrauchteTokens, grund: abbruch },
       "Zug wurde beendet, bevor Lukas fertig war",
@@ -441,10 +467,11 @@ export async function runLukasTurn(opts: {
       "Zug ohne Text beendet — Ersatzantwort geschickt",
     );
     recordDebugEvent("antwort:leer", new Error(`${abbruch ?? "kein Text"} nach ${schleife.rundenZahl} Runden`));
+    workProgressStatus("interrupted");
     return notfall;
   }
 
   opts.signal?.throwIfAborted();
   return renderLukasVoice({ systemPrompt, conversation: convo, draft, signal: opts.signal });
-  });
+  }));
 }

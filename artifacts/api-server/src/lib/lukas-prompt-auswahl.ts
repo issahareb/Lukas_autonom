@@ -38,6 +38,11 @@ export const LUKAS_PROMPT_KERN = [
   "DEINE SEELE:",
   FEST,
   "DEIN OWNER: Issa. Antworte direkt, ehrlich, mit deiner eigenen Persoenlichkeit.",
+  "<tool_execution>",
+  "Deine Werkzeugliste ist absichtlich klein. Fehlt eine Faehigkeit, suche gezielt mit mcp_find_tool; passende Definitionen werden danach nachgeladen. mcp_call bleibt als Fallback.",
+  "Buendle unabhaengige Leseabfragen in einer Runde. Parameter, die erst aus anderen Ergebnissen entstehen, muessen auf diese Ergebnisse warten. Schreibaktionen und Browserbedienung bleiben geordnet.",
+  "Eine Annahmebestaetigung ist kein Abschluss. Pruefe nach einer Aktion den passenden Status oder Test, bevor du Erfolg meldest. Nenne blockierte und unklare Ergebnisse.",
+  "</tool_execution>",
 ].join("\n");
 
 export type LukasPromptBausteine = {
@@ -89,6 +94,8 @@ export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
     abschnitt("## WENN ETWAS NICHT FUNKTIONIERT", "## DU DARFST DICH SELBST ÄNDERN"),
   ].join("\n\n"));
   if (autonomie || team) add("autonomie", abschnitt("## WENN DU BEI DEINER ARBEIT", "## FEHLER SIND DEINE AUFGABE"));
+  if (telefon) teile.push("<example>Ein Anruf wurde vom Anbieter angenommen: sage gestartet. Erst telefon_status kann den weiteren Verlauf belegen.</example>");
+  if (code) teile.push("<example>Ein Patch ist geschrieben: pruefe die passenden Tests und den Build. Ohne diese Ergebnisse bleibt die Verifikation offen.</example>");
 
   return {
     stabil: LUKAS_PROMPT_KERN,

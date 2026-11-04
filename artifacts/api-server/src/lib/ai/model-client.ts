@@ -1,4 +1,4 @@
-import { merkeAufrufUsage, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
+import { merkeAufrufUsage, merkeToolSchema, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
 import type OpenAI from "openai";
 import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../logger";
@@ -488,6 +488,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   if (tools.length) request.tools = tools;
   // Der Verlauf richtet sich danach, ob dieser Aufruf ueberhaupt Werkzeuge hat.
   request.input = toResponsesInput(input.messages, tools.length > 0);
+  merkeToolSchema(tools);
 
   const response: any = await openai.responses.create(request, { signal: input.signal });
   const toolCalls: LukasToolCall[] = [];

@@ -1,0 +1,7 @@
+{
+  "status": "skipped",
+  "reason": "No configured local AI_INTEGRATIONS_OPENAI_API_KEY; existing production credentials were not changed.",
+  "tokenUsage": null,
+  "liveLatencyMs": null,
+  "taskSuccess": null
+}

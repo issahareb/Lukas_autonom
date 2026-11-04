@@ -6,7 +6,8 @@ import { logger } from "./logger";
 type Auftrag = { id: string; rootId: string; parentId: string | null; quelle: string; conversationId?: number; status: string; gestartetAt: Date; beendetAt?: Date };
 const auftrag = new AsyncLocalStorage<Auftrag>();
 type Usage = { eingabe: number; ausgabe: number; cacheLesen: number; cacheSchreiben: number | null };
-const aufruf = new AsyncLocalStorage<{ usage?: Usage }>();
+type ToolSchema = { schemaZeichen: number; schemaBytes: number; werkzeuge: number; schemaFormat: "openai-responses" };
+const aufruf = new AsyncLocalStorage<{ usage?: Usage; schema?: ToolSchema }>();
 
 function speichern(job: Promise<unknown>) {
   verbrauchSchreiben(job.catch(err => logger.warn({ err }, "Auftragsmessung nicht gespeichert")));
@@ -37,11 +38,17 @@ export function ohneAuftragsKontext<T>(fn: () => T): T { return auftrag.exit(fn)
 
 export function auftragsStatus(status: string) { const a = auftrag.getStore(); if (a) a.status = status; }
 export function merkeAufrufUsage(usage: Usage) { const c = aufruf.getStore(); if (c) c.usage = usage; }
+/** Capture after provider serialization, without persisting schema contents. */
+export function merkeToolSchema(tools: unknown[]): void {
+  const c = aufruf.getStore(); if (!c) return;
+  const json = tools.length ? JSON.stringify(tools) : "";
+  c.schema = { schemaZeichen: json.length, schemaBytes: Buffer.byteLength(json), werkzeuge: tools.length, schemaFormat: "openai-responses" };
+}
 
 export async function messeModellAufruf<T>(input: { route: { model: string; provider: string }; quelle?: string; messages: any[]; tools?: any[] }, phase: string, fn: () => Promise<T>): Promise<T> {
   const a = auftrag.getStore();
   if (!a || a.beendetAt) return mitVerbrauchsAuftrag(input.quelle ?? "sonstige", undefined, () => messeModellAufruf(input, phase, fn));
-  const c: { usage?: Usage } = {}; const started = new Date(); let status = "ok";
+  const c: { usage?: Usage; schema?: ToolSchema } = {}; const started = new Date(); let status = "ok";
   const length = (v: unknown) => typeof v === "string" ? v.length : JSON.stringify(v ?? "").length;
   const sum = (role: string) => input.messages.filter(m => m.role === role).reduce((n, m) => n + length(m.content) + (m.tool_calls ? length(m.tool_calls) : 0), 0);
   const kontext = { systemZeichen: sum("system"), verlaufZeichen: sum("user") + sum("assistant"), ergebnisZeichen: sum("tool"), schemaZeichen: JSON.stringify(input.tools ?? []).length, werkzeuge: input.tools?.length ?? 0 };
@@ -51,7 +58,7 @@ export async function messeModellAufruf<T>(input: { route: { model: string; prov
     const row = { id: randomUUID(), auftragId: a.id, rootId: a.rootId, model: input.route.model, provider: input.route.provider,
       quelle: input.quelle ?? a.quelle, phase, status, eingabe: c.usage?.eingabe ?? null, ausgabe: c.usage?.ausgabe ?? null,
       cacheLesen: c.usage?.cacheLesen ?? null, cacheSchreiben: c.usage?.cacheSchreiben ?? null,
-      kontext, dauerMs: Date.now() - started.getTime(), gestartetAt: started };
+      kontext: { ...kontext, ...c.schema }, dauerMs: Date.now() - started.getTime(), gestartetAt: started };
     speichern(import("@workspace/db").then(async ({ db, verbrauchAufrufe }) => { await db.insert(verbrauchAufrufe).values(row); }));
   }
 }

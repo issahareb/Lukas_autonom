@@ -89,6 +89,10 @@ try {
   pruefe("aktuelle Nachricht bleibt", simpel.at(-1)?.content === "Hallo");
   pruefe("Systemnachricht bleibt", simpel[0]?.role === "system");
   pruefe("Originalarchiv nicht veraendert", original.length === 57);
+  const codeHistory = [...original, { role: "user", content: "Analysiere TypeScript Code und Repo" }, { role: "assistant", content: "Code analysiert." }];
+  const newTopic = fitLukasContext([...codeHistory, { role: "user", content: "Hallo" }]);
+  const continuing = fitLukasContext([...codeHistory, { role: "user", content: "weiter" }]);
+  pruefe("neues Thema erbt nicht das grosse Code-Kontextziel", newTopic.length < continuing.length);
   process.env.LUKAS_CONTEXT_MAX_CHARS = "150000";
   pruefe("explizite lange Grenze bleibt moeglich", fitLukasContext([...original, { role: "user", content: "Hallo" }]).length === 58);
   delete process.env.LUKAS_CONTEXT_MAX_CHARS;

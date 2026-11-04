@@ -80,6 +80,7 @@ try {
 
   const input = { route: { model: "test", provider: "openai" }, messages: [{ role: "system", content: "sys" }, { role: "user", content: "hi" }], tools: [] };
   const call = (n, phase = "start") => m.messeModellAufruf(input, phase, async () => {
+    m.merkeToolSchema([{ name: "fixture_ä" }]);
     await Promise.resolve(); m.merkeAufrufUsage({ eingabe: n, ausgabe: 2, cacheLesen: 8, cacheSchreiben: null });
   });
   await Promise.all([
@@ -109,6 +110,10 @@ try {
   assert.equal(failed.rootId, second.id); assert.equal(failed.eingabe, null, "missing usage is not zero");
   assert.ok(rows.aufrufe.every(c => c.cacheSchreiben === null));
   assert.equal(firstCalls[0].kontext.systemZeichen, 3);
+  assert.equal(firstCalls[0].kontext.schemaFormat, "openai-responses");
+  assert.equal(firstCalls[0].kontext.werkzeuge, 1);
+  assert.ok(firstCalls[0].kontext.schemaBytes > firstCalls[0].kontext.schemaZeichen, "UTF-8 bytes are measured after serialization");
+  assert.ok(!JSON.stringify(rows.aufrufe).includes("fixture_ä"), "schema contents are not persisted in telemetry");
   assert.ok(!JSON.stringify(rows.aufrufe).includes('"hi"'), "no prompt contents in telemetry");
   console.log("OK — Praxistest-Reparaturen: Projektfilter, begrenzter Kontext, Folgefrage, gezielte Werkzeuge, Zugangssperre, stabile Modellwahl und dauerhafte Auftrags-/Unteragentenmessung.");
 } finally { rmSync(dir, { recursive: true, force: true }); }
