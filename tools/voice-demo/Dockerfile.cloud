@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r requirements.txt
-COPY --chown=demo:demo *.py *.html *.sh operator-client.txt ./
+COPY --chown=demo:demo *.py *.html *.sh *.js operator-client.txt ./
 RUN chmod +x /app/*.sh
 USER demo
 ENV DEMO_RUNTIME=/tmp/lukas-voice-demo

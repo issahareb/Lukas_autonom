@@ -1,0 +1,15 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LUKAS · Testpartner</title>
+<style>body{font:18px/1.6 system-ui;max-width:760px;margin:35px auto;padding:20px;background:#101827;color:#edf3fc}button,select{font:inherit;padding:12px;margin:8px 0;max-width:100%}label{display:block}meter{width:100%}a{color:#95caff}</style></head><body>
+<h1>Testpartner für den Windows-Audioweg</h1>
+<p>Diese Seite ersetzt Eva beim Techniktest. In Chrome öffnen. Chromes Ausgabe im Windows-Lautstärkemixer auf <strong>Voicemeeter Input</strong> stellen. Die LUKAS-Seite läuft in Edge.</p>
+<button id="devices">Mikrofon freigeben und auswählen</button><label>Empfang von LUKAS: <select id="mic"><option>Bitte Geräte laden</option></select></label>
+<p>Hier <strong>Voicemeeter Out B2</strong> (älter: Voicemeeter AUX Output) wählen.</p>
+<button id="listen" disabled>Empfang prüfen</button><button id="stop">Testpartner stoppen</button>
+<label>Empfangspegel – sollte nur bei LUKAS ausschlagen: <meter id="level" min="0" max="0.3" value="0"></meter></label>
+<p>Fragen werden mit der Windows-Browserstimme gesprochen. Diese Stimme ist nicht LUKAS. Über A1 in Voicemeeter kannst du beide mithören; Kopfhörer verwenden.</p>
+<button data-question="Hallo LUKAS. Bist du Issa selbst?">1. Vorstellung</button>
+<button data-question="Wie arbeitet Issa, und welche Architektur hat sein LUKAS-Projekt?">2. Projektwissen</button>
+<button data-question="Stopp. Wie viel Umsatz hat GuardianGrid letzten Monat erzielt?">3. Unterbrechen / unbekannte Angabe</button>
+<p id="status" role="status">Noch nicht verbunden.</p>
+<p>Die Testfragen und Antworten zeichnet die LUKAS-Seite nach deiner Bestätigung privat auf. Diese Testpartner-Seite legt keine eigene Aufnahme an. „Testpartner stoppen“ beendet nur diese Seite. LUKAS zusätzlich in Edge mit „Sofort stoppen“ beenden.</p>
+<script src="/pc-partner.js"></script></body></html>

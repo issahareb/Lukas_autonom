@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LUKAS · PC-Sprachtest</title>
+<style>
+body{font:17px/1.55 system-ui;background:#101827;color:#edf3fc;max-width:860px;margin:35px auto;padding:0 22px}h1{line-height:1.1}section{background:#1a263b;padding:22px;margin:20px 0;border-radius:16px}label{display:block;margin:15px 0}select,button{font:inherit;padding:12px;border-radius:9px;border:1px solid #7790b1;max-width:100%}select{width:100%;margin-top:6px}button{cursor:pointer;background:#d8e9ff;color:#14213b;margin:5px 5px 5px 0}button:disabled{opacity:.5;cursor:default}#stop{background:#f74e65;color:white;border:0}a{color:#95caff}meter{width:100%;height:22px}small{color:#c1cfe4}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #53637a;padding:10px}#status{font-weight:600}input[type=checkbox]{width:20px;height:20px;vertical-align:middle}details{margin-top:20px}
+</style></head><body>
+<p>LUKAS / Windows</p><h1>Dein PC verbindet die Stimmen.</h1>
+<p>Technischer Test mit LUKAS als offen auftretendem KI-Agenten. Diese Seite öffnet oder startet kein Eva-Interview. Verwende zunächst deine eigene Stimme oder einen Testpartner.</p>
+<section><h2>1. Audiogeräte auswählen</h2>
+<button id="devices">Audiogeräte freigeben und laden</button>
+<label>Eingang für LUKAS <small>– später Evas Stimme über Voicemeeter Out B1</small><select id="input"><option value="">Zuerst Geräte laden</option></select></label>
+<label>LUKAS-Ausgabe <small>– später Voicemeeter AUX Input</small><select id="output"><option value="">Zuerst Geräte laden</option></select></label>
+<p><small>Zum ersten Sprachtest: dein Mikrofon als Eingang und Kopfhörer als Ausgabe. Danach auf die virtuellen Geräte wechseln.</small></p>
+</section>
+<section><h2>2. Testgespräch</h2>
+<label><input id="consent" type="checkbox"> Ich erlaube die private Aufnahme beider Tonspuren dieses Tests und die automatische Transkription.</label>
+<button id="start" disabled>Aufnahme und LUKAS starten</button><button id="stop" disabled>Sofort stoppen</button>
+<p id="status" role="status">Nicht verbunden.</p>
+<label>Eingang <meter id="in-level" min="0" max="0.3" value="0"></meter></label>
+<label>LUKAS-Ausgabe <meter id="out-level" min="0" max="0.3" value="0"></meter></label>
+<p><small>Höchstens 11 Minuten pro Test. Bei Audio- oder Verbindungsfehler stoppt die Sitzung. Kein automatischer Wiederholungsversuch.</small></p>
+<p><a href="/conversation.zip">Letzte abgeschlossene Aufnahme und Text herunterladen</a> · <a href="/archives">Alle privaten Aufnahmen</a></p>
+<p><small>Automatische Abschriften müssen anhand beider Tonspuren geprüft werden. Die Aufnahme der Ausgabe bestätigt noch nicht, dass Eva sie empfangen hat.</small></p>
+</section>
+<details><summary>Windows: Voicemeeter Banana einstellen</summary>
+<p><a href="https://vb-audio.com/Voicemeeter/banana.htm" target="_blank" rel="noreferrer">Voicemeeter Banana beim Hersteller laden</a>, installieren und Windows neu starten. A1 auf deine Kopfhörer stellen.</p>
+<table><tr><th>Programm</th><th>Ausgabe</th><th>Mikrofon</th></tr><tr><td>Chrome: Eva / zunächst Testseite</td><td>Voicemeeter Input</td><td>Voicemeeter Out B2</td></tr><tr><td>Edge: diese LUKAS-Seite</td><td>Voicemeeter AUX Input</td><td>Voicemeeter Out B1</td></tr></table>
+<p>In Voicemeeter: VAIO-Spalte → B1 an, B2 aus. AUX-Spalte → B2 an, B1 aus. A1 darf bei beiden an sein, damit du mithörst. Hardware-Mikrofon nicht auf B1 oder B2 mischen. „Dieses Gerät als Wiedergabequelle verwenden“ in Windows ausschalten.</p>
+<p>Ältere Gerätenamen: Out B1 = Voicemeeter Output; Out B2 = Voicemeeter AUX Output. Chromes Ausgabe stellst du unter Windows → System → Sound → Lautstärkemixer ein. Bei Eva wird B2 in der Mikrofonwahl gewählt; falls dort keine Auswahl angeboten wird, in Chrome unter Einstellungen → Datenschutz und Sicherheit → Website-Einstellungen → Mikrofon.</p>
+<p>Die <a href="/pc/partner">geschützte Testpartner-Seite</a> in Chrome öffnen. Sie spricht Testfragen und zeigt an, ob LUKAS ankommt. Den echten Start bei Eva weiterhin nicht betätigen.</p>
+</details><script src="/pc-client.js"></script></body></html>
