@@ -53,6 +53,15 @@ const modules = {
     export async function executeLukasTool(name,input){globalThis.__chatAccessCheck.calls.push({name,input});
       if(globalThis.__chatAccessCheck.execute)return globalThis.__chatAccessCheck.execute(name,input);
       throw new Error(name==='email_search'?'EMAIL_USER fehlt':'VPS_SSH_KEY: All configured authentication methods failed');}`,
+  'pg': `export default {Client:class {
+    on(){} async connect(){} async end(){}
+    async query(sql,args){
+      const state=globalThis.__chatAccessCheck;
+      if(sql.includes('pg_try_advisory_lock'))return {rows:[{ok:true}]};
+      if(sql.startsWith('SELECT auftrag'))return {rows:[structuredClone(state.progressJournal)]};
+      return {rows:[]};
+    }
+  }};`,
   'owner-call-grant': 'export const ownerCallGrantFromMessage=()=>undefined;',
   'bildablage': 'export const nimmBilder=()=>[]; export const entwerteAlteBilder=()=>{}; export const BILD_MARKE="";',
   'lernen': 'export const merkeErfahrung=()=>{};',
@@ -175,6 +184,41 @@ try {
     await turn(channel,'Prüfe das TypeScript Repository und suche aktuelle Quellen');assert.equal(peak,2,'real '+channel+' loop overlaps independent reads');
   }
   console.log('PASS real dashboard/brain loops: discovery loads full definitions; independent reads overlap while tool results retain call order.');
+
+  // A missing mail credential blocks siblings that were not initially offered,
+  // too. Discovery must not reintroduce email_send after a read-only request.
+  for(const channel of ['dashboard','brain']){
+    state.execute=async name=>{
+      if(name==='email_search')throw new Error('EMAIL_USER fehlt');
+      return '■ email_send [Eigenes Werkzeug]\nSchema: to required';
+    };
+    state.model=async({tools})=>{
+      const names=tools.map(t=>t.function.name),n=state.modelCalls++;
+      if(n===0){assert.ok(!names.includes('email_send'));return {content:'',toolCalls:[{id:'mail',name:'email_search',arguments:'{}'}]};}
+      if(n===1)return {content:'',toolCalls:[{id:'discover',name:'mcp_find_tool',arguments:'{"query":"email_send"}'}]};
+      assert.ok(!names.includes('email_send'),'unoffered credential siblings remain blocked after discovery: '+channel);
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'Lies mein E-Mail-Postfach');
+  }
+  console.log('PASS dashboard/brain: discovery cannot restore unoffered tools sharing failed credentials.');
+
+  const savedDatabaseUrl=process.env.DATABASE_URL,savedProgressFlag=process.env.LUKAS_WORK_PROGRESS;
+  try{
+    process.env.DATABASE_URL='postgresql://fixture.invalid/test';delete process.env.LUKAS_WORK_PROGRESS;
+    state.progressJournal={auftrag:'Implementiere einen Cache im TypeScript Repo',status:'interrupted',schritte:[]};
+    state.model=async input=>{offered=input;return {content:'Antwort.',toolCalls:[]};};
+    for(const channel of ['dashboard','brain']){
+      await turn(channel,'weiter');
+      assert.ok(offered.tools.some(t=>t.function.name==='github_read_path'));
+      assert.equal(offered.route.profile,'code','journal-only recovery retains code model routing: '+channel);
+    }
+    console.log('PASS dashboard/brain: journal-only continuation retains the task model profile without chat history.');
+  }finally{
+    if(savedDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=savedDatabaseUrl;
+    if(savedProgressFlag===undefined)delete process.env.LUKAS_WORK_PROGRESS;else process.env.LUKAS_WORK_PROGRESS=savedProgressFlag;
+  }
+
 } finally {
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
   delete globalThis.__chatAccessCheck;

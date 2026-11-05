@@ -2,7 +2,7 @@ import { runToolBatch } from "./tool-batch";
 import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "./work-progress";
 import { istMisserfolg } from "./werkzeug-ergebnis";
 import { mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
-import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "./werkzeug-auswahl";
+import { zugangsFehler, werkzeugeNachFehler, gesperrteWerkzeugNamen, discoveredToolNames, mergeDiscoveredTools } from "./werkzeug-auswahl";
 import { randomInt } from "node:crypto";
 import type OpenAI from "openai";
 import { allLukasTools, executeLukasTool } from "./lukas-tools";
@@ -137,7 +137,7 @@ export async function runLukasTurn(opts: {
       ? { ...directRoute(opts.profil), profile: opts.profil }
       : routeLukasModel({
           userText: opts.userText,
-          previousUserText,
+          previousUserText: routingTask,
           hasAttachments,
           usedTools,
           iteration: i,
@@ -244,7 +244,7 @@ export async function runLukasTurn(opts: {
         if (err instanceof Error && err.name === "AbortError") throw err;
         logger.warn({ err, tool: tc.name }, "Lukas tool failed (brain)");
         const remainingTools = werkzeugeNachFehler(tools, tc.name, err);
-        for (const tool of tools) if (tool.type === "function" && !remainingTools.includes(tool)) blockedTools.add(tool.function.name);
+        for (const name of gesperrteWerkzeugNamen(tc.name, err)) blockedTools.add(name);
         tools = remainingTools;
         if (zugangsFehler(tc.name, err)) {
           auftragsStatus("blockiert");
@@ -376,7 +376,7 @@ export async function runLukasTurn(opts: {
         cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
         route: opts.profil ? directRoute(opts.profil) : routeLukasModel({
           userText: opts.userText,
-          previousUserText,
+          previousUserText: routingTask,
           hasAttachments,
           usedTools,
           iteration: schleife.rundenZahl,
