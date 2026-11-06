@@ -469,12 +469,15 @@ try {
   delete process.env.LUKAS_TELEFON_STRENG;
 
   const sipOptions = { telefonPeer: {nummer: "4915100000001", richtung: "eingehend"}, sessionId: "live_phone_ok", instructions: "PHONE_PRIVATE_BACKEND", visibility: "private", allowTools: true,
-    initialCommentary: "Du hast selbst angerufen. Begrüße den Gesprächspartner kurz zum vereinbarten Termin." };
+    initialCommentary: "Rufe Mazhar wegen Teleson an. Sage, du kommst von Kamil. Erwähne KI nur auf direkte Nachfrage und antworte dann ehrlich." };
   await api.acceptLiveSipSession({ sessionId: "business_inbound", telefonBusiness: true,
     telefonPeer: { nummer: "4915100000002", richtung: "eingehend" }, visibility: "public", allowTools: false, instructions: "business" });
   const businessAccept = fixture.requests.find(r => r.url.endsWith("/business_inbound/accept"));
   assert.match(businessAccept.body.session.instructions, /HAREB DIGITAL/);
   assert.match(businessAccept.body.session.instructions, /Gründer und Inhaber ist Issa Hareb/);
+  assert.ok(businessAccept.body.session.instructions.includes("Hallo, hier ist Lukas, der Assistent von Haareb Digital. Wie kann ich Ihnen helfen?"), "Inbound SIP receives business assistant greeting before first speech");
+  assert.ok(!businessAccept.body.session.instructions.includes("hier ist Lukas, der KI-Assistent"), "Inbound SIP has no conflicting KI introduction example");
+  assert.match(businessAccept.body.session.instructions, /Bei direkter Nachfrage antworte wahrheitsgemäß/);
   for (const fact of ["TaxiBB Essen", "GuardianGrid", "issahareb.me", "Automatisierung"]) assert.ok(businessAccept.body.session.instructions.includes(fact), "Voice receives public company fact: " + fact);
   assert.match(businessAccept.body.session.instructions, /Ich möchte eine Website/);
   assert.equal(fixture.enquiry.number, "4915100000002");
