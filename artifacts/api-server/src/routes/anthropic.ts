@@ -319,6 +319,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .insert(messages)
       .values({ conversationId: convId, role: "user", content })
       .returning();
+    // HTTP headers only acknowledge the stream; this acknowledges persisted input.
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ savedMessageId: userMessage.id })}\n\n`);
     rememberUserMessage(String(content), "dashboard");
 
     const pendingAttachments = await db

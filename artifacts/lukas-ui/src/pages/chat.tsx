@@ -445,12 +445,27 @@ export default function Chat() {
     const text = typeof provided === 'string' ? provided : input;
     if ((!text.trim() && pending.length === 0) || !activeId || streaming || sendLock.current) return false;
     sendLock.current = true;
-    let accepted = false;
+    let confirmed = false;
     const preserveDraft = provided !== undefined && text !== input;
     const msg = text.trim() || "(Datei angehängt)";
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
+
+    const confirmSaved = () => {
+      if (confirmed) return;
+      confirmed = true;
+      saveDraft(activeId, preserveDraft ? input : '');
+      if (questionId) setAnsweredQuestions(prev => {
+        const next = new Set([...prev, questionId].slice(-100));
+        try { sessionStorage.setItem('lukas_answered_questions', JSON.stringify([...next])); } catch {}
+        return next;
+      });
+      const transfer = readHandoff();
+      if (transfer?.conversationId === activeId && transfer.content.trim() === msg) {
+        clearHandoff(transfer.id); setHandoff(null);
+      }
+    };
 
     if (!preserveDraft) setInput("");
     setPending([]);
@@ -477,17 +492,6 @@ export default function Chat() {
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.detail || detail?.error || `Chat fehlgeschlagen (${response.status})`);
-      }
-      accepted = true;
-      saveDraft(activeId, preserveDraft ? input : '');
-      if (questionId) setAnsweredQuestions(prev => {
-        const next = new Set([...prev, questionId].slice(-100));
-        try { sessionStorage.setItem('lukas_answered_questions', JSON.stringify([...next])); } catch {}
-        return next;
-      });
-      const transfer = readHandoff();
-      if (transfer?.conversationId === activeId && transfer.content.trim() === msg) {
-        clearHandoff(transfer.id); setHandoff(null);
       }
 
       const reader = response.body?.getReader();
@@ -523,6 +527,7 @@ export default function Chat() {
         for (const zeile of zeilen) {
           const parsed = parseSseData(zeile);
           if (!parsed) continue;
+          if (parsed.savedMessageId || parsed.content || parsed.tool || parsed.step || parsed.done) confirmSaved();
           if (parsed.content) setStreamContent((prev) => prev + String(parsed.content));
           // Werkzeuge stehen nicht mehr als "[⚙ name]" im Text — sie sind
           // eigene, anklickbare Schritte.
@@ -537,7 +542,13 @@ export default function Chat() {
             setLiveTool(null);
           }
           // Ein Fehler gehört sichtbar in den Chat, nicht in die Konsole.
-          if (parsed.error) setStreamError(String(parsed.error));
+          if (parsed.error) {
+            setStreamError(String(parsed.error));
+            if (!confirmed) {
+              if (!preserveDraft) setInput(text);
+              setPending(pending); done = true; abschlussGesehen = true;
+            }
+          }
           if (parsed.done) {
             done = true;
             abschlussGesehen = true;
@@ -555,12 +566,13 @@ export default function Chat() {
        * es nach ihrer Frist ehrlich. Nur stillschweigend nichts tun ist
        * falsch.
        */
+      if (!confirmed && !controller.signal.aborted && !abschlussGesehen) throw new Error("Die Speicherung deiner Nachricht konnte nicht bestätigt werden. Prüfe vor erneutem Senden den Verlauf.");
       if (!abschlussGesehen && !controller.signal.aborted) {
         setStreamError(null);
         setWartetAufNachzuegler(true);
       }
     } catch (err) {
-      if (!accepted) {
+      if (!confirmed) {
         if (!preserveDraft) setInput(text);
         setPending(pending);
       }
@@ -574,7 +586,7 @@ export default function Chat() {
          * nachladen. Vorher stand hier "Load failed" und minutenlange Arbeit
          * sah aus wie verschwunden.
          */
-        if (!accepted) {
+        if (!confirmed) {
           setStreamError(err instanceof Error ? err.message : 'Senden fehlgeschlagen. Die Eingabe bleibt erhalten.');
         } else {
           setStreamError(null); setWartetAufNachzuegler(true);
@@ -592,7 +604,7 @@ export default function Chat() {
       setLiveSteps([]);
       qc.invalidateQueries({ queryKey: getGetAnthropicConversationQueryKey(activeId) });
     }
-    return accepted;
+    return confirmed;
   }, [input, activeId, streaming, qc, pending]);
 
   // Keep the handoff until the server accepts it. StrictMode may run the

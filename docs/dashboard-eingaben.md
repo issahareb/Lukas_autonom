@@ -2,7 +2,7 @@
 
 Die Hero-Eingabe übergab bisher Text an `/chat`, legte aber kein Gespräch an. Der Chat entfernte den Übergabetext sofort aus dem Zwischenspeicher, obwohl auf Mobilgeräten noch die Gesprächsliste ohne Eingabefeld offen war.
 
-Jetzt öffnet Senden ein neues Gespräch und übergibt den unveränderten Text einmalig an dessen Nachrichtenendpunkt. Die Übergabe bleibt bis zur Bestätigung erhalten. Eine unbestätigte Zustellung wird nach Neuladen nicht blind wiederholt. Der Anhang-Einstieg öffnet ein neues Gespräch als Entwurf und sendet den Text dabei noch nicht. Entwürfe werden pro Gespräch sowie auf der Startseite gesichert; der zuletzt ausgewählte Chat wird beim Zurückkehren wieder geöffnet.
+Jetzt öffnet Senden ein neues Gespräch und übergibt den unveränderten Text einmalig an dessen Nachrichtenendpunkt. Die Übergabe bleibt bis zur Speicherbestätigung aus dem Nachrichtenstream erhalten; HTTP-Kopfzeilen allein reichen dafür nicht. Eine unbestätigte Zustellung wird nach Neuladen nicht blind wiederholt. Der Anhang-Einstieg öffnet ein neues Gespräch als Entwurf und sendet den Text dabei noch nicht. Entwürfe werden pro Gespräch sowie auf der Startseite gesichert; der zuletzt ausgewählte Chat wird beim Zurückkehren wieder geöffnet.
 
 Ein abgewiesener Sendeversuch erhält Text und Anhangauswahl. Das Entfernen eines Anhangs wird erst nach Serverbestätigung in der Oberfläche übernommen. Veraltete Anhangabfragen können nach einem Gesprächswechsel nicht mehr die neue Ansicht überschreiben. Gesprächswechsel während Senden/Upload werden gesperrt. Fehler beim Anlegen eines Chats werden sichtbar angezeigt.
 

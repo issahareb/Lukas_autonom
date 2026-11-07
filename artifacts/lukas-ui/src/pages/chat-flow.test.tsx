@@ -82,12 +82,13 @@ describe('Echte Chatseite: Navigation und Eingaben',()=>{
     await waitFor(()=>expect(sent).toHaveLength(1));
     expect(sent[0].url).toContain('/51/messages');expect(sent[0].content).toContain('Antwort: Kurz');
   });
-  it('bewahrt auch einen normalen Entwurf bis zur HTTP-Bestätigung',async()=>{
+  it('bewahrt auch einen normalen Entwurf nach HTTP-200 bis zur Speicherbestätigung',async()=>{
     sessionStorage.setItem('lukas_active_chat','51');
-    vi.stubGlobal('fetch',vi.fn((url:string,init?:RequestInit)=>String(url).endsWith('/messages')?new Promise((_resolve,reject)=>init?.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')))):Promise.resolve(Response.json([]))));
+    vi.stubGlobal('fetch',vi.fn((url:string,init?:RequestInit)=>String(url).endsWith('/messages')?Promise.resolve(new Response(new ReadableStream({start(controller){init?.signal?.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{headers:{'Content-Type':'text/event-stream'}})):Promise.resolve(Response.json([]))));
     const user=userEvent.setup(),view=render(<Chat/>);
     await user.type(screen.getByRole('textbox',{name:'Nachricht an Lukas'}),'Noch nicht bestätigt');
     await user.click(screen.getByRole('button',{name:'Senden'}));
+    await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).endsWith('/messages'))).toBe(true));
     expect(sessionStorage.getItem('lukas_draft_51')).toBe('Noch nicht bestätigt');
     view.unmount();expect(sessionStorage.getItem('lukas_draft_51')).toBe('Noch nicht bestätigt');
   });
@@ -101,6 +102,16 @@ describe('Echte Chatseite: Navigation und Eingaben',()=>{
     await screen.findByText('Die Antwort konnte nicht bestätigt werden. Deine Eingabe bleibt erhalten.');
     expect(sessionStorage.getItem('lukas_draft_51')).toBe('Mein anderer Entwurf');
     expect(document.querySelector('[aria-label="Nachricht an Lukas"]')).toHaveValue('Mein anderer Entwurf');
+  });
+
+  it('erhält die Eingabe bei Speicherfehlern nach bereits geöffnetem HTTP-200-Stream',async()=>{
+    sessionStorage.setItem('lukas_active_chat','51');
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/messages')?new Response('data: {"error":"Speichern fehlgeschlagen"}\n\n',{headers:{'Content-Type':'text/event-stream'}}):Response.json([])));
+    const user=userEvent.setup();render(<Chat/>);
+    await user.type(screen.getByRole('textbox',{name:'Nachricht an Lukas'}),'Nicht verlieren');await user.click(screen.getByRole('button',{name:'Senden'}));
+    await screen.findByText('Speichern fehlgeschlagen');
+    expect(screen.getByRole('textbox',{name:'Nachricht an Lukas'})).toHaveValue('Nicht verlieren');
+    expect(sessionStorage.getItem('lukas_draft_51')).toBe('Nicht verlieren');
   });
 
 });
