@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { pool } from '@workspace/db';
 import { gleicherToken } from '../middlewares/schutz';
 import { websiteBatch } from '../lib/website-event-schema';
+import { WEBSITE_ANALYTICS_PREFIX, WEBSITE_SUMMARY_SELECT } from '../lib/website-kennzahlen';
 
 const router=Router(), changes=new EventEmitter();changes.setMaxListeners(100);
 let retentionAt=0;
@@ -32,12 +33,12 @@ router.get("/lukas/websites/stream",(req,res)=>{
 router.get("/lukas/websites/analytics",async(req,res)=>{
   const site=String(req.query.site||'hareb.digital'),days=Number(req.query.days||7);
   if(!['hareb.digital','issahareb.me'].includes(site)||![1,7,30,90].includes(days))return void res.status(400).end();
-  const prefix="WITH e AS (SELECT * FROM lukas_website_events WHERE site=$1 AND received_at >= now()-($2::int * interval '1 day')) ";
+  const prefix=WEBSITE_ANALYTICS_PREFIX;
   const query=async(sql:string)=>(await pool.query(prefix+sql,[site,days])).rows;
   res.set('Cache-Control','no-store');
   try{
     const [summary,pages,clicks,sections,scroll,forms,recent,devices,referrers,exits]=await Promise.all([
-      query(`, p AS (SELECT session,page,max(coalesce((data->>'seconds')::float,0)) seconds,max(coalesce((data->>'depth')::float,0)) depth FROM e WHERE event IN ('engagement','page_exit') GROUP BY session,page), s AS (SELECT session,sum(seconds) seconds FROM p GROUP BY session) SELECT (SELECT count(DISTINCT session) FROM e) sessions,(SELECT count(*) FROM e WHERE event='page_view') views,(SELECT count(DISTINCT session) FROM e WHERE received_at>now()-interval '30 seconds' AND event IN ('page_view','engagement')) active,coalesce((SELECT avg(seconds) FROM s),0) seconds,coalesce((SELECT avg(depth) FROM p),0) depth`),
+      query(WEBSITE_SUMMARY_SELECT),
       query(`SELECT path,count(*) views,count(DISTINCT session) visits FROM e WHERE event='page_view' GROUP BY path ORDER BY views DESC LIMIT 100`),
       query(`SELECT path,data->>'section' section,data->>'target' target,data->>'destination' destination,count(*) clicks,count(DISTINCT session) visits FROM e WHERE event='click' GROUP BY 1,2,3,4 ORDER BY clicks DESC LIMIT 150`),
       query(`SELECT path,data->>'section' section,count(DISTINCT page) FILTER(WHERE event='section_view') views,coalesce(sum((data->>'seconds')::float) FILTER(WHERE event='section_time'),0) seconds FROM e WHERE event IN ('section_view','section_time') GROUP BY 1,2 ORDER BY seconds DESC LIMIT 150`),

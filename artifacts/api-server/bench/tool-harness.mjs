@@ -50,6 +50,7 @@ export async function toolHarness({baselineRef,live=false}={}) {
     const logger={info(){},warn(){}};
     ${['LUKAS_TOOLS','sanitizeToolSchema','mitPolicyHinweis','allLukasTools','mcpFindTool'].map(n=>declaration(n==='LUKAS_TOOLS'?schemaSource:toolsSource,n)).join('\n')}
     export {waehleWerkzeuge};
+    export {riskFor} from '../src/lib/policy';
     export * from '../src/lib/ai/model-client';
     export * from '../src/lib/ai/model-router';
     export * from '../src/lib/tool-batch';

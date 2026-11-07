@@ -1,6 +1,8 @@
 import type OpenAI from "openai";
 
+const WEBSITE_KENNZAHLEN = /aufrufzahl|\baufrufe\b|seitenaufruf|besucher|pageviews?|scrolltiefe|verweildauer|analytics|website.{0,30}(?:statistik|kennzahl|traffic)|(?:statistik|kennzahl|traffic).{0,30}website/i;
 const GRUPPEN: Array<[RegExp, string[]]> = [
+  [WEBSITE_KENNZAHLEN, ["lese_website_kennzahlen"]],
   [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
   [/such|recherch|aktuell|quelle|preis|kostet|internet|öffnungszeit|kommend|protest|news|wetter|ceo|präsident|\bmorgen\b|\bheute\b/i, ["web_search"]],
   [/https?:|webseite|website|fetch|url|link/i, ["fetch_url"]],
@@ -44,6 +46,9 @@ export function waehleWerkzeuge(tools: OpenAI.Chat.Completions.ChatCompletionToo
   // Discovery remains available, so a missed synonym does not remove a capability.
   const names = new Set(["mcp_find_tool", "mcp_call"]);
   for (const [pattern, group] of GRUPPEN) if (pattern.test(text)) group.forEach(n => names.add(n));
+  if (WEBSITE_KENNZAHLEN.test(text) && !/internet|recherch|quelle|vergleich.*konkurrenz/i.test(text)) {
+    names.delete("web_search"); names.delete("fetch_url");
+  }
   if (/anfrag|postfach|posteingang|tokenverbrauch|anrufstatus/i.test(text) &&
       !/web|internet|recherch|quelle|öffnungszeit|wetter/i.test(text.replace(/websites?/gi, ""))) names.delete("web_search");
   if (/anfrag|postfach|posteingang/i.test(text) && !/https?:|\burl\b|verlink|webseite.*(?:les|prüf|pruef)/i.test(text)) names.delete("fetch_url");

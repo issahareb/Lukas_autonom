@@ -55,3 +55,29 @@ aktuelle Nummer, private Kontaktstufe und konfigurierte Owner-ID zusammenpassen.
 
 Ein privater Kontakt und die Owner-ID sind getrennte Einstellungen. Ein anderer
 Kontakt mit ähnlichem Namen oder eine mündliche Identitätsbehauptung reicht nicht.
+
+## Aktuelle Website-Kennzahlen
+
+`lese_website_kennzahlen` steht im privaten Chat und im serverseitig bestätigten
+Owner-Telefonat über denselben Agentenpfad zur Verfügung. Die Werkzeugauswahl
+erkennt Aufrufzahlen, Seitenaufrufe, Besucherzahlen, Scrolltiefe, Verweildauer und
+Analytics. Andere Formulierungen können das Werkzeug über Discovery laden.
+
+Unterstützt sind `hareb.digital`, `issahareb.me` und `taxibbessen.de`. Der Standard
+sind die letzten sieben Tage bis zum Abruf. Hareb/Portfolio unterstützen 1, 7, 30
+und 90 Tage, TaxiBB 7, 30, 90 und 180 Tage. Ein Tag bezeichnet ein rollendes
+24-Stunden-Fenster, keinen exakten Kalendertag. Ausgabe mit Abrufzeit und Zeitraum;
+Seitenaufrufe, Sitzungen und gespeicherte Buchungen bleiben getrennte Kennzahlen.
+
+Hareb/Portfolio verwenden dieselbe aggregierte SQL-Zusammenfassung wie das
+Dashboard. TaxiBB verwendet denselben validierten Abruf mit festem Ziel und
+serverseitigem Lesetoken wie der Dashboard-Proxy. Fehler und unvollständige
+Antworten werden nicht als Nullstand dargestellt. Öffentliche Anrufer erhalten
+keine privaten Werkzeugrechte.
+
+`check-website-kennzahlen.mjs` prüft Auswahl, Discovery, Zeiträume, frische Abrufe,
+Nullwerte/Fehler und die Trennung von Buchungen und Formularsitzungen.
+Der Integrationslauf führt zusätzlich die echte PostgreSQL-Abfrage mit
+zurückgerollten Testereignissen aus. Die SIP-Regression prüft die Weitergabe der
+Website-Frage an das gemeinsame Backend für Owner- und gesperrte Sitzungen.
+Modell und SIP-Anbieter sind dabei simuliert; das ersetzt keinen echten Anruf.

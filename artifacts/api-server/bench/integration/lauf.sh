@@ -29,6 +29,7 @@ DATABASE_URL="$URL" npm run db:deploy --prefix "$API/../.." >/dev/null
 node scripts/check-telefon-status.mjs
 node scripts/check-rueckrufe.mjs
 node scripts/check-anfragen-lesen.mjs
+node scripts/check-website-kennzahlen.mjs
 node scripts/check-work-progress.mjs
 
 echo "→ Bündel bauen"
