@@ -461,8 +461,16 @@ try {
     if (test.enabled) {
       assert.match(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/);
       assert.match(accept.body.session.instructions, /lese_anfragen/);
+      assert.match(accept.body.session.instructions, /lese_website_kennzahlen/);
       assert.doesNotMatch(accept.body.session.instructions, /Deine Aufgabe ist eine qualifizierte Anfrage/);
     } else assert.doesNotMatch(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/, test.name);
+    const metricsQuestion = "Nenne mir die aktuellen Aufrufzahlen von Taxi BB Essen und Hareb Digital.";
+    input(active, metricsQuestion); delegate(active, "website_metrics_" + test.name); await settle();
+    const metricsCall = fixture.calls.at(-1);
+    assert.equal(metricsCall.userText, metricsQuestion);
+    assert.equal(metricsCall.telefonOwnerContactId, test.enabled ? test.contactId : undefined);
+    if (test.enabled) assert.equal(metricsCall.tools, undefined, "owner metrics use the same backend tool catalogue as chat");
+    else assert.deepEqual(metricsCall.tools, [], test.name + " cannot request private analytics tools");
     active.emit({ type: "session.closed", reason: "remote_hangup" });
   }
   delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;

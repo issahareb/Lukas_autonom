@@ -114,6 +114,7 @@ export const TOOL_RISK: Record<string, RiskTier> = {
   read_diagnostics: "R0",
   read_usage: "R0",
   lese_anfragen: "R0",
+  lese_website_kennzahlen: "R0",
 
   // Ein Code-Vorschlag schreibt nur in unsere eigene Datenbank — geschrieben
   // wird erst, wenn Issa im Dashboard auf "Annehmen" klickt. Diese Entscheidung

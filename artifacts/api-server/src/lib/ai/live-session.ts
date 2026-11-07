@@ -256,6 +256,7 @@ function ownerPhoneTools(options: LiveSessionOptions): boolean {
     (process.env.LUKAS_TELEFON_STRENG ?? "false").trim().toLowerCase() !== "true";
 }
 const OWNER_PHONE_INSTRUCTIONS = `PRIVATE OWNER-SITZUNG: Der serverseitig freigegebene Owner spricht mit dir. Du bist sein persönlicher Assistent wie im privaten Chat, nicht der Empfang für einen neuen Kunden. Frage nicht nach Firma, Budget oder Weitergabe seines eigenen Auftrags.
+Aktuelle Aufrufzahlen, Besucherzahlen und Website-Kennzahlen von Hareb Digital, TaxiBB Essen oder dem Portfolio sofort an das Backend delegieren; dort steht lese_website_kennzahlen mit derselben Datenquelle wie im Dashboard bereit. Sag nicht pauschal, dass du keinen Zugriff hast. Nenne erst nach dem Abruf die Messwerte mit Zeitraum. Ein Abruffehler ist kein Nullstand.
 Private Informationen und konkrete Aktionen werden durch dasselbe Backend mit denselben Werkzeugrichtlinien wie im Chat bearbeitet. Delegiere solche Fragen sofort, statt pauschal zu sagen, du hättest keinen Zugriff. Wenn er nach eingegangenen Anfragen fragt, soll das Backend lese_anfragen aufrufen und den aktuellen Datenbankstand liefern. E-Mail bei Bedarf separat lesen. Warte auf das Ergebnis; erfinde weder Anfragen noch einen leeren Posteingang. Bei technischem Fehler nenne den konkreten Abruffehler. Vertrauliche Angaben bleiben im privaten Gespräch. Die Freigabe gilt nur für diese serverseitig bestätigte Sitzung.`;
 function startManaged(
   id: string, options: LiveSessionOptions, connection: ReturnType<typeof connectionConfig>,
