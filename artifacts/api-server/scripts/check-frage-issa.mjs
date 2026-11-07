@@ -14,6 +14,7 @@ try {
   assert.notEqual(result.id,JSON.parse(frageIssa(input,17)).id);
   for(const bad of [{fragen:[]},{fragen:Array(4).fill(input.fragen[0])},{fragen:[{frage:'x'}]},{fragen:[{frage:'Welche Variante?',optionen:['Nur eine']}]},{fragen:[{frage:'Gib mir dein Passwort'}]}])assert.throws(()=>frageIssa(bad,17));
   for(const id of [undefined,-1,0,1.5])assert.throws(()=>frageIssa(input,id));
+  assert.throws(()=>frageIssa({fragen:Array.from({length:3},()=>({frage:'?'.repeat(500),optionen:Array(4).fill('"'.repeat(160))}))},17),/kürzer/);
   assert.match(frageIssa(input,17,true),/mündlich/);assert.ok(!frageIssa(input,17,true).includes('"surface"'));
   console.log('PASS frage_issa: structured private-chat question, bounded choices, credential rejection, stable conversation scope and spoken telephone fallback.');
 }finally{rmSync(dir,{recursive:true,force:true});}

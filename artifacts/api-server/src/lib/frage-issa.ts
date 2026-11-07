@@ -14,6 +14,10 @@ export function frageIssa(input: unknown, conversationId?: number, telefonisch =
   }
   if (!Number.isSafeInteger(conversationId) || conversationId! <= 0) throw new Error('Rückfragen benötigen ein privates Gespräch. Im Hintergrund melde_dich_bei_issa verwenden.');
   if (telefonisch) return `Frage deinen Gesprächspartner mündlich und warte auf seine Antwort: ${parsed.fragen.map(f => f.frage).join(' ')}. Kein Dashboardfenster am Telefon behaupten.`;
-  return JSON.stringify({ surface: 'lukas-rueckfrage', id: randomUUID(), conversationId,
+  const result = JSON.stringify({ surface: 'lukas-rueckfrage', id: randomUUID(), conversationId,
     fragen: parsed.fragen, hinweis: 'Das Eingabefenster wird im Dashboard angezeigt. Warte auf die Antwort des Nutzers; keine Annahmen oder Aktionen für die offene Entscheidung.' });
+  // Persisted tool steps are bounded to 4,000 characters. Never let that
+  // truncation turn a successful question into invalid, invisible JSON.
+  if (result.length > 3900) throw new Error('Bitte Fragen und Optionen kürzer formulieren, damit das vollständige Eingabefenster gespeichert werden kann.');
+  return result;
 }
