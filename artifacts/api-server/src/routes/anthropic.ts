@@ -29,6 +29,8 @@ import { Arbeitsschleife } from "../lib/arbeitsschleife";
 import { stoppWuensche, laufendeZuege, stopConversationWork } from "../lib/chat-work-state";
 import { toolStep } from "../lib/tool-step";
 
+import { mitRueckfrageKontext, rueckfrageRoutingText } from "../lib/frage-issa";
+
 const router = Router();
 
 /*
@@ -317,6 +319,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .insert(messages)
       .values({ conversationId: convId, role: "user", content })
       .returning();
+    // HTTP headers only acknowledge the stream; this acknowledges persisted input.
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ savedMessageId: userMessage.id })}\n\n`);
     rememberUserMessage(String(content), "dashboard");
 
     const pendingAttachments = await db
@@ -330,8 +334,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .from(messages)
       .where(eq(messages.conversationId, convId))
       .orderBy(asc(messages.createdAt));
+    const routingInput = rueckfrageRoutingText(history, String(content), convId);
     const previousUserText = previousRoutingTask(history, String(content));
-    const routingTask = workProgressTask(activeRoutingTask(String(content), previousUserText));
+    const routingTask = workProgressTask(activeRoutingTask(routingInput, previousUserText));
     const systemPrompt = await buildSystemPrompt(routingTask.slice(0, 1000), { routingTask }) + workProgressContext();
 
     let expression = "neutral";
@@ -341,7 +346,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     }
     const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt + `\nAktueller sichtbarer Gesichtsausdruck dieses Webchats: ${expression}.` },
-      ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...history.map((m) => ({ role: m.role as "user" | "assistant", content: mitRueckfrageKontext(m, convId) })),
     ];
 
     if (pendingAttachments.length > 0) {
@@ -397,7 +402,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     while (schleife.darfWeiter() && !gestoppt()) {
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
-        userText: String(content),
+        userText: routingInput,
         previousUserText,
         hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
         attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
@@ -614,7 +619,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       quelle: "chat",
         cacheKey: `lukas-${convId}`,
           route: routeLukasModel({
-            userText: String(content),
+            userText: routingInput,
         previousUserText,
             hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
             attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,

@@ -31,6 +31,11 @@ import { zugangFuer } from "./zugaenge";
 import { nurEinmal, fingerabdruck } from "./versandsperre";
 
 export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  { type: 'function', function: {
+    name: 'frage_issa',
+    description: 'Stelle 1 bis 3 notwendige Rückfragen als Eingabefenster im privaten Dashboard-Chat. Je Frage optional 2 bis 4 Auswahlmöglichkeiten; eine eigene Antwort bleibt möglich. Nutze dies, wenn für den nächsten Schritt eine Entscheidung oder Angabe des Nutzers fehlt. Danach auf die Antwort warten. Keine Passwörter oder Zugangsdaten erfragen; dafür den Bereich Zugänge verwenden.',
+    parameters: { type: 'object', properties: { fragen: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'object', properties: { frage: { type: 'string', minLength: 3, maxLength: 500 }, optionen: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', maxLength: 160 } } }, required: ['frage'], additionalProperties: false } } }, required: ['fragen'], additionalProperties: false },
+  } },
   {
     type: "function", function: {
       name: "lese_website_kennzahlen",
@@ -1225,6 +1230,10 @@ export async function executeLukasTool(
   if (name.startsWith(MCP_TOOL_PREFIX)) return await runMcpTool(name, input);
 
   switch (name) {
+    case 'frage_issa': {
+      const { frageIssa } = await import('./frage-issa');
+      return frageIssa(input, ctx.conversationId, ctx.telefonOwnerContactId !== undefined);
+    }
     case "lese_website_kennzahlen": {
       const { leseWebsiteKennzahlen } = await import("./website-kennzahlen");
       return await leseWebsiteKennzahlen(input);

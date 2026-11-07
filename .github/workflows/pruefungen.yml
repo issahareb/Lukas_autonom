@@ -111,6 +111,9 @@ jobs:
       - name: Browser für den Integrationslauf
         run: npx playwright install --with-deps chromium
 
+      - name: Dashboard-Abläufe (mobiler Browser, lokale API-Fixtures)
+        run: node artifacts/lukas-ui/scripts/check-browser-flows.mjs
+
       - name: Integrationslauf (echtes Postgres, echter Browser)
         working-directory: artifacts/api-server
         env:
