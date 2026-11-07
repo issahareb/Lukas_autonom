@@ -21,6 +21,10 @@ export async function toolHarness({baselineRef,live=false}={}) {
   const pinned=baselineRef==='0f7e3a0'?JSON.parse(readFileSync('bench/baselines/tool-routing-0f7e3a0.json','utf8')):undefined;
   const fromRepo=path=>pinned?pinned.files[path]:baselineRef?execFileSync('git',['show',`${baselineRef}:artifacts/api-server/${path}`],{encoding:'utf8'}):readFileSync(path,'utf8');
   const toolsSource=fromRepo('src/lib/lukas-tools.ts');
+  // Compare selection algorithms using one current schema catalogue. Prompt
+  // edits must not invalidate the historical selector or skew byte savings.
+  // Keep the pinned source intact for the baseline selection/loading logic.
+  const schemaSource=readFileSync('src/lib/lukas-tools.ts','utf8');
   writeFileSync(join(dir,'selection.ts'),fromRepo('src/lib/werkzeug-auswahl.ts'));
   const external=join(dir,'external.mjs');
   writeFileSync(external,`
@@ -44,7 +48,7 @@ export async function toolHarness({baselineRef,live=false}={}) {
     const MCP_TOOL_PREFIX='mcp__'; const MCP_TOOLS_PER_SERVER=18;
     const activeServers=async()=>globalThis.__toolBenchServers??[];
     const logger={info(){},warn(){}};
-    ${['LUKAS_TOOLS','sanitizeToolSchema','mitPolicyHinweis','allLukasTools','mcpFindTool'].map(n=>declaration(toolsSource,n)).join('\n')}
+    ${['LUKAS_TOOLS','sanitizeToolSchema','mitPolicyHinweis','allLukasTools','mcpFindTool'].map(n=>declaration(n==='LUKAS_TOOLS'?schemaSource:toolsSource,n)).join('\n')}
     export {waehleWerkzeuge};
     export * from '../src/lib/ai/model-client';
     export * from '../src/lib/ai/model-router';

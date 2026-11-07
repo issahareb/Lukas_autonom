@@ -50,6 +50,17 @@ export async function executeLukasTool(name, input, ctx) {
   return 'ok';
 }
 export async function buildSystemPrompt() { return 'System'; }
+// Persistence is outside this vision-routing regression. A build must never
+// write fixture conversation 4711 into the deployment's configured database.
+export async function withWorkProgress(_scope, _task, fn) { return fn(); }
+export function workProgressContext() { return ''; }
+export function workProgressTask(task) { return task; }
+export function workProgressStatus() {}
+export async function planWorkBatch() {}
+export async function startWorkStep() {}
+export async function finishWorkStep() {}
+export async function mitVerbrauchsAuftrag(_quelle, _conversationId, fn) { return fn(); }
+export function auftragsStatus() {}
 export async function recordEmotion() {}
 export async function fuehleWerkzeug() {}
 export async function merkeErfahrung() {}
@@ -90,7 +101,7 @@ await build({
       setup(b) {
         // Router und Bildablage bleiben ECHT — sie sind der Gegenstand der Prüfung.
         b.onResolve(
-          { filter: /(^|\/)(lukas-tools|system-prompt|emotion-engine|logger|debug-log|model-client|voice-renderer|lernen)$/ },
+          { filter: /(^|\/)(lukas-tools|system-prompt|emotion-engine|logger|debug-log|model-client|voice-renderer|lernen|work-progress|verbrauch-auftrag)$/ },
           () => ({ path: attrappen }),
         );
       },

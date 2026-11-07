@@ -53,6 +53,12 @@ const modules = {
     export async function executeLukasTool(name,input){globalThis.__chatAccessCheck.calls.push({name,input});
       if(globalThis.__chatAccessCheck.execute)return globalThis.__chatAccessCheck.execute(name,input);
       throw new Error(name==='email_search'?'EMAIL_USER fehlt':'VPS_SSH_KEY: All configured authentication methods failed');}`,
+  // Persistent work journals have their own regression suite. This isolated
+  // route fixture must not depend on a deployment DATABASE_URL or real pool.
+  'work-progress': `export const withWorkProgress=(_scope,_task,fn)=>fn();
+    export const workProgressContext=()=>''; export const workProgressTask=task=>task;
+    export const workProgressStatus=()=>{}; export const planWorkBatch=async()=>{};
+    export const startWorkStep=async()=>{}; export const finishWorkStep=async()=>{};`,
   'owner-call-grant': 'export const ownerCallGrantFromMessage=()=>undefined;',
   'bildablage': 'export const nimmBilder=()=>[]; export const entwerteAlteBilder=()=>{}; export const BILD_MARKE="";',
   'lernen': 'export const merkeErfahrung=()=>{};',
