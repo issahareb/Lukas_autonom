@@ -1,7 +1,7 @@
 import { runToolBatch } from "./tool-batch";
 import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "./work-progress";
 import { istMisserfolg } from "./werkzeug-ergebnis";
-import { mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
+import { markiereAuftrag, mitVerbrauchsAuftrag, auftragsStatus } from "./verbrauch-auftrag";
 import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "./werkzeug-auswahl";
 import { randomInt } from "node:crypto";
 import type OpenAI from "openai";
@@ -88,6 +88,7 @@ export async function runLukasTurn(opts: {
   return mitVerbrauchsAuftrag(opts.quelle ?? "sonstige", opts.conversationId, () => withWorkProgress(
     opts.systemPromptOverride ? undefined : opts.progressKey ?? (opts.conversationId && opts.conversationId > 0 ? `conversation:${opts.conversationId}` : undefined),
     opts.userText, async () => {
+  markiereAuftrag(opts.userText, undefined, opts.profil);
   opts.signal?.throwIfAborted();
   /*
    * Dashboard-Chats haben eine dauerhafte positive Konversations-ID. Autonome

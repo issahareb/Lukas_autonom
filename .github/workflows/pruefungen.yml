@@ -87,6 +87,11 @@ jobs:
           ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: node lib/db/check-migrationen.mjs
 
+      - name: Verbrauchsfallstudie (echte PostgreSQL-Persistenz)
+        env:
+          ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node artifacts/api-server/scripts/check-verbrauch-fallstudie-sql.mjs
+
       - name: Telefon-Gedächtnis (echte PostgreSQL-Persistenz)
         env:
           PHONE_MEMORY_SQL_URL: postgresql://postgres:postgres@localhost:5432/postgres

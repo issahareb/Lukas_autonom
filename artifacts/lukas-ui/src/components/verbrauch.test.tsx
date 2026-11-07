@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import Verbrauch from "./verbrauch";
 
+vi.mock("./verbrauch-fallstudie", () => ({default: () => null}));
+
 const tokens = { aufrufe: 12, eingabe: 1_000_000, ausgabe: 200_000, cacheLesen: 400_000, cacheSchreiben: 100, gesamt: 1_600_100 };
 const bericht = {
   stand: "2026-10-05T10:00:00Z", guthaben: { usd: 42.5, organisation: "Issa", bestaetigtAt: "2026-10-04T09:00:00Z" },

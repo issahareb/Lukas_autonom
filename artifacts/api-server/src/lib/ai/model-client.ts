@@ -1,4 +1,5 @@
-import { merkeAufrufUsage, merkeToolSchema, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
+import { usageBeleg } from "../verbrauch-methodik";
+import { merkeProviderBeleg, hatAufrufMessung, bucheEinzelBeleg, merkeAufrufUsage, merkeToolSchema, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
 import type OpenAI from "openai";
 import { openai } from "@workspace/integrations-openai-ai";
 import { logger } from "../logger";
@@ -322,7 +323,7 @@ const verbrauch = new Map<
  * Caching ueberhaupt greift — und ohne diese Zahl ist jede Aussage ueber
  * Kosten geraten.
  */
-function cacheTreffer(usage: any): { gelesen: number; geschrieben: number; imEingang: boolean } {
+function cacheTreffer(usage: any, provider: string): { gelesen: number; geschrieben: number; imEingang: boolean } {
   /*
    * Und hier liegt die Falle, an der jede Cache-Quote falsch wird:
    *
@@ -336,7 +337,7 @@ function cacheTreffer(usage: any): { gelesen: number; geschrieben: number; imEin
    * niedrig ist. Genau das stand hier. Deshalb sagt `imEingang`, welcher Fall
    * vorliegt, und merkeVerbrauch rechnet danach.
    */
-  const anthropisch = usage.cache_read_input_tokens !== undefined || usage.cache_creation_input_tokens !== undefined;
+  const anthropisch = provider === "anthropic" || usage.cache_read_input_tokens !== undefined || usage.cache_creation_input_tokens !== undefined;
   if (anthropisch) {
     return {
       gelesen: Number(usage.cache_read_input_tokens ?? 0),
@@ -354,13 +355,23 @@ function cacheTreffer(usage: any): { gelesen: number; geschrieben: number; imEin
 }
 
 export function merkeVerbrauch(model: string, usage: any, provider = "unbekannt", quelle: VerbrauchsQuelle = "sonstige"): { rein: number; raus: number } {
-  if (!usage) return { rein: 0, raus: 0 };
+  const nonnegative = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+  if (!usage || !nonnegative(usage.input_tokens ?? usage.prompt_tokens) || !nonnegative(usage.output_tokens ?? usage.completion_tokens)) {
+    return { rein: 0, raus: 0 }; // Missing receipt stays NULL in the individual call, never a measured zero.
+  }
   const eintrag = verbrauch.get(model) ?? { aufrufe: 0, rein: 0, raus: 0, ausCache: 0, inCache: 0 };
-  const cache = cacheTreffer(usage);
+  const cache = cacheTreffer(usage, provider);
   const gemeldet = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0);
+  if (!nonnegative(cache.gelesen) || !nonnegative(cache.geschrieben) || (cache.imEingang && cache.gelesen > gemeldet)) return { rein: 0, raus: 0 };
   merkeAufrufUsage({ eingabe: cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet,
     ausgabe: Number(usage.output_tokens ?? usage.completion_tokens ?? 0), cacheLesen: cache.gelesen,
     cacheSchreiben: cache.imEingang ? null : cache.geschrieben });
+  merkeProviderBeleg({ usage: usageBeleg(usage) });
+  if (!hatAufrufMessung()) bucheEinzelBeleg(model, provider, quelle, {
+    eingabe: cache.imEingang ? Math.max(0, gemeldet - cache.gelesen) : gemeldet,
+    ausgabe: Number(usage.output_tokens ?? usage.completion_tokens ?? 0), cacheLesen: cache.gelesen,
+    cacheSchreiben: cache.imEingang ? null : cache.geschrieben,
+  }, usageBeleg(usage));
   eintrag.aufrufe++;
   /*
    * `rein` heisst ab hier ueberall dasselbe: frisch bezahlter Eingang, ohne
@@ -491,6 +502,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   merkeToolSchema(tools);
 
   const response: any = await openai.responses.create(request, { signal: input.signal });
+  merkeProviderBeleg({ responseId: response.id, gemeldetesModell: response.model });
   const toolCalls: LukasToolCall[] = [];
   for (const item of response.output ?? []) {
     if (item?.type !== "function_call") continue;
@@ -610,6 +622,7 @@ async function callAnthropic(input: CallInput): Promise<LukasModelResult> {
   const raw = await response.text();
   if (!response.ok) throw new Error(`Anthropic ${response.status}: ${raw.slice(0, 1000)}`);
   const data = JSON.parse(raw) as any;
+  merkeProviderBeleg({ responseId: typeof data.id === "string" ? data.id : undefined, gemeldetesModell: typeof data.model === "string" ? data.model : undefined });
   const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const text: string[] = [];
   const toolCalls: LukasToolCall[] = [];
@@ -686,6 +699,7 @@ async function callLocal(input: CallInput): Promise<LukasModelResult> {
     throw new Error(`Lokales Modell hat kein JSON geliefert: ${raw.slice(0, 300)}`);
   }
 
+  merkeProviderBeleg({ responseId: typeof data.id === "string" ? data.id : undefined, gemeldetesModell: typeof data.model === "string" ? data.model : undefined });
   const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const choice = data.choices?.[0];
   const toolCalls: LukasToolCall[] = [];
@@ -731,6 +745,7 @@ async function callGoogle(input: CallInput): Promise<LukasModelResult> {
   const raw = await response.text();
   if (!response.ok) throw new Error(`Gemini ${response.status}: ${raw.slice(0, 1000)}`);
   const data = JSON.parse(raw) as any;
+  merkeProviderBeleg({ responseId: typeof data.id === "string" ? data.id : undefined, gemeldetesModell: typeof data.model === "string" ? data.model : undefined });
   const verbraucht = merkeVerbrauch(input.route.model, data.usage, input.route.provider, input.quelle);
   const choice = data.choices?.[0];
   const toolCalls: LukasToolCall[] = [];

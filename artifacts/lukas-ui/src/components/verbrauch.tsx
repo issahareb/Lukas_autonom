@@ -1,3 +1,4 @@
+import VerbrauchFallstudie from "./verbrauch-fallstudie";
 import { useCallback, useEffect, useState } from "react";
 
 type Tokens = { aufrufe: number; eingabe: number; ausgabe: number; cacheLesen: number; cacheSchreiben: number; gesamt: number };
@@ -48,6 +49,7 @@ export default function Verbrauch() {
   const gesamt = daten?.tageswerte.reduce((s, t) => s + t.gesamt, 0) ?? 0;
   return <section className="space-y-4" aria-label="Verbrauch und OpenAI-Guthaben">
     <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Verbrauch im Detail</h2><button onClick={laden} className="rounded-full border px-4 py-2 text-sm">Aktualisieren</button></div>
+    <VerbrauchFallstudie />
     {fehler && <p role="alert" className="text-sm text-amber-400">{fehler}</p>}
     {!daten && !fehler && <p role="status">Verbrauch wird geladen …</p>}
     {daten && <>
