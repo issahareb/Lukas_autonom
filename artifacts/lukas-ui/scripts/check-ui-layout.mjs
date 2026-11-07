@@ -119,7 +119,12 @@ try {
     if (name === "desktop" || name === "mobil") await screenshot(page, "arbeitsraum-" + name);
     const question = page.getByRole("textbox", { name: "Frage an Lukas" });
     await question.fill("Ein Gedanke vom Dashboard");
-    await page.getByRole("button", { name: "Senden", exact: true }).click();
+    // Attachment entry opens a new draft; hero Send is covered by the
+    // separate browser-flow test and now submits immediately by design.
+    await page.getByRole("button", { name: "Datei anhängen (im Chat)", exact: true }).click();
+    await page.getByRole("textbox", { name: "Nachricht an Lukas" }).waitFor();
+    assert.equal(await page.getByRole("textbox", { name: "Nachricht an Lukas" }).inputValue(), "Ein Gedanke vom Dashboard", "Attachment-entry draft survives the route change");
+    if (width < 768) await page.getByRole("button", { name: "Zurück zur Liste" }).click();
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).waitFor();
     assert.equal(await page.locator(".chat-new-button").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(32, 33, 30)", "New chat uses the Hareb ink button, not legacy mint");
     await page.getByRole("searchbox", { name: "Gespräche suchen" }).fill("STUDIO");
@@ -129,7 +134,7 @@ try {
     await page.keyboard.press("Enter");
     const input = page.getByRole("textbox", { name: "Nachricht an Lukas" });
     await input.waitFor();
-    assert.equal(await input.inputValue(), "Ein Gedanke vom Dashboard", "Draft survives the route change");
+    assert.equal(await input.inputValue(), "", "Draft from another conversation is not copied into this thread");
     await page.getByText(messages[3].content, { exact: true }).waitFor();
     await noOverflow(page, "Chat " + name);
     const box = await input.boundingBox();
