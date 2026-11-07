@@ -10,6 +10,8 @@ it('behält Antworten nach Schließen und nach einem Sendeproblem',async()=>{
   expect(screen.getByRole('textbox')).toHaveValue('Mittwoch');await user.click(screen.getByRole('button',{name:'Antwort senden'}));
   await screen.findByRole('alert');expect(screen.getByRole('textbox')).toHaveValue('Mittwoch');
   expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][0]).toBe('Antwort auf deine Rückfrage [q]:\n1. Antwort: Mittwoch');
+  expect(send.mock.calls[0][0]).not.toContain('Welcher Termin?');
 });
 it('akzeptiert nur erfolgreiche strukturierte Fragen des aktiven Gesprächs',()=>{
   const step={tool:'frage_issa',input:'{}',ok:true,result:JSON.stringify(frage),ms:1};

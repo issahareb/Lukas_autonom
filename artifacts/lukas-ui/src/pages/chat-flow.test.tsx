@@ -82,4 +82,25 @@ describe('Echte Chatseite: Navigation und Eingaben',()=>{
     await waitFor(()=>expect(sent).toHaveLength(1));
     expect(sent[0].url).toContain('/51/messages');expect(sent[0].content).toContain('Antwort: Kurz');
   });
+  it('bewahrt auch einen normalen Entwurf bis zur HTTP-Bestätigung',async()=>{
+    sessionStorage.setItem('lukas_active_chat','51');
+    vi.stubGlobal('fetch',vi.fn((url:string,init?:RequestInit)=>String(url).endsWith('/messages')?new Promise((_resolve,reject)=>init?.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')))):Promise.resolve(Response.json([]))));
+    const user=userEvent.setup(),view=render(<Chat/>);
+    await user.type(screen.getByRole('textbox',{name:'Nachricht an Lukas'}),'Noch nicht bestätigt');
+    await user.click(screen.getByRole('button',{name:'Senden'}));
+    expect(sessionStorage.getItem('lukas_draft_51')).toBe('Noch nicht bestätigt');
+    view.unmount();expect(sessionStorage.getItem('lukas_draft_51')).toBe('Noch nicht bestätigt');
+  });
+  it('überschreibt bei einer abgewiesenen Rückfrage keinen bestehenden Chatentwurf',async()=>{
+    sessionStorage.setItem('lukas_active_chat','51');sessionStorage.setItem('lukas_draft_51','Mein anderer Entwurf');
+    const result={surface:'lukas-rueckfrage',id:'frage-fehler',conversationId:51,fragen:[{frage:'Welche Variante möchtest du?',optionen:['Kurz','Ausführlich']}]};
+    state.messages=[{id:1,role:'assistant',content:'Bitte wählen',createdAt:new Date().toISOString(),steps:[{tool:'frage_issa',input:'{}',ok:true,result:JSON.stringify(result),ms:1}]}];
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/messages')?Response.json({error:'Testfehler'},{status:503}):Response.json([])));
+    const user=userEvent.setup();render(<Chat/>);
+    await user.click(await screen.findByRole('radio',{name:'Kurz'}));await user.click(screen.getByRole('button',{name:'Antwort senden'}));
+    await screen.findByText('Die Antwort konnte nicht bestätigt werden. Deine Eingabe bleibt erhalten.');
+    expect(sessionStorage.getItem('lukas_draft_51')).toBe('Mein anderer Entwurf');
+    expect(document.querySelector('[aria-label="Nachricht an Lukas"]')).toHaveValue('Mein anderer Entwurf');
+  });
+
 });

@@ -362,7 +362,7 @@ export default function Chat() {
     setLiveSteps([]); setWartetAufNachzuegler(false); setNavigationError(null);
   };
   useEffect(() => { rememberChat(activeId); }, [activeId]);
-  useEffect(() => { saveDraft(activeId, input); }, [activeId, input]);
+  useEffect(() => { if (!streaming) saveDraft(activeId, input); }, [activeId, input, streaming]);
   const handleNew = async () => {
     if (createConvo.isPending || sendLock.current || createLock.current) return;
     createLock.current = true; setCreating(true);
@@ -479,6 +479,7 @@ export default function Chat() {
         throw new Error(detail?.detail || detail?.error || `Chat fehlgeschlagen (${response.status})`);
       }
       accepted = true;
+      saveDraft(activeId, preserveDraft ? input : '');
       if (questionId) setAnsweredQuestions(prev => {
         const next = new Set([...prev, questionId].slice(-100));
         try { sessionStorage.setItem('lukas_answered_questions', JSON.stringify([...next])); } catch {}
@@ -559,6 +560,10 @@ export default function Chat() {
         setWartetAufNachzuegler(true);
       }
     } catch (err) {
+      if (!accepted) {
+        if (!preserveDraft) setInput(text);
+        setPending(pending);
+      }
       if (err instanceof DOMException && err.name === "AbortError") {
         // Vom Stopp-Knopf — kein Fehler.
       } else {
@@ -570,7 +575,6 @@ export default function Chat() {
          * sah aus wie verschwunden.
          */
         if (!accepted) {
-          setInput(text); setPending(pending);
           setStreamError(err instanceof Error ? err.message : 'Senden fehlgeschlagen. Die Eingabe bleibt erhalten.');
         } else {
           setStreamError(null); setWartetAufNachzuegler(true);
@@ -628,7 +632,7 @@ export default function Chat() {
 
   const allMessages = activeConv?.messages ?? [];
   const last = allMessages.at(-1);
-  const candidate = !streaming && last?.role === 'assistant' ? rueckfrageAus((last as { steps?: ToolStep[] }).steps ?? [], activeId) : null;
+  const candidate = last?.role === 'assistant' ? rueckfrageAus((last as { steps?: ToolStep[] }).steps ?? [], activeId) : null;
   const question = candidate && !answeredQuestions.has(candidate.id) ? candidate : null;
   const face = faceOverride?.id === activeId ? faceOverride.expression : expressionFromSteps([...allMessages.flatMap(m => (m as { steps?: ToolStep[] }).steps ?? []), ...liveSteps]);
   const isMobile = useIsMobile();

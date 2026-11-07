@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 const dir=mkdtempSync(join(tmpdir(),'frage-issa-'));
 try {
   const out=join(dir,'frage.mjs');await build({entryPoints:['src/lib/frage-issa.ts'],outfile:out,bundle:true,format:'esm',platform:'node',logLevel:'silent'});
-  const {frageIssa}=await import(pathToFileURL(out));
+  const {frageIssa,mitRueckfrageKontext,rueckfrageRoutingText}=await import(pathToFileURL(out));
   const input={fragen:[{frage:'Welche Variante?',optionen:['Kurz','Lang']}]};
   const result=JSON.parse(frageIssa(input,17));
   assert.equal(result.surface,'lukas-rueckfrage');assert.equal(result.conversationId,17);assert.deepEqual(result.fragen,input.fragen);
@@ -16,5 +16,15 @@ try {
   for(const id of [undefined,-1,0,1.5])assert.throws(()=>frageIssa(input,id));
   assert.throws(()=>frageIssa({fragen:Array.from({length:3},()=>({frage:'?'.repeat(500),optionen:Array(4).fill('"'.repeat(160))}))},17),/kürzer/);
   assert.match(frageIssa(input,17,true),/mündlich/);assert.ok(!frageIssa(input,17,true).includes('"surface"'));
+  const assistant={role:'assistant',content:'Bitte wähle.',steps:[{tool:'frage_issa',ok:true,result:JSON.stringify(result)}]};
+  const user={role:'user',content:'Baue die React-Funktion im Repository.'};
+  const answer={role:'user',content:`Antwort auf deine Rückfrage [${result.id}]:\n1. Antwort: Kurz`};
+  assert.match(mitRueckfrageKontext(assistant,17),/Welche Variante/);
+  assert.equal(mitRueckfrageKontext(assistant,18),assistant.content);
+  assert.equal(mitRueckfrageKontext({...assistant,role:'user'},17),assistant.content);
+  assert.equal(mitRueckfrageKontext({...assistant,steps:[{...assistant.steps[0],tool:'fetch_url'}]},17),assistant.content);
+  assert.equal(rueckfrageRoutingText([user,assistant,answer],answer.content,17),user.content);
+  assert.equal(rueckfrageRoutingText([user,assistant,answer],answer.content,18),answer.content);
+  assert.equal(rueckfrageRoutingText([user,assistant,answer],'Neuer Auftrag',17),'Neuer Auftrag');
   console.log('PASS frage_issa: structured private-chat question, bounded choices, credential rejection, stable conversation scope and spoken telephone fallback.');
 }finally{rmSync(dir,{recursive:true,force:true});}
