@@ -25,6 +25,7 @@ import { callLukasModel } from "../lib/ai/model-client";
 import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
 import type { Response } from "express";
+import { ModelProgress } from "../lib/ai/model-policy";
 import { Arbeitsschleife } from "../lib/arbeitsschleife";
 
 const router = Router();
@@ -405,6 +406,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     // angehaengt hat.
     let bilderGesehen = false;
     const schleife = new Arbeitsschleife();
+    const modelProgress = new ModelProgress();
     let angeboteneTools = await allLukasTools(routingTask);
     while (schleife.darfWeiter() && !gestoppt()) {
       const iteration = schleife.naechsteRunde();
@@ -423,6 +425,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       quelle: "chat",
         cacheKey: `lukas-${convId}`,
         route,
+        escalation: modelProgress.escalation,
         tools: angeboteneTools,
         messages: convo,
       });
@@ -542,6 +545,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
         }
         return message;
       }, { stopped: gestoppt });
+      modelProgress.observe(result.toolCalls, toolMessages.map(m => String(m.content ?? "")));
       convo.push(...toolMessages);
       if (result.toolCalls.some(call => call.name === "mcp_find_tool")) {
         const ids = new Set(result.toolCalls.filter(call => call.name === "mcp_find_tool").map(call => call.id));
@@ -623,6 +627,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       );
       try {
         const letzte = await callLukasModel({
+          escalation: modelProgress.escalation,
       quelle: "chat",
         cacheKey: `lukas-${convId}`,
           route: routeLukasModel({
