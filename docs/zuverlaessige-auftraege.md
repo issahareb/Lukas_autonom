@@ -88,8 +88,12 @@ Telefon klingelt → LUKAS spricht“ steht aus. Es wurde kein solcher Erfolg
 behauptet und kein unaufgeforderter echter Anruf ausgelöst.
 
 Allgemeine lange Aufgaben erhalten hier noch keinen dauerhaften Job-Executor.
-Laufende Backend-Delegationen werden beim Auflegen weiterhin abgebrochen;
-nur bereits persistierte Rückrufaufträge überleben. Andere Zeitaktionen
+Seit der Owner-Chat-Angleichung laufen bereits gestartete Aufgaben aus bestätigten
+eingehenden Owner-Anrufen nach dem Auflegen im laufenden Prozess weiter und
+speichern Ergebnisse im Dashboard. Andere Backend-Delegationen bleiben an ihre
+Sprachsitzung gebunden. Einen Serverneustart überleben als ausführbare Jobs nur
+persistierte Rückrufaufträge; Owner-Arbeitsjournale erlauben eine geprüfte
+Wiederaufnahme im Dashboard. Andere Zeitaktionen
 müssen ausdrücklich als noch nicht unterstützt behandelt werden. Die
 Freitext-Ergebnisheuristik ersetzt langfristig keine strukturierten Ergebnisse
 für jedes einzelne Werkzeug. Die neue Migration ist additiv; ein Rollback des
@@ -140,7 +144,8 @@ privaten Kontexts davor konnte unbegrenzt warten. Ein geschriebenes
 `session.commentary.append` wurde zudem nicht mit seiner Anbieterbestätigung
 korreliert.
 
-Jetzt umfasst das Zeitlimit den gesamten Auftrag, einschließlich Kontext und
+Für Sprachsitzungen außerhalb des bestätigten eingehenden Owner-Pfads umfasst
+das Zeitlimit den gesamten Auftrag, einschließlich Kontext und
 Gedächtnisabruf. Nach acht und dreißig Sekunden kann die Sitzung einen ehrlichen
 Zwischenstand an das Sprachmodell senden. Eine kurze Anwesenheitsfrage erhält
 während der Arbeit unmittelbar Statuskontext, ohne einen weiteren Backendauftrag

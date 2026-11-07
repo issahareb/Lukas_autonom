@@ -35,6 +35,7 @@ state.model = async ({ tools, messages }) => {
 };
 const modules = {
   '@workspace/db': `
+    export const pool={};
     export const conversations={name:'conversations',id:'id'};
     export const messages={name:'messages',conversationId:'conversationId',createdAt:'createdAt'};
     export const attachments={name:'attachments',conversationId:'conversationId',messageId:'messageId'};
@@ -113,6 +114,13 @@ try {
   const brainOutput=join(directory,'brain.mjs');
   await build({entryPoints:['src/lib/lukas-brain.ts'],outfile:brainOutput,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
   const {runLukasTurn}=await import(pathToFileURL(resolve(brainOutput)).href);
+  const phoneOutput=join(directory,'phone-chat.mjs');
+  await build({entryPoints:['src/lib/owner-phone-chat.ts'],outfile:phoneOutput,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
+  const {createOwnerPhoneChat}=await import(pathToFileURL(resolve(phoneOutput)).href);
+  const phoneChat=await createOwnerPhoneChat(7,{create:async()=>1,
+    start:async(_id,text)=>{state.rows.push({role:'user',content:text});const history=[...state.rows];const messageId=state.rows.length;state.rows.push({role:'assistant',content:'pending'});return {messageId,history};},
+    save:async(id,text,steps)=>{state.rows[id]={role:'assistant',content:text,steps};}});
+
   const fixtureNames=['github_read_path','github_search_code','execute_command','email_search','email_send',
     'telefon_kontakte','ruf_an','lese_anfragen','mcp_find_tool','mcp_call','query_memory'];
   state.tools=fixtureNames.map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}}));
@@ -127,7 +135,7 @@ try {
     {before:['Implementiere einen Cache im TypeScript Repo','weiter','weiter'],current:'Ja, mach das',modules:['code','diagnose'],has:['github_read_path','execute_command'],missing:['email_search','ruf_an']},
     {before:['Prüfe mein E-Mail-Postfach'],current:'Prüfe das TypeScript Repository und rufe einen Kontakt an',modules:['code','telefon','diagnose'],has:['github_read_path','ruf_an'],missing:['email_search']},
   ];
-  for(const channel of ['dashboard','brain']) for(const scenario of cases){
+  for(const channel of ['dashboard','brain','owner-phone']) for(const scenario of cases){
     const history=scenario.before.flatMap(content=>[{role:'user',content},{role:'assistant',content:'Bisherige Antwort.'}]);
     offered=undefined;state.promptModules=undefined;
     if(channel==='dashboard'){
@@ -135,6 +143,8 @@ try {
       const reply=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
         method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:scenario.current}),signal:AbortSignal.timeout(10000)});
       assert.equal(reply.status,200);assert.match(await reply.text(),/"done":true/);
+    }else if(channel==='owner-phone'){
+      state.rows=history;assert.equal(await phoneChat.run(scenario.current,''),'Antwort.');
     }else{
       assert.equal(await runLukasTurn({userText:scenario.current,history:[...history,{role:'user',content:scenario.current}],conversationId:1}),'Antwort.');
     }
@@ -150,10 +160,11 @@ try {
   await runLukasTurn({userText:'Implementiere TypeScript Code',history:[],tools:[],systemPromptOverride:'Public only',conversationId:1});
   assert.deepEqual(offered.tools,[],'explicitly tool-free turns stay tool-free');
   assert.equal(offered.messages[0].content,'Public only','explicit prompt override remains authoritative');
-  console.log('OK — 12 real dashboard/brain scenarios: topic changes drop stale tools and prompt modules, repeated continuations and compound tasks retain needed capabilities; overrides remain intact.');
+  console.log('OK — 18 real dashboard/brain/owner-phone scenarios: topic changes drop stale tools and prompt modules, repeated continuations and compound tasks retain needed capabilities; overrides remain intact.');
 
   const turn=async(channel,text)=>{
     state.rows=[];state.modelCalls=0;
+    if(channel==='owner-phone')return phoneChat.run(text,'');
     if(channel==='brain')return runLukasTurn({userText:text,history:[{role:'user',content:text}],conversationId:1});
     const response=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:text}),signal:AbortSignal.timeout(10000)});
@@ -161,7 +172,7 @@ try {
   };
   state.tools.push({type:'function',function:{name:'save_memory',parameters:{type:'object',properties:{content:{type:'string'}},required:['content']}}});
   state.tools.push({type:'function',function:{name:'web_search',parameters:{type:'object',properties:{}}}});
-  for(const channel of ['dashboard','brain']){
+  for(const channel of ['dashboard','brain','owner-phone']){
     state.execute=async name=>name==='mcp_find_tool'?'■ save_memory [Eigenes Werkzeug]\nSchema: content required':'Erinnerung gespeichert.';
     state.model=async({tools,messages})=>{
       const names=tools.map(t=>t.function.name);const n=state.modelCalls++;
@@ -182,6 +193,23 @@ try {
     await turn(channel,'Prüfe das TypeScript Repository und suche aktuelle Quellen');assert.equal(peak,2,'real '+channel+' loop overlaps independent reads');
   }
   console.log('PASS real dashboard/brain loops: discovery loads full definitions; independent reads overlap while tool results retain call order.');
+  const {toolHarness}=await import('../bench/tool-harness.mjs');const catalog=await toolHarness();
+  try {
+    state.tools=catalog.api.LUKAS_TOOLS;
+    const tasks=['Lies mein E-Mail-Postfach','Sende eine E-Mail','Lies package.json im Repository','Implementiere einen Cache im TypeScript Repo',
+      'Bediene den Browser und klicke auf das Formular','Suche aktuelle Quellen im Internet','Speichere meine Vorliebe im Gedächtnis',
+      'Erstelle ein Ziel und aktualisiere seinen Fortschritt','Prüfe den Tokenverbrauch','Lies die Diagnose zum Fehler',
+      'Plane einen Rückruf in fünf Minuten','Rufe einen Kontakt an','Schicke eine SMS','Delegiere die Recherche an einen Subagenten',
+      'Erstelle ein Video über Higgsfield','Nenne die Aufrufzahlen von Hareb Digital'];
+    for(const text of tasks){
+      const offers=[];
+      state.model=async request=>{offers.push(request.tools.map(t=>t.function.name).sort());return {content:'Antwort.',toolCalls:[]};};
+      await turn('dashboard',text);await turn('owner-phone',text);
+      assert.deepEqual(offers[1],offers[0],text+' must offer identical canonical tools over owner phone and dashboard');
+    }
+    console.log('PASS full catalogue parity: 16 task families offer identical canonical tools in actual dashboard and owner-phone loops.');
+  }finally{await rm(catalog.dir,{recursive:true,force:true});}
+
 } finally {
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
   delete globalThis.__chatAccessCheck;
