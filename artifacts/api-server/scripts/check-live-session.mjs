@@ -9,6 +9,14 @@ const fixture = { memoryParts: [], memoryClosed: [], sockets: [], requests: [], 
   failCreate: false, sequence: 0, answer: "Bestätigtes Ergebnis.", backend: null };
 globalThis.__liveSessionTest = fixture;
 const stubSources = {
+  "../owner-phone-chat": `export async function createOwnerPhoneChat(contactId) {
+    const f=globalThis.__liveSessionTest; if(f.ownerCreateError)throw Error("private conversation unavailable"); (f.ownerChats??=[]).push(contactId);
+    const id=10000+f.ownerChats.length;
+    return {id,stop(){ f.ownerStopped=(f.ownerStopped??0)+1; f.ownerAbort?.abort(new DOMException('Von dir gestoppt','AbortError'));return true;},
+      async run(userText,context){ const controller=new AbortController();f.ownerAbort=controller;
+        const options={quelle:'telefon',conversationId:id,telefonOwnerContactId:contactId,userText,history:[{role:'user',content:userText}],systemPromptExtra:context,signal:controller.signal};
+        f.calls.push(options);return f.backend?await f.backend(options):f.answer; }};
+  }`,
   "../telefon-anfragen": `export async function preparePhoneEnquiry(id, number, context, acknowledge) { const f=globalThis.__liveSessionTest; f.enquiry={id, number, context, acknowledge, parts:[], closed:0}; return {observe: part=>f.enquiry.parts.push(part), close:async()=>{f.enquiry.closed++}}; }`,
   "./telefon-memory": `export async function preparePhoneMemory(id, peer, visibility) { const f = globalThis.__liveSessionTest; f.memoryPeer = {id, peer, visibility}; return {input: [{type:"message", role:"user", content:[{type:"input_text", text:"ARCHIVE_SAMSTAG"}]}], observe: part => f.memoryParts.push(part), recall: async () => "ARCHIVE_SAMSTAG", close: async complete => f.memoryClosed.push({id,complete})}; }`,
   undici: [
@@ -34,7 +42,7 @@ await build({
   stdin: { contents: 'export * from "./src/lib/ai/live-session.ts"; export { aktuellerAnruf } from "./src/lib/telefon-laufend.ts";', resolveDir: resolve(dirname(fileURLToPath(import.meta.url)), ".."), loader: "ts" },
   outfile: output, bundle: true, platform: "node", target: "node22", format: "esm", logLevel: "silent",
   plugins: [{ name: "live-isolation", setup(builder) {
-    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory|\.\.\/telefon-anfragen)$/ },
+    builder.onResolve({ filter: /^(undici|\.\.\/live-verbrauch|\.\.\/logger|\.\/sprach-sitzung|\.\.\/lukas-brain|\.\/telefon-memory|\.\.\/telefon-anfragen|\.\.\/owner-phone-chat)$/ },
       (args) => ({ path: args.path, namespace: "live-stub" }));
     builder.onLoad({ filter: /.*/, namespace: "live-stub" }, (args) => ({ contents: stubSources[args.path], loader: "js" }));
   } }],
@@ -427,6 +435,7 @@ try {
   process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "7";
   const ownerPhoneCases = [
     { name: "owner", contactId: 7, contextId: "signed_owner_context", visibility: "private", allowTools: true, enabled: true },
+    { name: "outgoing_owner", direction: "ausgehend", contactId: 7, contextId: "signed_context", visibility: "private", allowTools: true, enabled: false },
     { name: "other_private_contact", contactId: 8, contextId: "signed_other_context", visibility: "private", allowTools: true, enabled: false },
     { name: "no_owner_grant", contextId: "signed_context", visibility: "private", allowTools: true, enabled: false },
     { name: "unsigned", contactId: 7, visibility: "private", allowTools: true, enabled: false },
@@ -442,6 +451,7 @@ try {
     const sessionId = "live_owner_phone_" + test.name;
     await api.acceptLiveSipSession({
       sessionId, instructions: "OWNER_PRIVATE_BACKEND", visibility: test.visibility,
+      telefonPeer: {nummer:"4915100000007",richtung:test.direction??"eingehend"},
       allowTools: test.allowTools, telefonKontextId: test.contextId, telefonOwnerContactId: test.contactId, telefonBusiness: true,
     });
     const active = socketFor(sessionId);
@@ -454,14 +464,15 @@ try {
     assert.equal(call.telefonOwnerContactId, test.enabled ? test.contactId : undefined, "only verified owner identity reaches callback tools");
     if (test.enabled) {
       assert.equal(call.tools, undefined, "owner can delegate to the real backend toolset");
-      assert.equal(call.systemPromptOverride, "OWNER_PRIVATE_BACKEND");
+      assert.equal(call.systemPromptOverride, undefined, "owner context is built per task rather than replaced by a session snapshot");
+      assert.ok(call.conversationId>0, "owner tools use a real dashboard conversation");
     } else assert.deepEqual(call.tools, [], test.name + " must not grant owner tools");
     const accept = fixture.requests.find(r => r.url.endsWith("/" + sessionId + "/accept"));
     assert.ok(!JSON.stringify(accept.body).includes("OWNER_PRIVATE_BACKEND"));
     if (test.enabled) {
       assert.match(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/);
       assert.match(accept.body.session.instructions, /lese_anfragen/);
-      assert.match(accept.body.session.instructions, /lese_website_kennzahlen/);
+      assert.match(accept.body.session.instructions, /Alle konkreten Aufgaben/);
       assert.doesNotMatch(accept.body.session.instructions, /Deine Aufgabe ist eine qualifizierte Anfrage/);
     } else assert.doesNotMatch(accept.body.session.instructions, /PRIVATE OWNER-SITZUNG/, test.name);
     const metricsQuestion = "Nenne mir die aktuellen Aufrufzahlen von Taxi BB Essen und Hareb Digital.";
@@ -473,6 +484,35 @@ try {
     else assert.deepEqual(metricsCall.tools, [], test.name + " cannot request private analytics tools");
     active.emit({ type: "session.closed", reason: "remote_hangup" });
   }
+  process.env.LUKAS_TELEFON_OWNER_CONTACT_ID = "7";
+  process.env.LUKAS_TELEFON_STRENG = "false";
+  const ownerOptions = {instructions:"unused private snapshot",visibility:"private",allowTools:true,
+    telefonOwnerContactId:7,telefonKontextId:"signed-owner-context",telefonPeer:{nummer:"4915100000007",richtung:"eingehend"}};
+  let completeOwner;
+  fixture.backend = () => new Promise(resolve => {completeOwner=resolve;});
+  const deadlinesBefore=[...timers.values()].filter(t=>t.milliseconds===120000).length;
+  await api.acceptLiveSipSession({...ownerOptions,sessionId:"owner_long_job"});
+  const longSocket=socketFor("owner_long_job");input(longSocket,"Bearbeite das Repository vollständig.");delegate(longSocket,"long_owner_work");await settle();
+  const longCall=fixture.calls.at(-1);
+  assert.equal([...timers.values()].filter(t=>t.milliseconds===120000).length,deadlinesBefore,"verified owner work has dashboard budget rather than phone two-minute deadline");
+  longSocket.emit({type:"session.closed",reason:"remote_hangup"});await settle();
+  assert.equal(longCall.signal.aborted,false,"hangup does not revoke an already accepted owner task");
+  completeOwner("Das vollständige Ergebnis liegt im Dashboard.");await settle();
+  assert.ok(!longSocket.sent.some(e=>e.type==="session.commentary.append"&&String(e.content).includes("vollständige Ergebnis")),"no stale audio after hangup");
+  fixture.backend=options=>new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}));
+  await api.acceptLiveSipSession({...ownerOptions,sessionId:"owner_stop_job"});
+  const stopSocket=socketFor("owner_stop_job");input(stopSocket,"Recherchiere die Quellen.");delegate(stopSocket,"owner_work_to_stop");await settle();
+  const stoppingCall=fixture.calls.at(-1),callsBeforeStop=fixture.calls.length;
+  input(stopSocket,"Stopp.");delegate(stopSocket,"owner_stop");await settle();
+  assert.equal(stoppingCall.signal.aborted,true,"actual owner words stop active work");assert.equal(fixture.calls.length,callsBeforeStop,"stop does not become another backend task");
+  stopSocket.emit({type:"session.closed",reason:"remote_hangup"});await settle();
+  fixture.backend=null;fixture.ownerCreateError=true;
+  await api.acceptLiveSipSession({...ownerOptions,sessionId:"owner_db_failure"});
+  const failedOwnerSocket=socketFor("owner_db_failure"),beforeOwnerFailure=fixture.calls.length;
+  input(failedOwnerSocket,"Sende die E-Mail.");delegate(failedOwnerSocket,"owner_must_persist");await settle();
+  assert.equal(fixture.calls.length,beforeOwnerFailure,"private persistence failure cannot fall back to a synthetic tool scope");
+  failedOwnerSocket.emit({type:"session.closed",reason:"remote_hangup"});fixture.ownerCreateError=false;
+  console.log("PASS owner SIP parity: incoming-only gate, durable task scope, shared backend, work beyond audio hangup, explicit stop and persistence failure isolation.");
   delete process.env.LUKAS_TELEFON_OWNER_CONTACT_ID;
   delete process.env.LUKAS_TELEFON_STRENG;
 

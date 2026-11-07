@@ -81,3 +81,39 @@ Der Integrationslauf führt zusätzlich die echte PostgreSQL-Abfrage mit
 zurückgerollten Testereignissen aus. Die SIP-Regression prüft die Weitergabe der
 Website-Frage an das gemeinsame Backend für Owner- und gesperrte Sitzungen.
 Modell und SIP-Anbieter sind dabei simuliert; das ersetzt keinen echten Anruf.
+
+## Vollständiger Chat-Werkzeugumfang für eingehende Owner-Anrufe
+
+Der Owner-Pfad verwendet den regulären `runLukasTurn` ohne Werkzeug- oder
+Systemprompt-Ersatz. Aufgabe, private Erinnerungen, Promptmodule, Modellrouting,
+Discovery und Werkzeug-Policy werden pro Zug wie für eine Dashboard-Aufgabe
+aufgebaut. Es gibt keine Telefon-Positivliste einzelner Fähigkeiten. Die
+Freischaltung erfordert zusätzlich im Live-Manager eine eingehende Richtung;
+ausgehende Gespräche bekommen auch mit einer passenden Kontakt-ID keine Rechte.
+
+Beim ersten delegierten Auftrag wird eine private Dashboard-Unterhaltung
+angelegt. Owner-Aufträge, vollständige Antworten und begrenzte Werkzeugbelege
+werden dort gespeichert. Dieselbe positive Unterhaltungs-ID trägt Freigaben,
+Codevorschläge, Browser-/Code-Sitzungen und das dauerhafte Arbeitsjournal.
+Ausdrückliche neue Anrufziele nutzen denselben einmaligen, zielgebundenen
+Freigabeparser wie der Dashboard-Chat. Nur die aktuellen transkribierten
+Owner-Worte erteilen diese Freigabe, keine Archive oder Modell-Metadaten.
+
+Bereits gestartete Owner-Aufträge laufen mit dem regulären Arbeitsbudget auch
+nach einem Gesprächsende weiter; der bisherige Telefon-Timeout von zwei Minuten
+gilt für diese Aufträge nicht. Ergebnisse erscheinen im Dashboard, nach dem
+Auflegen erfolgt keine Audioausgabe. Noch nicht gestartete wartende Aufträge
+werden beim Gesprächsende verworfen. Ein explizites „Stopp“ während des Anrufs
+oder der Stopp-Knopf derselben Dashboard-Unterhaltung beendet weitere Arbeit;
+bereits begonnene externe Effekte lassen sich damit nicht rückgängig machen.
+Bei Serverneustart werden die laufenden Aufträge abgebrochen und vorhandene
+Journalbelege können über „weiter“ im Dashboard geprüft und wiederaufgenommen
+werden. Es gibt keine automatische Wiederholung unklarer Schreibaktionen.
+
+Kontrollierte Tests vergleichen 16 Aufgabenfamilien mit dem tatsächlichen
+Dashboard- und Owner-Backend samt kanonischem Werkzeugkatalog. Weitere Tests
+prüfen Themenwechsel, Discovery, parallele Leseaufrufe, persönliche Freigaben,
+Persistenz vor Ausführung, Stopp, Auflegen und fehlgeschlagene Speicherung.
+Der PostgreSQL-Integrationslauf prüft echte Dashboard-Nachrichten, Werkzeugbelege
+und unterhaltungsgebundene Freigaben. Modell-, Telefon- und andere externe
+Wirkungen werden dabei simuliert; ein echter Anruf ist eine separate Abnahme.

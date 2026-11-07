@@ -1,6 +1,8 @@
 import type { PhoneEnquiry } from "./telefon-anfrage";
 import { HAREB_DIGITAL_TELEFON, telefonRueckrufKontext } from "../hareb-digital";
 import type { PhoneMemory, PhonePeer } from "./telefon-memory";
+import type { OwnerPhoneChat } from "../owner-phone-chat";
+import { shutdownOwnerPhoneWork } from "../chat-work-state";
 /** GPT Live: server-owned delegation over the authenticated sideband. */
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { WebSocket } from "undici";
@@ -53,7 +55,8 @@ type ManagedSession = {
   outputAudio?: LiveOutputAudio;
   phoneGreetingTimer?: ReturnType<typeof setTimeout>;
   backendInstructions?: Promise<string>;
-  activeWork?: { id: string; startedAt: number; lastNoticeAt: number };
+  ownerChat?: Promise<OwnerPhoneChat>;
+  activeWork?: { id: string; startedAt: number; lastNoticeAt: number; cancel?: () => void };
   commentaryAcks: Map<string, { delegationId: string | null; sentAt: number; timer: ReturnType<typeof setTimeout> }>;
   phoneGreetingEventId?: string;
   phoneStartup?: {
@@ -68,6 +71,7 @@ type ManagedSession = {
 };
 const setups = new Set<Promise<unknown>>();
 const phoneMemoryWrites = new Set<Promise<void>>();
+const ownerJobs = new Set<Promise<string>>();
 function trackSetup<T>(job: Promise<T>): Promise<T> {
   setups.add(job);
   return job.then((value) => { setups.delete(job); return value; }, (error) => { setups.delete(job); throw error; });
@@ -250,13 +254,15 @@ function rememberAcceptedSip(id: string) {
 /** Identical owner gate for the audible role and backend tool access. */
 function ownerPhoneTools(options: LiveSessionOptions): boolean {
   return options.visibility === "private" && options.allowTools === true &&
+    options.telefonPeer?.richtung === "eingehend" &&
     Number.isSafeInteger(options.telefonOwnerContactId) && options.telefonOwnerContactId! > 0 &&
     String(options.telefonOwnerContactId) === process.env.LUKAS_TELEFON_OWNER_CONTACT_ID?.trim() &&
     Boolean(options.telefonKontextId) &&
     (process.env.LUKAS_TELEFON_STRENG ?? "false").trim().toLowerCase() !== "true";
 }
 const OWNER_PHONE_INSTRUCTIONS = `PRIVATE OWNER-SITZUNG: Der serverseitig freigegebene Owner spricht mit dir. Du bist sein persönlicher Assistent wie im privaten Chat, nicht der Empfang für einen neuen Kunden. Frage nicht nach Firma, Budget oder Weitergabe seines eigenen Auftrags.
-Aktuelle Aufrufzahlen, Besucherzahlen und Website-Kennzahlen von Hareb Digital, TaxiBB Essen oder dem Portfolio sofort an das Backend delegieren; dort steht lese_website_kennzahlen mit derselben Datenquelle wie im Dashboard bereit. Sag nicht pauschal, dass du keinen Zugriff hast. Nenne erst nach dem Abruf die Messwerte mit Zeitraum. Ein Abruffehler ist kein Nullstand.
+Alle konkreten Aufgaben, privaten Fragen und Handlungen sofort an das gemeinsame Chat-Backend delegieren. Dort stehen dieselben aufgabenabhängigen Werkzeuge, verbundenen MCP-Dienste, Erinnerungen, Code-/Browserfunktionen und Freigabeverfahren wie im Dashboard-Chat bereit. Das gilt allgemein, nicht nur für Kennzahlen oder einzelne Beispiele. Deine Aufgabe ist die Sprachführung; erfinde keine fehlenden Zugriffsrechte. Freigaben beziehen sich auf Issas tatsächliche Worte und die konkreten Werkzeugargumente, nicht auf erfundene Zustimmung.
+Telefonaufträge und Werkzeugbelege werden in einer privaten Dashboard-Unterhaltung gespeichert. Ein bereits gestarteter Owner-Auftrag kann nach dem Auflegen weiterlaufen; das Ergebnis erscheint dort. Ein ausdrückliches Stopp beendet weitere Arbeit, ein Gesprächsende allein widerruft keinen bereits gestarteten Auftrag. Sage nur bestätigte Ergebnisse und fasse lange Antworten zum Vorlesen knapp zusammen; vollständige Ergebnisse und Links bleiben im Dashboard.
 Private Informationen und konkrete Aktionen werden durch dasselbe Backend mit denselben Werkzeugrichtlinien wie im Chat bearbeitet. Delegiere solche Fragen sofort, statt pauschal zu sagen, du hättest keinen Zugriff. Wenn er nach eingegangenen Anfragen fragt, soll das Backend lese_anfragen aufrufen und den aktuellen Datenbankstand liefern. E-Mail bei Bedarf separat lesen. Warte auf das Ergebnis; erfinde weder Anfragen noch einen leeren Posteingang. Bei technischem Fehler nenne den konkreten Abruffehler. Vertrauliche Angaben bleiben im privaten Gespräch. Die Freigabe gilt nur für diese serverseitig bestätigte Sitzung.`;
 function startManaged(
   id: string, options: LiveSessionOptions, connection: ReturnType<typeof connectionConfig>,
@@ -387,10 +393,14 @@ async function drainWork(state: ManagedSession) {
     while (!state.ended && !state.closing && state.queue.length) {
       const work = state.queue.shift()!;
       const startedAt = Date.now(), deadline = new AbortController();
-      const signal = AbortSignal.any([state.controller.signal, deadline.signal]);
-      const timeout = setTimeout(() => deadline.abort(new DOMException("Backend deadline", "TimeoutError")), 120_000);
-      timeout.unref();
-      state.activeWork = { id: work.id, startedAt, lastNoticeAt: -Infinity };
+      const owner = state.transport === "sip" && ownerPhoneTools(state.options);
+      // Verified owner jobs have the same work-loop budget as dashboard chat.
+      // They persist independently of a dropped audio connection.
+      const signal = owner ? deadline.signal : AbortSignal.any([state.controller.signal, deadline.signal]);
+      const timeout = owner ? undefined : setTimeout(() => deadline.abort(new DOMException("Backend deadline", "TimeoutError")), 120_000);
+      timeout?.unref();
+      state.activeWork = { id: work.id, startedAt, lastNoticeAt: -Infinity,
+        ...(owner ? { cancel: () => deadline.abort(new DOMException("Von dir gestoppt", "AbortError")) } : {}) };
       const progress = [8_000, 30_000].map(delay => {
         const timer = setTimeout(() => workNotice(state), delay); timer.unref(); return timer;
       });
@@ -399,6 +409,21 @@ async function drainWork(state: ManagedSession) {
       try {
         signal.throwIfAborted();
         const answer = await waitForWork((async () => {
+          if (owner) {
+            // Create no private dashboard state until a verified owner actually
+            // delegates a task. A failure never falls back to a synthetic ID.
+            const chat = await (state.ownerChat ??= import("../owner-phone-chat").then(({ createOwnerPhoneChat }) =>
+              createOwnerPhoneChat(state.options.telefonOwnerContactId!)));
+            state.conversationId = chat.id;
+            signal.throwIfAborted();
+            if (state.ended || state.closing) return "";
+            const recall = await state.phoneMemory?.recall(work.userText).catch(() => "\nKontaktarchiv nicht verfügbar; erfinde keine früheren Absprachen.") ?? "";
+            signal.throwIfAborted();
+            if (state.ended || state.closing) return "";
+            const job = chat.run(work.userText, recall);
+            ownerJobs.add(job);
+            try { return await job; } finally { ownerJobs.delete(job); }
+          }
           const [{ runLukasTurn }, instructions] = await Promise.all([import("../lukas-brain"), backendInstructions(state)]);
           // A caller can hang up while the backend-only context is still loading.
           signal.throwIfAborted();
@@ -570,6 +595,14 @@ function observe(state: ManagedSession, event: Json) {
     return;
   }
   state.transcript = state.transcript.filter((row) => row.endMs > cutoff);
+  if (state.transport === "sip" && ownerPhoneTools(state.options) &&
+      /^(?:lukas[,!]?\s+)?(?:bitte\s+)?(?:stopp?|abbrechen|brich (?:den auftrag|die arbeit|das) ab|hör auf)[.!\s]*$/i.test(userText)) {
+    state.queue = [];
+    state.activeWork?.cancel?.();
+    if (state.ownerChat) void state.ownerChat.then(chat => chat.stop()).catch(() => {});
+    try { commentary(state, delegation.id, "Ich stoppe den laufenden Auftrag. Bereits begonnene Aktionen können trotzdem erfolgt sein; den Stand findest du im Dashboard."); } catch {}
+    return;
+  }
   state.queue.push({ id: delegation.id, messages, userText });
   void drainWork(state).catch(() => { void terminateSession(state, "backend_error").catch(() => {}); });
 }
@@ -914,6 +947,8 @@ export async function closeLiveSession(sessionId: string, closeToken: string): P
 }
 export async function shutdownLiveSessions(): Promise<void> {
   shuttingDown = true;
+  shutdownOwnerPhoneWork();
   await Promise.allSettled([...setups, ...[...sessions.values()].map((state) => terminateSession(state, "server_shutdown"))]);
   await Promise.allSettled([...phoneMemoryWrites]);
+  await Promise.allSettled([...ownerJobs]);
 }

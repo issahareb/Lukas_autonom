@@ -19,6 +19,9 @@ import { callLukasModel } from "./ai/model-client";
 import { renderLukasVoice } from "./ai/voice-renderer";
 import type { VerbrauchsQuelle } from "./verbrauch-quelle";
 import { Arbeitsschleife } from "./arbeitsschleife";
+import type { OwnerCallGrant } from "./owner-call-grant";
+import type { ToolStep } from "@workspace/db";
+import { toolStep } from "./tool-step";
 
 /*
  * Ein Lukas-Durchlauf ohne Streaming — fuer Kanaele wie WhatsApp.
@@ -57,6 +60,10 @@ export async function runLukasTurn(opts: {
   userText: string;
   conversationId?: number;
   telefonOwnerContactId?: number;
+  ownerCallGrant?: OwnerCallGrant;
+  /** Server-only additions; do not replace task-aware private context. */
+  systemPromptExtra?: string;
+  onToolStep?: (step: ToolStep) => Promise<void>;
   /** Stop future model/tool work when the caller leaves or the task expires. */
   signal?: AbortSignal;
   /*
@@ -106,12 +113,12 @@ export async function runLukasTurn(opts: {
   const previousUserText = previousRoutingTask(opts.history, opts.userText);
   const routingTask = workProgressTask(activeRoutingTask(opts.userText, previousUserText));
 
-  const systemPrompt =
+  const systemPrompt = (
     opts.systemPromptOverride ??
     (await buildSystemPrompt(routingTask.slice(0, 1000), {
       ohneZieleUndTagebuch: opts.ohneZieleUndTagebuch,
       routingTask,
-    })) + workProgressContext();
+    })) + workProgressContext()) + (opts.systemPromptExtra ? "\n\n" + opts.systemPromptExtra : "");
   opts.signal?.throwIfAborted();
   let tools = opts.tools ?? (await allLukasTools(routingTask));
   opts.signal?.throwIfAborted();
@@ -137,7 +144,7 @@ export async function runLukasTurn(opts: {
     const route = opts.profil
       ? { ...directRoute(opts.profil), profile: opts.profil }
       : routeLukasModel({
-          userText: opts.userText,
+          userText: routingTask,
           previousUserText,
           hasAttachments,
           usedTools,
@@ -210,11 +217,13 @@ export async function runLukasTurn(opts: {
         // Kaputtes JSON vom Modell — das Tool meldet fehlende Felder selbst.
       }
       await startWorkStep(tc);
+      const started = Date.now();
       try {
         opts.signal?.throwIfAborted();
         const toolResult = await executeLukasTool(tc.name, input, {
           rawUserMessage: opts.userText,
           telefonOwnerContactId: opts.telefonOwnerContactId,
+          ownerCallGrant: opts.ownerCallGrant,
           conversationId,
           signal: opts.signal,
         });
@@ -303,6 +312,10 @@ export async function runLukasTurn(opts: {
           });
         }
       }
+      if (opts.onToolStep) {
+        const resultText = String(message.content ?? "");
+        await opts.onToolStep(toolStep(tc.name, input, resultText, !istMisserfolg(resultText), Date.now() - started));
+      }
       return message;
     }, { signal: opts.signal });
     convo.push(...toolMessages);
@@ -376,7 +389,7 @@ export async function runLukasTurn(opts: {
         signal: opts.signal,
         cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
         route: opts.profil ? directRoute(opts.profil) : routeLukasModel({
-          userText: opts.userText,
+          userText: routingTask,
           previousUserText,
           hasAttachments,
           usedTools,
