@@ -26,6 +26,7 @@ export async function toolHarness({baselineRef,live=false}={}) {
   // Keep the pinned source intact for the baseline selection/loading logic.
   const schemaSource=readFileSync('src/lib/lukas-tools.ts','utf8');
   writeFileSync(join(dir,'selection.ts'),fromRepo('src/lib/werkzeug-auswahl.ts'));
+  writeFileSync(join(dir,'aufgaben-bedarf.ts'),readFileSync('src/lib/aufgaben-bedarf.ts','utf8'));
   const external=join(dir,'external.mjs');
   writeFileSync(external,`
     ${live?`import {openai as provider} from ${JSON.stringify(resolve('../../lib/integrations-openai-ai/src/client.ts'))};`:''}
