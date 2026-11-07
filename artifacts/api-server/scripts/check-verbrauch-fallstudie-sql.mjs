@@ -35,6 +35,7 @@ try{
  const b=await m.fallstudienBericht({von:day,bis:day});assert.equal(b.aktuell.auftraege.length,1);assert.equal(b.aktuell.auftraege[0].gesamt,150);assert.equal(b.abgleich.aktuell.passt,true);assert.equal(b.aktuell.abdeckung.abgenommen,1);assert.equal(b.vergleich[0].bewertung,'nicht_belastbar');
  assert.equal(JSON.stringify(b).includes('private prompt must not persist'),false);
  const {nachweis,...payload}=JSON.parse(JSON.stringify(b));const crypto=await import('node:crypto');assert.equal(m.belegHash(payload),nachweis.sha256);
+ const logLine=m.archivLogZeile({art:'vergleich',tokens:150,hinweis:'first\nsecond'});assert.equal(logLine.split('\n').length,1);assert.equal(JSON.parse(logLine.slice('LUKAS_EFFIZIENZ '.length)).tokens,150,'filtered log line contains numeric evidence');
  const a=await m.archiviereVerbrauch();const a2=await m.archiviereVerbrauch();assert.equal(a.sha256,a2.sha256);const {nachweis:archiveProof,...archivePayload}=a2.daten;assert.equal(m.belegHash(archivePayload),archiveProof.sha256,'JSONB field reordering must preserve the canonical evidence hash');assert.equal((await client.query('SELECT count(*)::int AS n FROM lukas_verbrauch_berichte')).rows[0].n,1);
  await m.pool.end();console.log('PASS PostgreSQL usage: migrations, async receipts, review persistence, historical API, reconciliation, export hash, immutable daily archive');
 }finally{
