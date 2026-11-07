@@ -18,6 +18,7 @@ import { routeLukasModel, directRoute, previousRoutingTask, activeRoutingTask } 
 import { callLukasModel } from "./ai/model-client";
 import { renderLukasVoice } from "./ai/voice-renderer";
 import type { VerbrauchsQuelle } from "./verbrauch-quelle";
+import { ModelProgress } from "./ai/model-policy";
 import { Arbeitsschleife } from "./arbeitsschleife";
 
 /*
@@ -131,6 +132,7 @@ export async function runLukasTurn(opts: {
    * sich wiederholt, bekommt er das gesagt statt abgeschnitten zu werden.
    */
   const schleife = new Arbeitsschleife();
+  const modelProgress = new ModelProgress();
   while (schleife.darfWeiter()) {
     opts.signal?.throwIfAborted();
     const i = schleife.naechsteRunde();
@@ -168,6 +170,7 @@ export async function runLukasTurn(opts: {
       quelle: opts.quelle ?? "sonstige",
       cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
       route,
+      escalation: modelProgress.escalation,
       tools,
       messages: fuerModell,
       signal: opts.signal,
@@ -305,6 +308,7 @@ export async function runLukasTurn(opts: {
       }
       return message;
     }, { signal: opts.signal });
+    modelProgress.observe(result.toolCalls, toolMessages.map(m => String(m.content ?? "")));
     convo.push(...toolMessages);
     if (opts.tools === undefined && result.toolCalls.some(call => call.name === "mcp_find_tool")) {
       const ids = new Set(result.toolCalls.filter(call => call.name === "mcp_find_tool").map(call => call.id));
@@ -374,6 +378,7 @@ export async function runLukasTurn(opts: {
       const letzte = await callLukasModel({
       quelle: opts.quelle ?? "sonstige",
         signal: opts.signal,
+        escalation: modelProgress.escalation,
         cacheKey: `lukas-${opts.conversationId ?? "ohne"}`,
         route: opts.profil ? directRoute(opts.profil) : routeLukasModel({
           userText: opts.userText,
