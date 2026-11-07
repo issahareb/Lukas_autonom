@@ -33,6 +33,7 @@ export async function toolHarness({baselineRef,live=false}={}) {
     export const db={}; export const approvals={};
     export const isIsolatedBackend=()=>true; export const isLinkFromEmail=()=>false;
     export const hatAktivenAuftrag=()=>true; export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
+    export const merkeProviderBeleg=()=>{}; export const hatAufrufMessung=()=>true; export const bucheEinzelBeleg=()=>{};
     export const messeModellAufruf=(_input,_phase,fn)=>fn(); export const merkeAufrufUsage=()=>{}; export const merkeToolSchema=()=>{};
     export const verbucheTag=async()=>{};
     export const openai={responses:{create:async(request,opts)=>{

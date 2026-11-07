@@ -44,7 +44,8 @@ const modules = {
     export const db={select:()=>({from:table=>chain(table===conversations?[{id:1}]:state.rows)}),
       update:()=>({set:()=>chain([])}),insert:()=>({values:row=>{
         const saved={...row,id:state.rows.length+1,createdAt:new Date()};state.rows.push(saved);return chain([saved]);}})};`,
-  'verbrauch-auftrag': `export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
+  'verbrauch-auftrag': `export const markiereAuftrag=()=>{}; export const aktuellerAuftragId=()=> 'test-root';
+export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
     export const auftragsStatus=status=>globalThis.__chatAccessCheck.statuses.push(status);`,
   'lukas-tools': `import {waehleWerkzeuge} from ${JSON.stringify(resolve('src/lib/werkzeug-auswahl.ts'))};
     export const allLukasTools=async(task,discovered)=>discovered
