@@ -37,7 +37,7 @@ export function RueckfrageFenster({ frage, busy, antworten }: { frage: Rueckfrag
             e.preventDefault(); if (busy || sending || answers.some(a => !a.trim())) return;
             setSending(true); setError('');
             try {
-              const text = `Antwort auf deine Rückfrage [${frage.id}]:\n` + answers.map((answer, i) => `${i + 1}. Antwort: ${answer.trim()}`).join('\n');
+              const text = "Antwort auf deine Rückfrage:\n" + answers.map((answer, i) => `${i + 1}. Antwort: ${answer.trim()}`).join('\n');
               if (await antworten(text)) { try { sessionStorage.removeItem(`lukas_question_${frage.id}`); } catch {} setOpen(false); }
               else setError('Die Antwort konnte nicht bestätigt werden. Deine Eingabe bleibt erhalten.');
             } catch { setError('Senden fehlgeschlagen. Deine Eingabe bleibt erhalten.'); }

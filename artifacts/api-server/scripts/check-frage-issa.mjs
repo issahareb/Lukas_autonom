@@ -18,7 +18,7 @@ try {
   assert.match(frageIssa(input,17,true),/mündlich/);assert.ok(!frageIssa(input,17,true).includes('"surface"'));
   const assistant={role:'assistant',content:'Bitte wähle.',steps:[{tool:'frage_issa',ok:true,result:JSON.stringify(result)}]};
   const user={role:'user',content:'Baue die React-Funktion im Repository.'};
-  const answer={role:'user',content:`Antwort auf deine Rückfrage [${result.id}]:\n1. Antwort: Kurz`};
+  const answer={role:'user',content:'Antwort auf deine Rückfrage:\n1. Antwort: Kurz'};
   assert.match(mitRueckfrageKontext(assistant,17),/Welche Variante/);
   assert.equal(mitRueckfrageKontext(assistant,18),assistant.content);
   assert.equal(mitRueckfrageKontext({...assistant,role:'user'},17),assistant.content);

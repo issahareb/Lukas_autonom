@@ -50,6 +50,6 @@ export function rueckfrageRoutingText(history: ChatNachricht[], content: string,
   while (assistantIndex >= 0 && previous[assistantIndex].role !== 'assistant') assistantIndex--;
   if (assistantIndex < 0) return content;
   const question = gespeicherteRueckfrage(previous[assistantIndex], conversationId);
-  if (!question || !content.startsWith(`Antwort auf deine Rückfrage [${question.id}]:\n`)) return content;
+  if (!question || !content.startsWith('Antwort auf deine Rückfrage:\n')) return content;
   return previous.slice(0, assistantIndex).reverse().find(m => m.role === 'user')?.content || content;
 }
