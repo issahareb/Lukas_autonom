@@ -337,7 +337,8 @@ function cacheTreffer(usage: any, provider: string): { gelesen: number; geschrie
    * niedrig ist. Genau das stand hier. Deshalb sagt `imEingang`, welcher Fall
    * vorliegt, und merkeVerbrauch rechnet danach.
    */
-  const anthropisch = provider === "anthropic" || usage.cache_read_input_tokens !== undefined || usage.cache_creation_input_tokens !== undefined;
+  const anthropisch = usage.cache_read_input_tokens != null || usage.cache_creation_input_tokens != null ||
+    (provider === "anthropic" && usage.input_tokens_details?.cached_tokens === undefined && usage.prompt_tokens_details?.cached_tokens === undefined);
   if (anthropisch) {
     return {
       gelesen: Number(usage.cache_read_input_tokens ?? 0),
