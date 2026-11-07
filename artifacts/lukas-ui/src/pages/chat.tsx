@@ -24,7 +24,7 @@ import { useAppNavigation } from "@/components/app-navigation";
 import { expressionFromSteps, type Expression } from "@/lib/expression";
 import "./chat.css";
 import { rueckfrageAus, RueckfrageFenster } from "@/components/rueckfrage";
-import { clearHandoff, lastChat, readDraft, readHandoff, rememberChat, saveDraft, saveHandoff, type ChatHandoff } from "@/lib/chat-draft";
+import { clearHandoff, lastChat, readDraft, readHandoff, rememberChat, saveDraft, saveHandoff, saveHomeDraft, type ChatHandoff } from "@/lib/chat-draft";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -357,6 +357,11 @@ export default function Chat() {
 
   const selectConversation = (id: number | null) => {
     saveDraft(activeId, input);
+    const transfer = readHandoff();
+    if (transfer && (transfer.conversationId === activeId || transfer.conversationId === undefined)) {
+      if (transfer.conversationId === undefined) saveHomeDraft(transfer.content);
+      clearHandoff(transfer.id); setHandoff(null);
+    }
     setActiveId(id); setInput(readDraft(id));
     setPending([]); setUploadError(null); setStreamError(null);
     setLiveSteps([]); setWartetAufNachzuegler(false); setNavigationError(null);
@@ -462,7 +467,7 @@ export default function Chat() {
         return next;
       });
       const transfer = readHandoff();
-      if (transfer?.conversationId === activeId && transfer.content.trim() === msg) {
+      if (transfer?.conversationId === activeId) {
         clearHandoff(transfer.id); setHandoff(null);
       }
     };

@@ -45,6 +45,9 @@ describe('Echte Chatseite: Navigation und Eingaben',()=>{
     queueChat('Diesen Text nicht verlieren','send');state.create.mockRejectedValue(new Error('offline'));
     render(<Chat/>);await screen.findByRole('alert');
     expect(readHandoff()?.content).toBe('Diesen Text nicht verlieren');expect(sent).toHaveLength(0);
+    state.create.mockResolvedValue({id:56});await userEvent.setup().click(screen.getByRole('button',{name:/Neuer Chat/}));
+    await waitFor(()=>expect(readHandoff()).toBeNull());
+    expect(sessionStorage.getItem('lukas_home_draft')).toBe('Diesen Text nicht verlieren');
   });
   it('öffnet den Anhang-Einstieg als neuen Chatentwurf ohne ungefragtes Senden',async()=>{
     queueChat('Text zur Datei','draft');render(<Chat/>);
@@ -112,6 +115,16 @@ describe('Echte Chatseite: Navigation und Eingaben',()=>{
     await screen.findByText('Speichern fehlgeschlagen');
     expect(screen.getByRole('textbox',{name:'Nachricht an Lukas'})).toHaveValue('Nicht verlieren');
     expect(sessionStorage.getItem('lukas_draft_51')).toBe('Nicht verlieren');
+  });
+
+  it('entfernt eine alte Hero-Übergabe nach bewusst korrigiertem und bestätigtem Senden',async()=>{
+    queueChat('Ursprüngliche Anfrage','send');
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/messages')?Response.json({error:'Testfehler'},{status:503}):Response.json([])));
+    const user=userEvent.setup();render(<Chat/>);await screen.findByText('Testfehler');
+    expect(readHandoff()?.attempted).toBe(true);
+    const input=screen.getByRole('textbox',{name:'Nachricht an Lukas'});await user.clear(input);await user.type(input,'Korrigierte Anfrage');
+    vi.stubGlobal('fetch',vi.fn(async(url:string)=>String(url).endsWith('/messages')?new Response('data: {"savedMessageId":123}\n\ndata: {"done":true}\n\n',{headers:{'Content-Type':'text/event-stream'}}):Response.json([])));
+    await user.click(screen.getByRole('button',{name:'Senden'}));await waitFor(()=>expect(readHandoff()).toBeNull());
   });
 
 });

@@ -335,7 +335,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .where(eq(messages.conversationId, convId))
       .orderBy(asc(messages.createdAt));
     const routingInput = rueckfrageRoutingText(history, String(content), convId);
-    const previousUserText = previousRoutingTask(history, routingInput);
+    const previousUserText = previousRoutingTask(history, String(content));
     const routingTask = workProgressTask(activeRoutingTask(routingInput, previousUserText));
     const systemPrompt = await buildSystemPrompt(routingTask.slice(0, 1000), { routingTask }) + workProgressContext();
 
