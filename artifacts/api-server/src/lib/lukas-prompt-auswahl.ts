@@ -1,4 +1,5 @@
 import { LUKAS_SOUL } from "./lukas-soul";
+import { istAntwortEntwurf, ANTWORT_ENTWURF_REGEL } from "./aufgaben-bedarf";
 
 /**
  * Die Seele bleibt vollstaendig im Repository. Ins Modell gelangt immer der
@@ -53,9 +54,12 @@ export type LukasPromptBausteine = {
 
 /** Alle Entscheidungen sind deterministisch: gleiche Aufgabe -> gleicher Prompt. */
 export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
+  if (istAntwortEntwurf(task)) {
+    return { stabil: LUKAS_PROMPT_KERN, dynamisch: ANTWORT_ENTWURF_REGEL, module: ['antwort-entwurf'] };
+  }
   const text = task.slice(0, 5000);
   const code = /\b(code|coding|github|repos?|repository|repositories|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
-  const telefon = /telefon|anruf|anrufen|ruf.*an|gespr[aä]ch|telnyx|sip|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ck/i.test(text);
+  const telefon = /telefon|anruf|\bruf(?:e)?\b.{0,120}\b(?:an|zur[uü]ck)\b|gespr[aä]ch|telnyx|\bsip\b|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ckruf/i.test(text);
   const mail = /e-?mail|postfach|posteingang|imap|smtp/i.test(text);
   const sms = /\bsms\b|kurznachricht/i.test(text);
   const internet = /aktuell|kommend|protest|nachricht|news|recherch|webseite|website|internet|browser|scrap|crawl|such|google|fetch.url|browse.page|https?:\/\/|suchmaschine/i.test(text);

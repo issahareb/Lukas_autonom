@@ -1,0 +1,166 @@
+{
+  "baselineRef": "446b6fafffe3ef99c4d131a0c4aa73b8f0008e3f",
+  "mode": "offline-original-prompt-replay",
+  "cases": [
+    {
+      "id": "analyse",
+      "promptCharsBefore": 15607,
+      "promptCharsAfter": 15972,
+      "modulesBefore": [],
+      "modulesAfter": [
+        "antwort-entwurf"
+      ],
+      "before": {
+        "tools": 6,
+        "schemaBytes": 3757,
+        "names": [
+          "create_goal",
+          "update_goal",
+          "web_search",
+          "read_usage",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "tools": 3,
+        "schemaBytes": 1955,
+        "names": [
+          "query_memory",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "vorlagen",
+      "promptCharsBefore": 19120,
+      "promptCharsAfter": 15972,
+      "modulesBefore": [
+        "email",
+        "web",
+        "autonomie"
+      ],
+      "modulesAfter": [
+        "antwort-entwurf"
+      ],
+      "before": {
+        "tools": 9,
+        "schemaBytes": 5494,
+        "names": [
+          "lese_anfragen",
+          "create_goal",
+          "update_goal",
+          "read_usage",
+          "mcp_find_tool",
+          "mcp_call",
+          "email_search",
+          "email_read",
+          "email_send"
+        ]
+      },
+      "after": {
+        "tools": 3,
+        "schemaBytes": 1955,
+        "names": [
+          "query_memory",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "code",
+      "promptCharsBefore": 32383,
+      "promptCharsAfter": 15972,
+      "modulesBefore": [
+        "code",
+        "telefon",
+        "diagnose",
+        "autonomie"
+      ],
+      "modulesAfter": [
+        "antwort-entwurf"
+      ],
+      "before": {
+        "tools": 13,
+        "schemaBytes": 9786,
+        "names": [
+          "create_goal",
+          "update_goal",
+          "github_list_repos",
+          "github_read_path",
+          "github_search_code",
+          "read_usage",
+          "telefon_status",
+          "telefon_kontakte",
+          "fix_error",
+          "mcp_find_tool",
+          "mcp_call",
+          "propose_code_change",
+          "execute_command"
+        ]
+      },
+      "after": {
+        "tools": 3,
+        "schemaBytes": 1955,
+        "names": [
+          "query_memory",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    },
+    {
+      "id": "uebergabe",
+      "promptCharsBefore": 26007,
+      "promptCharsAfter": 15972,
+      "modulesBefore": [
+        "telefon",
+        "web",
+        "autonomie"
+      ],
+      "modulesAfter": [
+        "antwort-entwurf"
+      ],
+      "before": {
+        "tools": 11,
+        "schemaBytes": 6584,
+        "names": [
+          "lese_anfragen",
+          "rueckruf_status",
+          "save_memory",
+          "create_goal",
+          "update_goal",
+          "query_memory",
+          "read_usage",
+          "telefon_status",
+          "telefon_kontakte",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      },
+      "after": {
+        "tools": 3,
+        "schemaBytes": 1955,
+        "names": [
+          "query_memory",
+          "mcp_find_tool",
+          "mcp_call"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "promptCharsBefore": 93117,
+    "promptCharsAfter": 63888,
+    "schemaBytesBefore": 25621,
+    "schemaBytesAfter": 7820
+  },
+  "tokenUsage": null,
+  "limitations": [
+    "Characters and serialized schema bytes are not billed tokens.",
+    "Only selected static prompt modules are measured, not the full dynamic system prompt.",
+    "No live model requests or task-quality claims. Memory, history and context-window settings are unchanged."
+  ]
+}
