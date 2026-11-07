@@ -1,3 +1,4 @@
+import { startVerbrauchsArchiv, stopVerbrauchsArchiv } from "./lib/verbrauch-archiv";
 import { startRueckrufe, stopRueckrufe } from "./lib/rueckrufe";
 import { inspectTelefonOwnerContact } from "./lib/telefon-owner";
 import { inspectTelefonCodeAccess } from "./lib/telefon-code-diagnose";
@@ -120,6 +121,7 @@ const server = app.listen(port, (err) => {
       });
   }
 
+  startVerbrauchsArchiv();
   startRueckrufe();
   startMoltbookWorker();
   startAutonomy();
@@ -135,6 +137,7 @@ const server = app.listen(port, (err) => {
    */
   const stopMithoeren = starteTelefonMithoeren(server);
   richteAbschiedEin(server, () => {
+    stopVerbrauchsArchiv();
     stopMithoeren();
     stopAutonomy();
     stopMoltbookWorker();

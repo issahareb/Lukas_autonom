@@ -60,6 +60,7 @@ export async function planWorkBatch() {}
 export async function startWorkStep() {}
 export async function finishWorkStep() {}
 export async function mitVerbrauchsAuftrag(_quelle, _conversationId, fn) { return fn(); }
+export function markiereAuftrag() {}
 export function auftragsStatus() {}
 export async function recordEmotion() {}
 export async function fuehleWerkzeug() {}

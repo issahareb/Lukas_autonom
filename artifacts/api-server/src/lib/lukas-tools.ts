@@ -351,8 +351,8 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "read_usage",
       description:
-        "Lies den dauerhaft gespeicherten Verbrauch der letzten 14 UTC-Tage aus derselben Datenquelle wie das Dashboard: frische Eingabe, Ausgabe inklusive Denken, Cache-Lesen, gemeldetes Cache-Schreiben und Gesamt je Modell. Serverneustarts setzen diese Werte nicht zurück. Keine Modellkosten oder Einsparungen aus bloßen Tokenzahlen ableiten.",
-      parameters: { type: "object", properties: {} },
+        "Lies belegbaren Verbrauch und Effizienzvergleich nach Kanal und Aufgabenart, mit Providerwerten, Messlücken und getrennten identischen Testfällen. Standard: letzte sieben abgeschlossene UTC-Tage gegen die sieben davor. Optional von/bis als YYYY-MM-DD (maximal 90 Tage); vergleichVon/vergleichBis erlauben einen gleich langen älteren Basiszeitraum, etwa für eine Fallstudie innerhalb derselben Woche. besser/schlechter nur bei gleicher Aufgabe und gesonderter Abnahme; keine Euroeinsparung erfinden.",
+      parameters: { type: "object", properties: { von:{type:"string",description:"Erster UTC-Tag YYYY-MM-DD, gemeinsam mit bis."}, bis:{type:"string",description:"Letzter UTC-Tag YYYY-MM-DD, gemeinsam mit von."}, vergleichVon:{type:"string",description:"Optionaler erster Basistag YYYY-MM-DD, gemeinsam mit vergleichBis."}, vergleichBis:{type:"string",description:"Optionaler letzter Basistag, gleich lang und vor von."} }, additionalProperties:false },
     },
   },
   {
@@ -1386,8 +1386,8 @@ export async function executeLukasTool(
     case "ask_subagent":
       return await runSubagent(String(input.agent), String(input.auftrag ?? ""));
     case "read_usage": {
-      const { verbrauchsbericht, formatiereVerbrauch } = await import("./verbrauchsbericht");
-      return formatiereVerbrauch(await verbrauchsbericht(14));
+      const { fallstudienBericht, formatiereFallstudie } = await import("./verbrauch-fallstudie");
+      return formatiereFallstudie(await fallstudienBericht({von:input.von,bis:input.bis,vergleichVon:input.vergleichVon,vergleichBis:input.vergleichBis}));
     }
     case "read_diagnostics":
       return await leseDiagnose(typeof input.stunden === "number" ? input.stunden : 24);

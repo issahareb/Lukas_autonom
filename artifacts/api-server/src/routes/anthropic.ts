@@ -1,7 +1,7 @@
 import { runToolBatch } from "../lib/tool-batch";
 import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "../lib/work-progress";
 import { istMisserfolg } from "../lib/werkzeug-ergebnis";
-import { mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
+import { aktuellerAuftragId, markiereAuftrag, mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
 import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
 import type OpenAI from "openai";
@@ -275,6 +275,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     const convId = parseInt(req.params.id);
     const { content } = req.body;
     if (!content) return void res.status(400).json({ error: "content required" });
+    try { markiereAuftrag(String(content), req.body.fallstudie); }
+    catch { auftragsStatus("abgebrochen"); return void res.status(400).json({ error: "Ungültige Fallstudie: serie, fall und abnahme erforderlich." }); }
+    res.setHeader("X-Lukas-Auftrag", aktuellerAuftragId() ?? "");
     // This route is behind lukasAuth. Never mint this capability from model output.
     const ownerCallGrant = ownerCallGrantFromMessage(String(content));
 

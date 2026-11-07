@@ -92,6 +92,20 @@
       "when": 1793752653590,
       "tag": "0012_orange_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794055566824,
+      "tag": "0013_tricky_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794055818397,
+      "tag": "0014_soft_frank_castle",
+      "breakpoints": true
     }
   ]
 }
