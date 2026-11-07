@@ -23,10 +23,12 @@ import { LukasAvatar, type LukasMood } from "@/components/lukas-avatar";
 import { WartetAufDich } from "@/components/wartet-auf-dich";
 import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import "./dashboard.css";
+import { queueChat, readHomeDraft, saveHomeDraft } from '@/lib/chat-draft';
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(readHomeDraft);
+  useEffect(() => saveHomeDraft(text), [text]);
   const eingabe = useRef<HTMLTextAreaElement>(null);
   const sprache = useSprachsitzung();
   const { data, isError, refetch } = useGetLukasDashboard();
@@ -42,7 +44,7 @@ export default function Dashboard() {
   function absenden() {
     const frage = text.trim();
     if (!frage) return;
-    sessionStorage.setItem("lukas_startfrage", frage);
+    queueChat(frage, 'send');
     setText("");
     navigate("/chat");
   }
@@ -103,7 +105,7 @@ export default function Dashboard() {
               aria-label="Frage an Lukas"
             />
             <div className="home-composer-actions">
-              <button type="button" className="home-attach" onClick={() => navigate("/chat")} aria-label="Datei anhängen (im Chat)">
+              <button type="button" className="home-attach" onClick={() => { queueChat(text, 'draft'); navigate('/chat'); }} aria-label="Datei anhängen (im Chat)">
                 <Paperclip size={19} aria-hidden="true" />
               </button>
               <span>Mit Lukas weiterdenken</span>

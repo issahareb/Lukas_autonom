@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {pathToFileURL} from 'node:url';
+const dir=mkdtempSync(join(tmpdir(),'frage-issa-'));
+try {
+  const out=join(dir,'frage.mjs');await build({entryPoints:['src/lib/frage-issa.ts'],outfile:out,bundle:true,format:'esm',platform:'node',logLevel:'silent'});
+  const {frageIssa}=await import(pathToFileURL(out));
+  const input={fragen:[{frage:'Welche Variante?',optionen:['Kurz','Lang']}]};
+  const result=JSON.parse(frageIssa(input,17));
+  assert.equal(result.surface,'lukas-rueckfrage');assert.equal(result.conversationId,17);assert.deepEqual(result.fragen,input.fragen);
+  assert.notEqual(result.id,JSON.parse(frageIssa(input,17)).id);
+  for(const bad of [{fragen:[]},{fragen:Array(4).fill(input.fragen[0])},{fragen:[{frage:'x'}]},{fragen:[{frage:'Welche Variante?',optionen:['Nur eine']}]},{fragen:[{frage:'Gib mir dein Passwort'}]}])assert.throws(()=>frageIssa(bad,17));
+  for(const id of [undefined,-1,0,1.5])assert.throws(()=>frageIssa(input,id));
+  assert.match(frageIssa(input,17,true),/mündlich/);assert.ok(!frageIssa(input,17,true).includes('"surface"'));
+  console.log('PASS frage_issa: structured private-chat question, bounded choices, credential rejection, stable conversation scope and spoken telephone fallback.');
+}finally{rmSync(dir,{recursive:true,force:true});}

@@ -129,7 +129,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
       <Dialog.Root open={mehr} onOpenChange={setMehr}>
-        <Dialog.Portal>
+        {mehr && <Dialog.Portal>
           <Dialog.Overlay className="app-sheet-overlay" />
           <Dialog.Content className="app-sheet app-drawer" onCloseAutoFocus={event => {
             event.preventDefault();
@@ -168,7 +168,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               Abmelden
             </button>
           </Dialog.Content>
-        </Dialog.Portal>
+        </Dialog.Portal>}
       </Dialog.Root>
     </div>
     </AppNavigationContext.Provider>
