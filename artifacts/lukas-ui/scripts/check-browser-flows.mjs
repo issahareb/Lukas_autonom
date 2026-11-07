@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {chromium} from 'playwright';
 const root=resolve('artifacts/lukas-ui/dist/public');
@@ -48,7 +48,15 @@ try{
   await page.getByRole('textbox',{name:'Nachricht an Lukas'}).fill('Entwurf bleibt');await navigate('Übersicht');await navigate('Chat');
   assert.equal(await page.getByRole('textbox',{name:'Nachricht an Lukas'}).inputValue(),'Entwurf bleibt');
   await page.getByRole('textbox',{name:'Nachricht an Lukas'}).fill('fixture frage');await page.getByRole('button',{name:'Senden',exact:true}).click();
-  await page.getByRole('dialog',{name:'Lukas hat eine Rückfrage'}).waitFor();await page.getByRole('radio',{name:'Zweite'}).check();
+  await page.getByRole('dialog',{name:'Lukas hat eine Rückfrage'}).waitFor();
+  await mkdir(resolve('artifacts/lukas-ui/ui-preview'),{recursive:true});
+  const questionImage=await page.screenshot({path:resolve('artifacts/lukas-ui/ui-preview/rueckfrage-mobil.png')});
+  console.log('UI_QUESTION_IMAGE:'+questionImage.toString('base64'));
+  await page.setViewportSize({width:390,height:500});
+  const dialogBox=await page.getByRole('dialog',{name:'Lukas hat eine Rückfrage'}).boundingBox();
+  assert.ok(dialogBox.y>=0&&dialogBox.y+dialogBox.height<=501,'Question remains inside a smaller mobile viewport');
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('radio',{name:'Zweite'}).check();
   const questionResponse=page.waitForResponse(r=>r.url().endsWith('/messages')&&r.request().method()==='POST'&&r.request().postDataJSON().content.includes('Antwort: Zweite'));
   await page.getByRole('button',{name:'Antwort senden'}).click();await questionResponse;await page.getByRole('dialog').waitFor({state:'hidden'});
   assert.equal(sent.at(-1).id,sent[0].id);assert.match(sent.at(-1).content,/Antwort: Zweite/);
