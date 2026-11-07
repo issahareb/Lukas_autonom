@@ -13,6 +13,8 @@ export function istAntwortEntwurf(task: string): boolean {
   // "prepare a template and send it", repo changes or research with a draft.
   if (/\b(?:ruf(?:e)?|anrufen|sende\w*|versend\w*|schick\w*|veröffentlich(?:e|en|t|st)?|veroeffentlich(?:e|en|t|st)?|deploy\w*|merge\w*|commit\w*|push\w*|buch(?:e|en)|lösch\w*|loesch\w*|änder(?:e|n)|aender(?:e|n)|speicher\w*|recherchier\w*|installier\w*|führ(?:e|en)?|fuehr(?:e|en)?|ausführen|ausfuehren)\b/i.test(ohneVerbote)) return false;
   if (/https?:|\b(?:github|repo(?:s|sitory)?|dateisystem|postfach|posteingang)\b/i.test(ohneVerbote)) return false;
+  if (/\b(?:lege?|legen|trag(?:e|en)?|füge|fuege|upload\w*|lade\w*)\b|(?:^|\s)\/(?:[\w.-]+\/)*[\w.-]+|\b[\w-]+\.(?:md|txt|docx|pdf|html|tsx?|jsx?|py)\b/i.test(ohneVerbote)) return false;
+  if (/\b(?:aus|anhand|mit)\b.{0,60}\b(?:mein\w*|unser\w*)\b.{0,40}\b(?:mails?|e-mails?|dateien|dokumenten|nachrichten|kundendaten)\b/i.test(ohneVerbote)) return false;
   const erstellen = /\b(?:erstell\w*|schreib\w*|formulier\w*|liefer\w*|analysier\w*|berechn\w*)\b/i.test(text);
   const vorlage = /\b(?:vorlagen?|textentw[uü]rf\w*|[uü]bergabevermerk)\b/i.test(text);
   const nurChat = /\b(?:nur|ausschließlich|ausschliesslich)\s+(?:hier\s+)?(?:im\s+chat\s+)?antworten\b/i.test(text);

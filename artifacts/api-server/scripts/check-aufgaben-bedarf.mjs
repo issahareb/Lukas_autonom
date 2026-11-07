@@ -40,6 +40,9 @@ try {
     ['Erstelle eine Vorlage und speichere sie','mcp_find_tool',null],
     ['Erstelle eine Vorlage für https://example.com','fetch_url','web'],
     ['Erstelle eine Vorlage und führe die Tests aus','mcp_find_tool',null],
+    ['Erstelle eine Vorlage und lege sie im Kundenordner ab','mcp_find_tool',null],
+    ['Erstelle eine Vorlage in /tmp/template.md','mcp_find_tool',null],
+    ['Erstelle eine Vorlage anhand meiner letzten E-Mails','email_read','email'],
   ];
   for(const [task,tool,module] of actions){
     assert.equal(istAntwortEntwurf(task),false,task);
