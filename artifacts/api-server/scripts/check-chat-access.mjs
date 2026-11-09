@@ -55,12 +55,15 @@ export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
     export async function executeLukasTool(name,input){globalThis.__chatAccessCheck.calls.push({name,input});
       if(globalThis.__chatAccessCheck.execute)return globalThis.__chatAccessCheck.execute(name,input);
       throw new Error(name==='email_search'?'EMAIL_USER fehlt':'VPS_SSH_KEY: All configured authentication methods failed');}`,
-  // Persistent work journals have their own regression suite. This isolated
-  // route fixture must not depend on a deployment DATABASE_URL or real pool.
-  'work-progress': `export const withWorkProgress=(_scope,_task,fn)=>fn();
-    export const workProgressContext=()=>''; export const workProgressTask=task=>task;
-    export const workProgressStatus=()=>{}; export const planWorkBatch=async()=>{};
-    export const startWorkStep=async()=>{}; export const finishWorkStep=async()=>{};`,
+  'pg': `export default {Client:class {
+    on(){} async connect(){} async end(){}
+    async query(sql,args){
+      const state=globalThis.__chatAccessCheck;
+      if(sql.includes('pg_try_advisory_lock'))return {rows:[{ok:true}]};
+      if(sql.startsWith('SELECT auftrag'))return {rows:state.progressJournal?[structuredClone(state.progressJournal)]:[]};
+      return {rows:[]};
+    }
+  }};`,
   'owner-call-grant': 'export const ownerCallGrantFromMessage=()=>undefined;',
   'bildablage': 'export const nimmBilder=()=>[]; export const entwerteAlteBilder=()=>{}; export const BILD_MARKE="";',
   'lernen': 'export const merkeErfahrung=()=>{};',
@@ -209,6 +212,47 @@ try {
     }
     console.log('PASS full catalogue parity: 16 task families offer identical canonical tools in actual dashboard and owner-phone loops.');
   }finally{await rm(catalog.dir,{recursive:true,force:true});}
+
+
+  // PR #39 regression matrix: external DB/model/dispatch are stubs; journal,
+  // dashboard/brain/owner-phone loops, tool selection and routing stay real.
+  const failures=[];
+  const verify=(label,check)=>{try{check();console.log('PASS PR39 '+label);}catch(error){failures.push(label+': '+error.message);console.log('FAIL PR39 '+label+': '+error.message);}};
+  state.tools=fixtureNames.map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}}));
+  for(const channel of ['dashboard','brain','owner-phone']){
+    const offers=[];
+    state.execute=async name=>{if(name==='email_search')throw new Error('EMAIL_USER fehlt');return '■ email_send [Eigenes Werkzeug]\nSchema: to required';};
+    state.model=async({tools})=>{
+      offers.push(tools.map(t=>t.function.name));const n=state.modelCalls++;
+      if(n===0)return {content:'',toolCalls:[{id:'mail',name:'email_search',arguments:'{}'}]};
+      if(n===1)return {content:'',toolCalls:[{id:'discover',name:'mcp_find_tool',arguments:'{"query":"email_send"}'}]};
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'Lies mein E-Mail-Postfach');
+    verify(channel+' credential discovery',()=>{
+      assert.equal(offers.length,3);assert.ok(!offers[0].includes('email_send'));
+      assert.ok(!offers[2].includes('email_send'),'email_send must remain blocked after discovery');
+    });
+  }
+  const savedDatabaseUrl=process.env.DATABASE_URL,savedProgressFlag=process.env.LUKAS_WORK_PROGRESS;
+  process.env.DATABASE_URL='postgresql://fixture.invalid/test';delete process.env.LUKAS_WORK_PROGRESS;
+  state.progressJournal={auftrag:'Implementiere einen Cache im TypeScript Repo',status:'interrupted',schritte:[]};
+  for(const finalCall of [false,true])for(const channel of ['dashboard','brain','owner-phone']){
+    const routes=[];state.execute=async()=> 'Memory result';
+    state.model=async input=>{
+      routes.push(input.route.profile);state.modelCalls++;
+      if(finalCall&&state.modelCalls===1)return {content:'',toolCalls:[{id:'memory',name:'query_memory',arguments:'{}'}],usage:{rein:500000,raus:0}};
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'weiter');
+    verify(channel+' journal continuation'+(finalCall?' with final call':''),()=>{
+      assert.deepEqual(routes,finalCall?['code','code']:['code']);
+    });
+  }
+  if(savedDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=savedDatabaseUrl;
+  if(savedProgressFlag===undefined)delete process.env.LUKAS_WORK_PROGRESS;else process.env.LUKAS_WORK_PROGRESS=savedProgressFlag;
+  delete state.progressJournal;
+  if(failures.length){console.log('PR39 FAILURES '+JSON.stringify(failures));process.exitCode=1;}
 
 } finally {
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

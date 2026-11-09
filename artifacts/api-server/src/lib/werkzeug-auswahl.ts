@@ -81,13 +81,18 @@ export function zugangsFehler(name: string, error: unknown): boolean {
   return /EMAIL_USER|EMAIL_APP_PASSWORD|VPS_SSH_KEY|All configured authentication methods failed|Anmeldung erforderlich|Unauthorized|\b401\b|\b403\b/.test(text);
 }
 
-export function werkzeugeNachFehler(tools: OpenAI.Chat.Completions.ChatCompletionTool[], name: string, error: unknown) {
+/** Include unavailable siblings even when task routing omitted their schemas. */
+export function gesperrteWerkzeugNamen(name: string, error: unknown): Set<string> {
+  if (!zugangsFehler(name, error)) return new Set();
   const text = error instanceof Error ? error.message : String(error);
-  if (!zugangsFehler(name, error)) return tools;
-  const blocked = /VPS_SSH_KEY|authentication methods failed/.test(text)
+  return /VPS_SSH_KEY|authentication methods failed/.test(text)
     ? new Set(["execute_command", "execute_on_host", "reset_sandbox", ...(process.env.LUKAS_BROWSER_URL?.trim() ? [] : ["browse_page", "browser_do"])])
     : /EMAIL_USER|EMAIL_APP_PASSWORD/.test(text)
     ? new Set(["email_search", "email_read", "email_send"])
     : new Set([name]);
+}
+
+export function werkzeugeNachFehler(tools: OpenAI.Chat.Completions.ChatCompletionTool[], name: string, error: unknown) {
+  const blocked = gesperrteWerkzeugNamen(name, error);
   return tools.filter(t => t.type !== "function" || !blocked.has(t.function.name));
 }

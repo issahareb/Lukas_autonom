@@ -2,7 +2,7 @@ import { runToolBatch } from "../lib/tool-batch";
 import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "../lib/work-progress";
 import { istMisserfolg } from "../lib/werkzeug-ergebnis";
 import { aktuellerAuftragId, markiereAuftrag, mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
-import { zugangsFehler, werkzeugeNachFehler, discoveredToolNames, mergeDiscoveredTools } from "../lib/werkzeug-auswahl";
+import { zugangsFehler, werkzeugeNachFehler, gesperrteWerkzeugNamen, discoveredToolNames, mergeDiscoveredTools } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
 import type OpenAI from "openai";
 import { db } from "@workspace/db";
@@ -403,7 +403,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
         userText: routingInput,
-        previousUserText,
+        previousUserText: routingTask,
         hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
         attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
         usedTools,
@@ -491,7 +491,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
           logger.warn({ err, tool: toolCall.name }, "Lukas tool failed");
           const grund = `Fehler: ${err instanceof Error ? err.message : String(err)}`;
           const remainingTools = werkzeugeNachFehler(angeboteneTools, toolCall.name, err);
-          for (const tool of angeboteneTools) if (tool.type === "function" && !remainingTools.includes(tool)) blockedTools.add(tool.function.name);
+          for (const name of gesperrteWerkzeugNamen(toolCall.name, err)) blockedTools.add(name);
           angeboteneTools = remainingTools;
           if (zugangsFehler(toolCall.name, err)) {
             auftragsStatus("blockiert");
@@ -620,7 +620,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
         cacheKey: `lukas-${convId}`,
           route: routeLukasModel({
             userText: routingInput,
-        previousUserText,
+        previousUserText: routingTask,
             hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
             attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
             usedTools,
