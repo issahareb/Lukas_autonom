@@ -217,7 +217,7 @@ paths:
     get:
       operationId: getVerbrauch
       tags: [lukas]
-      summary: Erfasster Modellverbrauch der letzten vierzehn UTC-Tage
+      summary: Erfasster Modellverbrauch mit optionalen UTC-Datumsgrenzen
       description: >
         Eingabe enthält frische Tokens. Cache-Lesen, Cache-Schreiben und Ausgabe
         werden jeweils einmal addiert. Fehlende Messungen belegen keinen Nullverbrauch.
@@ -226,6 +226,9 @@ paths:
         Das Guthaben ist ein manuell bestätigter USD-Stand, keine Live-Abfrage.
       security:
         - LukasBearer: []
+      parameters:
+        - { name: von, in: query, schema: { type: string, format: date }, description: Erster UTC-Tag; gemeinsam mit bis. Ohne Grenzen letzte 14 Tage einschließlich heute. }
+        - { name: bis, in: query, schema: { type: string, format: date }, description: Letzter UTC-Tag einschließlich; maximal 90 Tage je Fenster. }
       responses:
         "200":
           description: Verbrauch mit Messlücken und optionalem Guthabenstand.
@@ -257,6 +260,79 @@ paths:
           description: Zugang erforderlich.
         "503":
           description: Verbrauchsdaten gerade nicht verfügbar.
+  /lukas/verbrauch/fallstudie:
+    get:
+      operationId: getVerbrauchFallstudie
+      tags: [lukas]
+      summary: Aufgabenbezogene Verbrauchsbelege und Vergleich gleich langer UTC-Fenster
+      description: Standard sind die letzten sieben abgeschlossenen UTC-Tage gegen die sieben davor. Keine Effizienzbehauptung ohne identische abgenommene Fälle. Maximal 20000 Belege, sonst Fehler statt stiller Kürzung.
+      security:
+        - LukasBearer: []
+      parameters:
+        - { name: von, in: query, schema: { type: string, format: date }, description: Aktueller erster UTC-Tag; gemeinsam mit bis. }
+        - { name: bis, in: query, schema: { type: string, format: date }, description: Aktueller letzter UTC-Tag; maximal 90 Tage. }
+        - { name: vergleichVon, in: query, schema: { type: string, format: date }, description: Optionaler erster Basistag; gemeinsam mit vergleichBis. }
+        - { name: vergleichBis, in: query, schema: { type: string, format: date }, description: Gleich langes früheres Fenster; Anfang höchstens 180 Tage vor aktuellem Anfang. }
+      responses:
+        "200":
+          description: Versionierter Bericht mit Abdeckung, Tagesaggregaten, Einzelbelegen, unabhängigen Abnahmen und kanonischem SHA-256-Nachweis. Live-Sekunden separat; kein Rechnungsabgleich.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, stand, aktuell, vorher, vergleich, quellen, abgleich, nachweis]
+                additionalProperties: true
+        "400": { description: Ungültige Grenzen oder mehr als 20000 Belege. }
+        "401": { description: Zugang erforderlich. }
+        "503": { description: Bericht nicht verfügbar. }
+  /lukas/verbrauch/archiv/{id}:
+    get:
+      operationId: getVerbrauchArchiv
+      tags: [lukas]
+      summary: Gespeicherten unveränderlichen Tagesbericht lesen
+      security:
+        - LukasBearer: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: ID des gespeicherten Tagesberichts. }
+      responses:
+        "200":
+          description: Ursprünglicher Bericht einschließlich Stand, Rohbelegen und kanonischem Hash.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { description: Owner-Zugang erforderlich. }
+        "404": { description: Bericht nicht gefunden. }
+        "503": { description: Archiv nicht verfügbar. }
+  /lukas/verbrauch/auftraege/{id}/abnahme:
+    post:
+      operationId: createVerbrauchAbnahme
+      tags: [lukas]
+      summary: Unabhängige Ergebnisabnahme für einen abgeschlossenen Root-Auftrag ergänzen
+      description: Append-only. Eine erzeugte Antwort bestätigt keine fachliche Erledigung. Nur Owner-Zugang; der optionale Bericht-Lesetoken erlaubt keine Abnahme.
+      security:
+        - LukasBearer: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: ID des abgeschlossenen Root-Auftrags. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ergebnis, pruefer, beleg]
+              properties:
+                ergebnis: { type: string, enum: [erfolgreich, fehlgeschlagen] }
+                pruefer: { type: string, minLength: 1, maxLength: 120 }
+                beleg: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "201":
+          description: Persistente Abnahme; neuere Abnahmen ergänzen ältere Einträge.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { description: Ungültige Abnahme oder Auftrag nicht gefunden beziehungsweise noch offen. }
+        "401": { description: Owner-Zugang erforderlich. }
+        "503": { description: Abnahme nicht gespeichert. }
   /lukas/openai-guthaben:
     put:
       operationId: confirmOpenaiGuthaben

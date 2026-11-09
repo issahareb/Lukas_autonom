@@ -1,5 +1,6 @@
+import { verbrauchsZeitraum } from "./verbrauch-zeitraum";
 import { db, tageskostenTable, liveVerbrauchTable, openaiGuthabenTable, verbrauchAuftraege, verbrauchAufrufe } from "@workspace/db";
-import { gte, and, isNull, desc, inArray } from "drizzle-orm";
+import { gte, lt, lte, and, isNull, desc, inArray } from "drizzle-orm";
 import { verbrauchLeeren } from "./verbrauch-quelle";
 
 type Kosten = {
@@ -44,18 +45,21 @@ export function fasseVerbrauchZusammen(kosten: Kosten[], live: Live[], tage = 14
     modelle: [...modelle.values()].sort((a,b) => b.gesamt-a.gesamt), liveModelle: [...liveModelle.values()] };
 }
 
-export async function verbrauchsbericht(tage = 14) {
+export async function verbrauchsbericht(zeitraum: number | {von?: unknown; bis?: unknown} = 14) {
   await verbrauchLeeren();
   const jetzt = new Date();
-  const seitTag = new Date(jetzt.getTime() - (tage - 1) * TAG).toISOString().slice(0, 10);
+  const z = verbrauchsZeitraum(typeof zeitraum === "number" ? {
+    von: new Date(jetzt.getTime() - (zeitraum-1)*TAG).toISOString().slice(0,10), bis: jetzt.toISOString().slice(0,10),
+  } : zeitraum,jetzt);
+  const tage = z.tage; const seitTag = z.von;
   const [kosten, live, guthaben, auftraege] = await Promise.all([
-    db.select().from(tageskostenTable).where(gte(tageskostenTable.tag, seitTag)),
-    db.select().from(liveVerbrauchTable).where(gte(liveVerbrauchTable.gestartetAt, new Date(seitTag + "T00:00:00Z"))),
+    db.select().from(tageskostenTable).where(and(gte(tageskostenTable.tag, seitTag), lte(tageskostenTable.tag,z.bis))),
+    db.select().from(liveVerbrauchTable).where(and(gte(liveVerbrauchTable.gestartetAt,z.seit),lt(liveVerbrauchTable.gestartetAt,z.bisExklusiv))),
     db.select().from(openaiGuthabenTable).limit(1),
-    db.select().from(verbrauchAuftraege).where(and(isNull(verbrauchAuftraege.parentId), gte(verbrauchAuftraege.gestartetAt, new Date(seitTag + "T00:00:00Z")))).orderBy(desc(verbrauchAuftraege.gestartetAt)).limit(30),
+    db.select().from(verbrauchAuftraege).where(and(isNull(verbrauchAuftraege.parentId), gte(verbrauchAuftraege.gestartetAt,z.seit), lt(verbrauchAuftraege.gestartetAt,z.bisExklusiv))).orderBy(desc(verbrauchAuftraege.gestartetAt)).limit(30),
   ]);
   const aufrufe = auftraege.length ? await db.select().from(verbrauchAufrufe).where(inArray(verbrauchAufrufe.rootId, auftraege.map(a => a.id))).orderBy(verbrauchAufrufe.gestartetAt) : [];
-  return { ...fasseVerbrauchZusammen(kosten, live, tage, jetzt), guthaben: guthaben[0] ?? null,
+  return { ...fasseVerbrauchZusammen(kosten, live, tage, new Date(z.bis+"T12:00:00Z")), stand:jetzt.toISOString(), zeitraum:z, guthaben: guthaben[0] ?? null,
     cacheHinweis: "OpenAI meldet keine separate Cache-Schreibzahl. Dort ist 0 in älteren Summen kein separat gemessener Wert. Die Eingabe enthält bereits alle nicht aus dem Cache gelesenen Tokens.",
     auftraege: auftraege.map(a => {
       const calls = aufrufe.filter(c => c.rootId === a.id);

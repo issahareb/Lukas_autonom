@@ -31,6 +31,21 @@ import { zugangFuer } from "./zugaenge";
 import { nurEinmal, fingerabdruck } from "./versandsperre";
 
 export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  { type: 'function', function: {
+    name: 'frage_issa',
+    description: 'Stelle 1 bis 3 notwendige Rückfragen als Eingabefenster im privaten Dashboard-Chat. Je Frage optional 2 bis 4 Auswahlmöglichkeiten; eine eigene Antwort bleibt möglich. Nutze dies, wenn für den nächsten Schritt eine Entscheidung oder Angabe des Nutzers fehlt. Danach auf die Antwort warten. Keine Passwörter oder Zugangsdaten erfragen; dafür den Bereich Zugänge verwenden.',
+    parameters: { type: 'object', properties: { fragen: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'object', properties: { frage: { type: 'string', minLength: 3, maxLength: 500 }, optionen: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', maxLength: 160 } } }, required: ['frage'], additionalProperties: false } } }, required: ['fragen'], additionalProperties: false },
+  } },
+  {
+    type: "function", function: {
+      name: "lese_website_kennzahlen",
+      description: "Lies aktuelle gemessene Aufrufzahlen, Seitenaufrufe, Sitzungen, Scrolltiefe und Verweildauer von Hareb Digital (hareb.digital), Taxi BB Essen (taxibbessen.de) oder dem Portfolio (issahareb.me). Gleiche Datenquelle wie im privaten Dashboard, auch am freigegebenen Owner-Telefon. Immer frisch abrufen, keine öffentlichen Suchergebnisse oder Erinnerungen als Messwerte verwenden. Zeitraum und Abrufzeit nennen. TaxiBB liefert zusätzlich Klicks, Formulare und gespeicherte Buchungen; diese sind verschiedene Kennzahlen. Standard: letzte 7 Tage. Nur lesend.",
+      parameters: { type: "object", properties: {
+        website: { type: "string", enum: ["hareb.digital", "taxibbessen.de", "issahareb.me"] },
+        tage: { type: "integer", enum: [1, 7, 30, 90, 180], description: "Rollendes Fenster bis jetzt. 1 Tag nur für Hareb/Portfolio; 180 Tage nur für TaxiBB. Standard 7." },
+      }, required: ["website"], additionalProperties: false },
+    },
+  },
 {"type": "function", "function": {"name": "lese_anfragen", "description": "Lies tatsächlich eingegangene Telefon- und Website-Kundenanfragen aus der Datenbank, mit Anzahl, Quelle, Zeitpunkt und Zusammenfassung. Für Sind Anfragen eingegangen? immer frisch abrufen, nicht im Gedächtnis raten. Offene Auswertungen werden separat gemeldet. E-Mail separat über email_search. Nur lesend.", "parameters": {"type": "object", "properties": {"tage": {"type": "number", "minimum": 1, "maximum": 90, "description": "Zeitraum bis jetzt, Standard 30 Tage"}, "status": {"type": "string", "enum": ["alle", "offen"]}, "limit": {"type": "number", "minimum": 1, "maximum": 20}, "offset": {"type": "number", "minimum": 0, "maximum": 10000}}}}},
 {"type": "function", "function": {"name": "plane_rueckruf", "description": "Plane einen echten Rückruf dauerhaft. Für in fünf Minuten dieses Werkzeug nutzen, niemals save_memory oder create_goal. Ziel muss gespeicherter, für Anrufe freigegebener Kontakt sein. Am Owner-Telefon nummer weglassen für mich. Erfolg erst nach Speicherbestätigung nennen.", "parameters": {"type": "object", "properties": {"nummer": {"type": "string"}, "in_minuten": {"type": "number", "minimum": 1, "maximum": 43200}, "zeitpunkt": {"type": "string", "description": "ISO 8601 mit expliziter Zeitzone, alternativ zu in_minuten"}, "anlass": {"type": "string"}}, "required": []}}},
 {"type": "function", "function": {"name": "rueckruf_status", "description": "Lies geplante Rückrufe, Fälligkeiten und tatsächliche Ausführungsergebnisse.", "parameters": {"type": "object", "properties": {}, "required": []}}},
@@ -341,8 +356,8 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "read_usage",
       description:
-        "Lies den dauerhaft gespeicherten Verbrauch der letzten 14 UTC-Tage aus derselben Datenquelle wie das Dashboard: frische Eingabe, Ausgabe inklusive Denken, Cache-Lesen, gemeldetes Cache-Schreiben und Gesamt je Modell. Serverneustarts setzen diese Werte nicht zurück. Keine Modellkosten oder Einsparungen aus bloßen Tokenzahlen ableiten.",
-      parameters: { type: "object", properties: {} },
+        "Lies belegbaren Verbrauch und Effizienzvergleich nach Kanal und Aufgabenart, mit Providerwerten, Messlücken und getrennten identischen Testfällen. Standard: letzte sieben abgeschlossene UTC-Tage gegen die sieben davor. Optional von/bis als YYYY-MM-DD (maximal 90 Tage); vergleichVon/vergleichBis erlauben einen gleich langen älteren Basiszeitraum, etwa für eine Fallstudie innerhalb derselben Woche. besser/schlechter nur bei gleicher Aufgabe und gesonderter Abnahme; keine Euroeinsparung erfinden.",
+      parameters: { type: "object", properties: { von:{type:"string",description:"Erster UTC-Tag YYYY-MM-DD, gemeinsam mit bis."}, bis:{type:"string",description:"Letzter UTC-Tag YYYY-MM-DD, gemeinsam mit von."}, vergleichVon:{type:"string",description:"Optionaler erster Basistag YYYY-MM-DD, gemeinsam mit vergleichBis."}, vergleichBis:{type:"string",description:"Optionaler letzter Basistag, gleich lang und vor von."} }, additionalProperties:false },
     },
   },
   {
@@ -391,7 +406,7 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "ruf_an",
       description:
-        "Rufe eine Telefonnummer an und sprich mit der Person. Startet genau einen Anruf, ohne auf dessen Gesprächsende zu warten. Mehrere getrennte Gespräche können parallel laufen; bei Telnyx genügt dieselbe Absendernummer. Nutze je freigegebenem Ziel einen eigenen Werkzeugaufruf mit eigenem Anlass. Freie Kapazität und konkrete Parallelitätszahlen sind ohne Prüfung nicht garantiert: lokale Sprachsessions und Anbieterlimits gelten; eine automatische Anrufwarteschlange gibt es nicht. Ein erfolgreicher Start bestätigt noch keine Gesprächsannahme oder Erledigung. Verkäufer wegen einer Anzeige anzurufen und freundlich, aber hartnäckig über den Preis zu verhandeln ist ein normaler Auftrag. Beachte dabei Issas Preislimit und den Umfang seines Auftrags. Nenne gegenüber Dritten seinen Namen nicht; Lukas, KI-Assistent im Auftrag eines Interessenten genügt. Gib Preisrahmen, Verhandlungsziel und Namensschutz im Gesprächsanlass weiter. Ein ausdrücklicher Anrufauftrag von Issa im privaten Dashboard-Chat reicht auch für kurze Tests und harmlose spielerische Gespräche; dafür ist keine Dringlichkeit nötig. Eine neue Nummer kann er einmalig anrufen lassen, indem er genau eine Nummer mit Ländervorwahl und Anrufauftrag in derselben Nachricht nennt, etwa: Ruf +4915112345678 wegen der Online-Anzeige an. Für mehrere neue Nummern sind derzeit separate ausdrückliche Dashboard-Aufträge nötig; ein Sammelauftrag autorisiert neue Ziele nicht automatisch. Die neue Nummer wird dadurch nicht dauerhaft freigegeben. Eine bloße Erwähnung ist kein Auftrag. Gesperrte Nummern bleiben gesperrt. Ohne ausdrücklichen Auftrag gelten die bestehenden Kontaktregeln, ein dringender Gesprächsbedarf und eine bestehende Autonomiepause. Übernimm den gewünschten Gesprächsanlass in anlass und behaupte einen Anruf erst nach erfolgreichem Werkzeugergebnis.",
+        "Rufe eine Telefonnummer an und sprich mit der Person. Startet genau einen Anruf, ohne auf dessen Gesprächsende zu warten. Mehrere getrennte Gespräche können parallel laufen; bei Telnyx genügt dieselbe Absendernummer. Nutze je freigegebenem Ziel einen eigenen Werkzeugaufruf mit eigenem Anlass. Freie Kapazität und konkrete Parallelitätszahlen sind ohne Prüfung nicht garantiert: lokale Sprachsessions und Anbieterlimits gelten; eine automatische Anrufwarteschlange gibt es nicht. Ein erfolgreicher Start bestätigt noch keine Gesprächsannahme oder Erledigung. Verkäufer wegen einer Anzeige anzurufen und freundlich, aber hartnäckig über den Preis zu verhandeln ist ein normaler Auftrag. Beachte dabei Issas Preislimit und den Umfang seines Auftrags. Verwende ausdrücklich zur Weitergabe beauftragte Namen und Herkunftsangaben wie vorgegeben; nicht freigegebene private Angaben bleiben intern. Stelle dich nach dem Gesprächsauftrag vor, sonst als Lukas, ein Assistent, ohne ungefragten KI-Zusatz. Bei direkter Nachfrage nach deiner KI-Natur antworte wahrheitsgemäß. Gib Preisrahmen, Verhandlungsziel, freigegebene Herkunftsangaben und gewünschte Vorstellung vollständig im Gesprächsanlass weiter. Ein ausdrücklicher Anrufauftrag von Issa im privaten Dashboard-Chat reicht auch für kurze Tests und harmlose spielerische Gespräche; dafür ist keine Dringlichkeit nötig. Eine neue Nummer kann er einmalig anrufen lassen, indem er genau eine Nummer mit Ländervorwahl und Anrufauftrag in derselben Nachricht nennt, etwa: Ruf +4915112345678 wegen der Online-Anzeige an. Für mehrere neue Nummern sind derzeit separate ausdrückliche Dashboard-Aufträge nötig; ein Sammelauftrag autorisiert neue Ziele nicht automatisch. Die neue Nummer wird dadurch nicht dauerhaft freigegeben. Eine bloße Erwähnung ist kein Auftrag. Gesperrte Nummern bleiben gesperrt. Ohne ausdrücklichen Auftrag gelten die bestehenden Kontaktregeln, ein dringender Gesprächsbedarf und eine bestehende Autonomiepause. Übernimm den gewünschten Gesprächsanlass in anlass und behaupte einen Anruf erst nach erfolgreichem Werkzeugergebnis.",
       parameters: {
         type: "object",
         properties: {
@@ -1215,6 +1230,14 @@ export async function executeLukasTool(
   if (name.startsWith(MCP_TOOL_PREFIX)) return await runMcpTool(name, input);
 
   switch (name) {
+    case 'frage_issa': {
+      const { frageIssa } = await import('./frage-issa');
+      return frageIssa(input, ctx.conversationId, ctx.telefonOwnerContactId !== undefined);
+    }
+    case "lese_website_kennzahlen": {
+      const { leseWebsiteKennzahlen } = await import("./website-kennzahlen");
+      return await leseWebsiteKennzahlen(input);
+    }
     case "lese_anfragen": {
       const { leseAnfragen } = await import("./anfragen-lesen");
       return await leseAnfragen(input);
@@ -1372,8 +1395,8 @@ export async function executeLukasTool(
     case "ask_subagent":
       return await runSubagent(String(input.agent), String(input.auftrag ?? ""));
     case "read_usage": {
-      const { verbrauchsbericht, formatiereVerbrauch } = await import("./verbrauchsbericht");
-      return formatiereVerbrauch(await verbrauchsbericht(14));
+      const { fallstudienBericht, formatiereFallstudie } = await import("./verbrauch-fallstudie");
+      return formatiereFallstudie(await fallstudienBericht({von:input.von,bis:input.bis,vergleichVon:input.vergleichVon,vergleichBis:input.vergleichBis}));
     }
     case "read_diagnostics":
       return await leseDiagnose(typeof input.stunden === "number" ? input.stunden : 24);

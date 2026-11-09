@@ -1,8 +1,9 @@
+import { fallstudienBericht, nehmeAuftragAb } from "../lib/verbrauch-fallstudie";
 import { fuehreMeldungenZusammen } from "../lib/meldungen-merge";
 import { meldungIstVeraltet } from "../lib/meldungs-status";
 import { verbrauchsbericht, bestaetigeGuthaben } from "../lib/verbrauchsbericht";
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, verbrauchBerichte } from "@workspace/db";
 import {
   memoriesTable,
   goalsTable,
@@ -467,17 +468,26 @@ router.delete("/lukas/zugaenge/:sitzung/:feld", async (req, res) => {
   }
 });
 
-/*
- * Kennzahlen.
- *
- * Bewusst OHNE Parameter fuer den Zeitraum: vierzehn Tage sind lang genug,
- * dass ein Median etwas bedeutet, und kurz genug, dass die Rohdaten in einem
- * Zug lesbar bleiben. Ein frei waehlbares Fenster laedt dazu ein, so lange
- * zu schieben, bis die Zahl gefaellt.
- */
-router.get("/lukas/verbrauch", async (_req, res) => {
-  try { res.json(await verbrauchsbericht()); }
-  catch (err) { logger.error({ err }, "Verbrauch nicht lesbar"); res.status(503).json({ error: "Verbrauchsdaten gerade nicht verfügbar." }); }
+// Same authenticated data source for dashboard, CLI and agent; no browser session required.
+router.get("/lukas/verbrauch", async (req, res) => {
+  try { res.setHeader("Cache-Control","no-store"); res.json(await verbrauchsbericht(req.query.von === undefined && req.query.bis === undefined ? 14 : {von:req.query.von,bis:req.query.bis})); }
+  catch (err) { if (err instanceof RangeError) return void res.status(400).json({error:err.message}); logger.error({ err }, "Verbrauch nicht lesbar"); res.status(503).json({ error: "Verbrauchsdaten gerade nicht verfügbar." }); }
+});
+router.get("/lukas/verbrauch/fallstudie", async (req,res) => {
+  try { res.setHeader("Cache-Control","no-store"); res.json(await fallstudienBericht({von:req.query.von,bis:req.query.bis,vergleichVon:req.query.vergleichVon,vergleichBis:req.query.vergleichBis})); }
+  catch (err) { if (err instanceof RangeError) return void res.status(400).json({error:err.message}); logger.error({err},"Fallstudie nicht lesbar"); res.status(503).json({error:"Fallstudie gerade nicht verfügbar."}); }
+});
+router.get("/lukas/verbrauch/archiv/:id", async(req,res)=>{
+  try {
+    const [row]=await db.select().from(verbrauchBerichte).where(eq(verbrauchBerichte.id,String(req.params.id))).limit(1);
+    if(!row)return void res.status(404).json({error:"Bericht nicht gefunden."});
+    res.setHeader("Cache-Control","no-store");res.json(row.daten);
+  }catch(err){logger.error({err},"Verbrauchsarchiv nicht lesbar");res.status(503).json({error:"Archiv nicht verfügbar."});}
+});
+// Owner/runner acceptance is append-only. There is intentionally no model tool to grant itself success.
+router.post("/lukas/verbrauch/auftraege/:id/abnahme", async(req,res) => {
+  try { res.status(201).json(await nehmeAuftragAb(String(req.params.id),req.body)); }
+  catch(err) { if(err instanceof RangeError) return void res.status(400).json({error:err.message}); logger.error({err},"Abnahme nicht gespeichert"); res.status(503).json({error:"Abnahme nicht gespeichert."}); }
 });
 
 router.put("/lukas/openai-guthaben", async (req, res) => {

@@ -36,6 +36,10 @@ export function lukasAuth(req: Request, res: Response, next: NextFunction): void
   // Speichern einen Zeilenumbruch an den Wert an. Fuer diesen Zugangscode ist
   // das kein Sicherheitsproblem, also tolerieren wir Rand-Whitespace bewusst,
   // statt Nutzer:innen daran verzweifeln zu lassen.
+  const readToken = process.env.LUKAS_USAGE_READ_TOKEN?.trim();
+  const auth = req.headers.authorization;
+  const readProvided = auth?.startsWith("Bearer ") ? auth.slice(7).trim() : undefined;
+  if (req.method === "GET" && ["/lukas/verbrauch", "/lukas/verbrauch/fallstudie"].includes(req.path) && readToken && gleicherToken(readProvided,readToken)) return void next();
   const token = process.env.LUKAS_API_TOKEN?.trim();
 
   if (!token) {

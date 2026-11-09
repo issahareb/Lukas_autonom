@@ -561,7 +561,7 @@ try {
   globalThis.telefonEintrag.mithoerenZustimmung = true;
   globalThis.telefonEintrag.mithoerenQuelle = "email";
   globalThis.telefonEintrag.mithoerenBestaetigtAm = new Date();
-  const vorstellung = "Stelle dich als Matthias ohne KI-Bezeichnung in der Begrüßung vor. Verhandle locker und witzig.";
+  const vorstellung = "Stelle dich als Matthias vor. Sage, du kommst von Kamil, und frage wegen Teleson. Erwähne KI nur auf direkte Nachfrage und antworte dann ehrlich.";
   await starteAnruf("Max Muster", vorstellung);
   assert.equal(providerCalls.at(-1).context.mithoeren, true);
   assert.equal(providerCalls.at(-1).context.aufnahme, false);

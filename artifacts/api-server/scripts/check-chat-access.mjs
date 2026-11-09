@@ -35,6 +35,7 @@ state.model = async ({ tools, messages }) => {
 };
 const modules = {
   '@workspace/db': `
+    export const pool={};
     export const conversations={name:'conversations',id:'id'};
     export const messages={name:'messages',conversationId:'conversationId',createdAt:'createdAt'};
     export const attachments={name:'attachments',conversationId:'conversationId',messageId:'messageId'};
@@ -44,7 +45,8 @@ const modules = {
     export const db={select:()=>({from:table=>chain(table===conversations?[{id:1}]:state.rows)}),
       update:()=>({set:()=>chain([])}),insert:()=>({values:row=>{
         const saved={...row,id:state.rows.length+1,createdAt:new Date()};state.rows.push(saved);return chain([saved]);}})};`,
-  'verbrauch-auftrag': `export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
+  'verbrauch-auftrag': `export const markiereAuftrag=()=>{}; export const aktuellerAuftragId=()=> 'test-root';
+export const mitVerbrauchsAuftrag=(_q,_id,fn)=>fn();
     export const auftragsStatus=status=>globalThis.__chatAccessCheck.statuses.push(status);`,
   'lukas-tools': `import {waehleWerkzeuge} from ${JSON.stringify(resolve('src/lib/werkzeug-auswahl.ts'))};
     export const allLukasTools=async(task,discovered)=>discovered
@@ -58,7 +60,7 @@ const modules = {
     async query(sql,args){
       const state=globalThis.__chatAccessCheck;
       if(sql.includes('pg_try_advisory_lock'))return {rows:[{ok:true}]};
-      if(sql.startsWith('SELECT auftrag'))return {rows:[structuredClone(state.progressJournal)]};
+      if(sql.startsWith('SELECT auftrag'))return {rows:state.progressJournal?[structuredClone(state.progressJournal)]:[]};
       return {rows:[]};
     }
   }};`,
@@ -115,6 +117,13 @@ try {
   const brainOutput=join(directory,'brain.mjs');
   await build({entryPoints:['src/lib/lukas-brain.ts'],outfile:brainOutput,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
   const {runLukasTurn}=await import(pathToFileURL(resolve(brainOutput)).href);
+  const phoneOutput=join(directory,'phone-chat.mjs');
+  await build({entryPoints:['src/lib/owner-phone-chat.ts'],outfile:phoneOutput,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'silent',plugins});
+  const {createOwnerPhoneChat}=await import(pathToFileURL(resolve(phoneOutput)).href);
+  const phoneChat=await createOwnerPhoneChat(7,{create:async()=>1,
+    start:async(_id,text)=>{state.rows.push({role:'user',content:text});const history=[...state.rows];const messageId=state.rows.length;state.rows.push({role:'assistant',content:'pending'});return {messageId,history};},
+    save:async(id,text,steps)=>{state.rows[id]={role:'assistant',content:text,steps};}});
+
   const fixtureNames=['github_read_path','github_search_code','execute_command','email_search','email_send',
     'telefon_kontakte','ruf_an','lese_anfragen','mcp_find_tool','mcp_call','query_memory'];
   state.tools=fixtureNames.map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}}));
@@ -129,7 +138,7 @@ try {
     {before:['Implementiere einen Cache im TypeScript Repo','weiter','weiter'],current:'Ja, mach das',modules:['code','diagnose'],has:['github_read_path','execute_command'],missing:['email_search','ruf_an']},
     {before:['Prüfe mein E-Mail-Postfach'],current:'Prüfe das TypeScript Repository und rufe einen Kontakt an',modules:['code','telefon','diagnose'],has:['github_read_path','ruf_an'],missing:['email_search']},
   ];
-  for(const channel of ['dashboard','brain']) for(const scenario of cases){
+  for(const channel of ['dashboard','brain','owner-phone']) for(const scenario of cases){
     const history=scenario.before.flatMap(content=>[{role:'user',content},{role:'assistant',content:'Bisherige Antwort.'}]);
     offered=undefined;state.promptModules=undefined;
     if(channel==='dashboard'){
@@ -137,6 +146,8 @@ try {
       const reply=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
         method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:scenario.current}),signal:AbortSignal.timeout(10000)});
       assert.equal(reply.status,200);assert.match(await reply.text(),/"done":true/);
+    }else if(channel==='owner-phone'){
+      state.rows=history;assert.equal(await phoneChat.run(scenario.current,''),'Antwort.');
     }else{
       assert.equal(await runLukasTurn({userText:scenario.current,history:[...history,{role:'user',content:scenario.current}],conversationId:1}),'Antwort.');
     }
@@ -152,10 +163,11 @@ try {
   await runLukasTurn({userText:'Implementiere TypeScript Code',history:[],tools:[],systemPromptOverride:'Public only',conversationId:1});
   assert.deepEqual(offered.tools,[],'explicitly tool-free turns stay tool-free');
   assert.equal(offered.messages[0].content,'Public only','explicit prompt override remains authoritative');
-  console.log('OK — 12 real dashboard/brain scenarios: topic changes drop stale tools and prompt modules, repeated continuations and compound tasks retain needed capabilities; overrides remain intact.');
+  console.log('OK — 18 real dashboard/brain/owner-phone scenarios: topic changes drop stale tools and prompt modules, repeated continuations and compound tasks retain needed capabilities; overrides remain intact.');
 
   const turn=async(channel,text)=>{
     state.rows=[];state.modelCalls=0;
+    if(channel==='owner-phone')return phoneChat.run(text,'');
     if(channel==='brain')return runLukasTurn({userText:text,history:[{role:'user',content:text}],conversationId:1});
     const response=await fetch(`http://127.0.0.1:${server.address().port}/anthropic/conversations/1/messages`,{
       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content:text}),signal:AbortSignal.timeout(10000)});
@@ -163,7 +175,7 @@ try {
   };
   state.tools.push({type:'function',function:{name:'save_memory',parameters:{type:'object',properties:{content:{type:'string'}},required:['content']}}});
   state.tools.push({type:'function',function:{name:'web_search',parameters:{type:'object',properties:{}}}});
-  for(const channel of ['dashboard','brain']){
+  for(const channel of ['dashboard','brain','owner-phone']){
     state.execute=async name=>name==='mcp_find_tool'?'■ save_memory [Eigenes Werkzeug]\nSchema: content required':'Erinnerung gespeichert.';
     state.model=async({tools,messages})=>{
       const names=tools.map(t=>t.function.name);const n=state.modelCalls++;
@@ -184,40 +196,63 @@ try {
     await turn(channel,'Prüfe das TypeScript Repository und suche aktuelle Quellen');assert.equal(peak,2,'real '+channel+' loop overlaps independent reads');
   }
   console.log('PASS real dashboard/brain loops: discovery loads full definitions; independent reads overlap while tool results retain call order.');
+  const {toolHarness}=await import('../bench/tool-harness.mjs');const catalog=await toolHarness();
+  try {
+    state.tools=catalog.api.LUKAS_TOOLS;
+    const tasks=['Lies mein E-Mail-Postfach','Sende eine E-Mail','Lies package.json im Repository','Implementiere einen Cache im TypeScript Repo',
+      'Bediene den Browser und klicke auf das Formular','Suche aktuelle Quellen im Internet','Speichere meine Vorliebe im Gedächtnis',
+      'Erstelle ein Ziel und aktualisiere seinen Fortschritt','Prüfe den Tokenverbrauch','Lies die Diagnose zum Fehler',
+      'Plane einen Rückruf in fünf Minuten','Rufe einen Kontakt an','Schicke eine SMS','Delegiere die Recherche an einen Subagenten',
+      'Erstelle ein Video über Higgsfield','Nenne die Aufrufzahlen von Hareb Digital'];
+    for(const text of tasks){
+      const offers=[];
+      state.model=async request=>{offers.push(request.tools.map(t=>t.function.name).sort());return {content:'Antwort.',toolCalls:[]};};
+      await turn('dashboard',text);await turn('owner-phone',text);
+      assert.deepEqual(offers[1],offers[0],text+' must offer identical canonical tools over owner phone and dashboard');
+    }
+    console.log('PASS full catalogue parity: 16 task families offer identical canonical tools in actual dashboard and owner-phone loops.');
+  }finally{await rm(catalog.dir,{recursive:true,force:true});}
 
-  // A missing mail credential blocks siblings that were not initially offered,
-  // too. Discovery must not reintroduce email_send after a read-only request.
-  for(const channel of ['dashboard','brain']){
-    state.execute=async name=>{
-      if(name==='email_search')throw new Error('EMAIL_USER fehlt');
-      return '■ email_send [Eigenes Werkzeug]\nSchema: to required';
-    };
+
+  // PR #39 regression matrix: external DB/model/dispatch are stubs; journal,
+  // dashboard/brain/owner-phone loops, tool selection and routing stay real.
+  const failures=[];
+  const verify=(label,check)=>{try{check();console.log('PASS PR39 '+label);}catch(error){failures.push(label+': '+error.message);console.log('FAIL PR39 '+label+': '+error.message);}};
+  state.tools=fixtureNames.map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}}));
+  for(const channel of ['dashboard','brain','owner-phone']){
+    const offers=[];
+    state.execute=async name=>{if(name==='email_search')throw new Error('EMAIL_USER fehlt');return '■ email_send [Eigenes Werkzeug]\nSchema: to required';};
     state.model=async({tools})=>{
-      const names=tools.map(t=>t.function.name),n=state.modelCalls++;
-      if(n===0){assert.ok(!names.includes('email_send'));return {content:'',toolCalls:[{id:'mail',name:'email_search',arguments:'{}'}]};}
+      offers.push(tools.map(t=>t.function.name));const n=state.modelCalls++;
+      if(n===0)return {content:'',toolCalls:[{id:'mail',name:'email_search',arguments:'{}'}]};
       if(n===1)return {content:'',toolCalls:[{id:'discover',name:'mcp_find_tool',arguments:'{"query":"email_send"}'}]};
-      assert.ok(!names.includes('email_send'),'unoffered credential siblings remain blocked after discovery: '+channel);
       return {content:'Antwort.',toolCalls:[]};
     };
     await turn(channel,'Lies mein E-Mail-Postfach');
+    verify(channel+' credential discovery',()=>{
+      assert.equal(offers.length,3);assert.ok(!offers[0].includes('email_send'));
+      assert.ok(!offers[2].includes('email_send'),'email_send must remain blocked after discovery');
+    });
   }
-  console.log('PASS dashboard/brain: discovery cannot restore unoffered tools sharing failed credentials.');
-
   const savedDatabaseUrl=process.env.DATABASE_URL,savedProgressFlag=process.env.LUKAS_WORK_PROGRESS;
-  try{
-    process.env.DATABASE_URL='postgresql://fixture.invalid/test';delete process.env.LUKAS_WORK_PROGRESS;
-    state.progressJournal={auftrag:'Implementiere einen Cache im TypeScript Repo',status:'interrupted',schritte:[]};
-    state.model=async input=>{offered=input;return {content:'Antwort.',toolCalls:[]};};
-    for(const channel of ['dashboard','brain']){
-      await turn(channel,'weiter');
-      assert.ok(offered.tools.some(t=>t.function.name==='github_read_path'));
-      assert.equal(offered.route.profile,'code','journal-only recovery retains code model routing: '+channel);
-    }
-    console.log('PASS dashboard/brain: journal-only continuation retains the task model profile without chat history.');
-  }finally{
-    if(savedDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=savedDatabaseUrl;
-    if(savedProgressFlag===undefined)delete process.env.LUKAS_WORK_PROGRESS;else process.env.LUKAS_WORK_PROGRESS=savedProgressFlag;
+  process.env.DATABASE_URL='postgresql://fixture.invalid/test';delete process.env.LUKAS_WORK_PROGRESS;
+  state.progressJournal={auftrag:'Implementiere einen Cache im TypeScript Repo',status:'interrupted',schritte:[]};
+  for(const finalCall of [false,true])for(const channel of ['dashboard','brain','owner-phone']){
+    const routes=[];state.execute=async()=> 'Memory result';
+    state.model=async input=>{
+      routes.push(input.route.profile);state.modelCalls++;
+      if(finalCall&&state.modelCalls===1)return {content:'',toolCalls:[{id:'memory',name:'query_memory',arguments:'{}'}],usage:{rein:500000,raus:0}};
+      return {content:'Antwort.',toolCalls:[]};
+    };
+    await turn(channel,'weiter');
+    verify(channel+' journal continuation'+(finalCall?' with final call':''),()=>{
+      assert.deepEqual(routes,finalCall?['code','code']:['code']);
+    });
   }
+  if(savedDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=savedDatabaseUrl;
+  if(savedProgressFlag===undefined)delete process.env.LUKAS_WORK_PROGRESS;else process.env.LUKAS_WORK_PROGRESS=savedProgressFlag;
+  delete state.progressJournal;
+  if(failures.length){console.log('PR39 FAILURES '+JSON.stringify(failures));process.exitCode=1;}
 
 } finally {
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

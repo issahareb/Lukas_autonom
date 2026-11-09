@@ -87,6 +87,11 @@ jobs:
           ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: node lib/db/check-migrationen.mjs
 
+      - name: Verbrauchsfallstudie (echte PostgreSQL-Persistenz)
+        env:
+          ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: node artifacts/api-server/scripts/check-verbrauch-fallstudie-sql.mjs
+
       - name: Telefon-Gedächtnis (echte PostgreSQL-Persistenz)
         env:
           PHONE_MEMORY_SQL_URL: postgresql://postgres:postgres@localhost:5432/postgres
@@ -105,6 +110,9 @@ jobs:
       # Produktion. Lief bisher nur, wenn jemand daran dachte.
       - name: Browser für den Integrationslauf
         run: npx playwright install --with-deps chromium
+
+      - name: Dashboard-Abläufe (mobiler Browser, lokale API-Fixtures)
+        run: node artifacts/lukas-ui/scripts/check-browser-flows.mjs
 
       - name: Integrationslauf (echtes Postgres, echter Browser)
         working-directory: artifacts/api-server

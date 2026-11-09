@@ -31,6 +31,7 @@ export type RiskTier = "R0" | "R1" | "R2" | "R3";
 export const TOOL_RISK: Record<string, RiskTier> = {
   // R0 — lesend
   query_memory: "R0",
+  frage_issa: 'R0',
   telefon_status: "R0",
   telefon_kontakte: "R0",
   fetch_url: "R0",
@@ -114,6 +115,7 @@ export const TOOL_RISK: Record<string, RiskTier> = {
   read_diagnostics: "R0",
   read_usage: "R0",
   lese_anfragen: "R0",
+  lese_website_kennzahlen: "R0",
 
   // Ein Code-Vorschlag schreibt nur in unsere eigene Datenbank — geschrieben
   // wird erst, wenn Issa im Dashboard auf "Annehmen" klickt. Diese Entscheidung

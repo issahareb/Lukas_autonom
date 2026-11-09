@@ -81,9 +81,12 @@ Explizite Verkäufergespräche, Verhandlungen und kurze Tests benötigen keine
 Dringlichkeit. Die Hintergrundpause bleibt davon unabhängig aktiv.
 
 Externe Telefonate verwenden einen eigenen öffentlichen Prompt ohne Owner-Biografie,
-Portfolio-Fakten oder Gedächtnisabfragen. Lukas stellt sich als KI-Assistent vor;
-der Name des Auftraggebers und interne Preisobergrenzen bleiben im Gespräch privat.
-Der Chat gibt Gesprächsziel, Angebot und Namensschutz als Anlass weiter. Eine
+Portfolio-Fakten oder Gedächtnisabfragen. Lukas richtet seine Vorstellung nach dem
+Gesprächsauftrag und erwähnt seine KI-Natur nicht ungefragt; auf direkte Nachfrage
+antwortet er wahrheitsgemäß. Ausdrücklich zur Weitergabe beauftragte Namen und
+Herkunftsangaben (etwa „Ich komme von Kamil“) sind für das jeweilige Gespräch
+freigegeben. Sonstige private Namen und interne Preisobergrenzen bleiben privat.
+Der Chat gibt Gesprächsziel, Vorstellung, freigegebene Herkunftsangaben und Angebot als Anlass weiter. Eine
 Preisabsage beendet nicht automatisch jede Verhandlung; ein ausdrücklicher Wunsch
 nach keinen weiteren Verhandlungen oder Kontakten wird respektiert.
 
@@ -116,3 +119,7 @@ Eindeutige Mailboxansagen werden anhand mehrteiliger Phrasen in den ersten
 60 Sekunden erkannt und das Gespräch beendet; bloße Erwähnungen einer Mailbox
 reichen nicht. Ungewöhnliche Ansagen können unerkannt bleiben. Das Ergebnis
 erscheint beim Anruf. Beendigung nutzt die bestehende SIP-Schließung mit Retry.
+
+Ohne abweichenden Gesprächsauftrag lautet die Vorstellung „Hallo, hier ist Lukas, ein Assistent“. Der Zusatz „KI“ wird bei der Vorstellung weggelassen; direkte Fragen zur KI-Natur werden wahrheitsgemäß beantwortet.
+
+Bei eingehenden Anrufen fremder oder unterdrückter Nummern gilt die Firmenbegrüßung „Hallo, hier ist Lukas, der Assistent von Hareb Digital. Wie kann ich Ihnen helfen?“. Der Markenname wird „Haareb“ ausgesprochen.

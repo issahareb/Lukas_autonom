@@ -23,6 +23,8 @@ import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import { useAppNavigation } from "@/components/app-navigation";
 import { expressionFromSteps, type Expression } from "@/lib/expression";
 import "./chat.css";
+import { rueckfrageAus, RueckfrageFenster } from "@/components/rueckfrage";
+import { clearHandoff, lastChat, readDraft, readHandoff, rememberChat, saveDraft, saveHandoff, saveHomeDraft, type ChatHandoff } from "@/lib/chat-draft";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -178,8 +180,18 @@ export default function Chat() {
   const autoVoice = new URLSearchParams(window.location.search).get("voice") === "auto";
   useEffect(() => { if (autoVoice) void voice.starten(); }, [autoVoice, voice.starten]);
   const [faceOverride, setFaceOverride] = useState<{ id: number; expression: Expression } | null>(null);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [input, setInput] = useState("");
+  const [activeId, setActiveId] = useState<number | null>(() => readHandoff() ? null : lastChat());
+  const [input, setInput] = useState(() => readHandoff() ? "" : readDraft(lastChat()));
+  const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(() => {
+    try { const ids = JSON.parse(sessionStorage.getItem('lukas_answered_questions') ?? '[]'); return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []); } catch { return new Set(); }
+  });
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<ChatHandoff | null>(null);
+  const handoffStarted = useRef(false);
+  const handoffSent = useRef(false);
+  const sendLock = useRef(false);
+  const createLock = useRef(false);
+  const [creating, setCreating] = useState(false);
   const [conversationSearch, setConversationSearch] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState("");
@@ -234,11 +246,13 @@ export default function Chat() {
 
   useEffect(() => {
     if (!activeId) return void setSentAttachments([]);
+    const controller = new AbortController();
     const token = localStorage.getItem("lukas_token");
-    fetch(`${BASE}/api/attachments/${activeId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    fetch(`${BASE}/api/attachments/${activeId}`, { signal: controller.signal, headers: token ? { Authorization: `Bearer ${token}` } : {} })
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows: Attachment[]) => setSentAttachments(rows))
-      .catch(() => setSentAttachments([]));
+      .then((rows: Attachment[]) => { if (!controller.signal.aborted) setSentAttachments(rows); })
+      .catch(() => { if (!controller.signal.aborted) setSentAttachments([]); });
+    return () => controller.abort();
   }, [activeId, activeConv?.messages?.length, streaming]);
 
   useLayoutEffect(() => {
@@ -341,16 +355,35 @@ export default function Chat() {
     if (wartetAufNachzuegler && letzte?.role === "assistant") setWartetAufNachzuegler(false);
   }, [activeConv?.messages, wartetAufNachzuegler]);
 
+  const selectConversation = (id: number | null) => {
+    saveDraft(activeId, input);
+    const transfer = readHandoff();
+    if (transfer && (transfer.conversationId === activeId || transfer.conversationId === undefined)) {
+      if (transfer.conversationId === undefined) saveHomeDraft(transfer.content);
+      clearHandoff(transfer.id); setHandoff(null);
+    }
+    setActiveId(id); setInput(readDraft(id));
+    setPending([]); setUploadError(null); setStreamError(null);
+    setLiveSteps([]); setWartetAufNachzuegler(false); setNavigationError(null);
+  };
+  useEffect(() => { rememberChat(activeId); }, [activeId]);
+  useEffect(() => { if (!streaming) saveDraft(activeId, input); }, [activeId, input, streaming]);
   const handleNew = async () => {
-    const res = await createConvo.mutateAsync({ data: { title: `Chat ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` } });
-    setActiveId(res.id);
-    qc.invalidateQueries({ queryKey: getListAnthropicConversationsQueryKey() });
+    if (createConvo.isPending || sendLock.current || createLock.current) return;
+    createLock.current = true; setCreating(true);
+    try {
+      const res = await createConvo.mutateAsync({ data: { title: `Chat ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` } });
+      selectConversation(res.id);
+      qc.invalidateQueries({ queryKey: getListAnthropicConversationsQueryKey() });
+    } catch { setNavigationError('Das neue Gespräch konnte nicht angelegt werden. Deine Eingabe bleibt erhalten.'); }
+    finally { createLock.current = false; setCreating(false); }
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteConvo.mutateAsync({ id });
-    if (activeId === id) setActiveId(null);
+    if (activeId === id) selectConversation(null);
+    saveDraft(id, "");
     qc.invalidateQueries({ queryKey: getListAnthropicConversationsQueryKey() });
   };
 
@@ -382,8 +415,11 @@ export default function Chat() {
   };
 
   const removePending = async (id: number) => {
-    setPending((prev) => prev.filter((a) => a.id !== id));
-    await fetch(`${BASE}/api/attachments/file/${id}`, { method: "DELETE", headers: authHeaders() }).catch(() => {});
+    try {
+      const response = await fetch(`${BASE}/api/attachments/file/${id}`, { method: "DELETE", headers: authHeaders() });
+      if (!response.ok) throw new Error();
+      setPending(prev => prev.filter(a => a.id !== id));
+    } catch { setUploadError('Der Anhang konnte nicht entfernt werden und bleibt ausgewählt. Bitte vor dem Senden erneut versuchen.'); }
   };
 
   const handleCancel = useCallback(() => {
@@ -410,14 +446,33 @@ export default function Chat() {
     if (activeId) qc.invalidateQueries({ queryKey: getGetAnthropicConversationQueryKey(activeId) });
   }, [activeId, qc]);
 
-  const handleSend = useCallback(async () => {
-    if ((!input.trim() && pending.length === 0) || !activeId || streaming) return;
-    const msg = input.trim() || "(Datei angehängt)";
+  const handleSend = useCallback(async (provided?: string, questionId?: string): Promise<boolean> => {
+    const text = typeof provided === 'string' ? provided : input;
+    if ((!text.trim() && pending.length === 0) || !activeId || streaming || sendLock.current) return false;
+    sendLock.current = true;
+    let confirmed = false;
+    const preserveDraft = provided !== undefined && text !== input;
+    const msg = text.trim() || "(Datei angehängt)";
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
 
-    setInput("");
+    const confirmSaved = () => {
+      if (confirmed) return;
+      confirmed = true;
+      saveDraft(activeId, preserveDraft ? input : '');
+      if (questionId) setAnsweredQuestions(prev => {
+        const next = new Set([...prev, questionId].slice(-100));
+        try { sessionStorage.setItem('lukas_answered_questions', JSON.stringify([...next])); } catch {}
+        return next;
+      });
+      const transfer = readHandoff();
+      if (transfer?.conversationId === activeId) {
+        clearHandoff(transfer.id); setHandoff(null);
+      }
+    };
+
+    if (!preserveDraft) setInput("");
     setPending([]);
     setOptimisticMsg(msg);
     setStreaming(true);
@@ -439,7 +494,10 @@ export default function Chat() {
         body: JSON.stringify({ content: msg }),
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`Chat fehlgeschlagen (${response.status})`);
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail || detail?.error || `Chat fehlgeschlagen (${response.status})`);
+      }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error("No stream");
@@ -474,6 +532,7 @@ export default function Chat() {
         for (const zeile of zeilen) {
           const parsed = parseSseData(zeile);
           if (!parsed) continue;
+          if (parsed.savedMessageId || parsed.content || parsed.tool || parsed.step || parsed.done) confirmSaved();
           if (parsed.content) setStreamContent((prev) => prev + String(parsed.content));
           // Werkzeuge stehen nicht mehr als "[⚙ name]" im Text — sie sind
           // eigene, anklickbare Schritte.
@@ -488,7 +547,13 @@ export default function Chat() {
             setLiveTool(null);
           }
           // Ein Fehler gehört sichtbar in den Chat, nicht in die Konsole.
-          if (parsed.error) setStreamError(String(parsed.error));
+          if (parsed.error) {
+            setStreamError(String(parsed.error));
+            if (!confirmed) {
+              if (!preserveDraft) setInput(text);
+              setPending(pending); done = true; abschlussGesehen = true;
+            }
+          }
           if (parsed.done) {
             done = true;
             abschlussGesehen = true;
@@ -506,11 +571,16 @@ export default function Chat() {
        * es nach ihrer Frist ehrlich. Nur stillschweigend nichts tun ist
        * falsch.
        */
+      if (!confirmed && !controller.signal.aborted && !abschlussGesehen) throw new Error("Die Speicherung deiner Nachricht konnte nicht bestätigt werden. Prüfe vor erneutem Senden den Verlauf.");
       if (!abschlussGesehen && !controller.signal.aborted) {
         setStreamError(null);
         setWartetAufNachzuegler(true);
       }
     } catch (err) {
+      if (!confirmed) {
+        if (!preserveDraft) setInput(text);
+        setPending(pending);
+      }
       if (err instanceof DOMException && err.name === "AbortError") {
         // Vom Stopp-Knopf — kein Fehler.
       } else {
@@ -521,10 +591,14 @@ export default function Chat() {
          * nachladen. Vorher stand hier "Load failed" und minutenlange Arbeit
          * sah aus wie verschwunden.
          */
-        setStreamError(null);
-        setWartetAufNachzuegler(true);
+        if (!confirmed) {
+          setStreamError(err instanceof Error ? err.message : 'Senden fehlgeschlagen. Die Eingabe bleibt erhalten.');
+        } else {
+          setStreamError(null); setWartetAufNachzuegler(true);
+        }
       }
     } finally {
+      sendLock.current = false;
       if (abortRef.current === controller) abortRef.current = null;
       setStreaming(false);
       setStreamContent("");
@@ -535,28 +609,36 @@ export default function Chat() {
       setLiveSteps([]);
       qc.invalidateQueries({ queryKey: getGetAnthropicConversationQueryKey(activeId) });
     }
-  }, [input, activeId, streaming, qc, pending.length]);
+    return confirmed;
+  }, [input, activeId, streaming, qc, pending]);
 
-  /*
-   * Die Frage von der Startseite uebernehmen.
-   *
-   * Dort steht das Eingabefeld, hier laeuft das Gespraech — die Frage wird
-   * ueber sessionStorage gereicht und beim ersten Rendern eingesetzt. Der
-   * Schluessel wird SOFORT geloescht: sonst taucht dieselbe Frage bei jedem
-   * Zurueckblaettern erneut auf.
-   *
-   * Abgeschickt wird nicht automatisch. Sie steht im Feld, der Cursor
-   * dahinter — wer sich vertippt hat, kann es hier noch sehen. Ein Zug, der
-   * ohne Zutun losgeht, ist bei einem Agenten mit Werkzeugen die falsche
-   * Voreinstellung.
-   */
+  // Keep the handoff until the server accepts it. StrictMode may run the
+  // effect twice; the ref and send lock prevent duplicate creation/submission.
   useEffect(() => {
-    const frage = sessionStorage.getItem("lukas_startfrage");
-    if (!frage) return;
-    sessionStorage.removeItem("lukas_startfrage");
-    setInput(frage);
-    textareaRef.current?.focus();
+    if (handoffStarted.current) return;
+    handoffStarted.current = true;
+    const transfer = readHandoff();
+    if (!transfer) return;
+    const open = async () => {
+      try {
+        const id = transfer.conversationId ?? (await createConvo.mutateAsync({ data: { title: `Chat ${new Date().toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})}` } })).id;
+        const next = { ...transfer, conversationId: id };
+        saveHandoff(next); saveDraft(id, transfer.content);
+        setActiveId(id); setInput(transfer.content); setHandoff(next);
+        qc.invalidateQueries({ queryKey: getListAnthropicConversationsQueryKey() });
+        if (transfer.attempted) { setNavigationError('Die Zustellung deiner Anfrage ist noch nicht bestätigt. Prüfe zuerst den Gesprächsverlauf; dein Entwurf bleibt erhalten.'); setHandoff(null); }
+        if (transfer.mode === 'draft') { clearHandoff(transfer.id); setHandoff(null); }
+      } catch { setNavigationError('Deine Anfrage ist gesichert. Das Gespräch konnte nicht geöffnet werden. Bitte erneut versuchen.'); }
+    };
+    void open();
   }, []);
+  useEffect(() => {
+    if (!handoff || handoff.mode !== 'send' || activeId !== handoff.conversationId || handoffSent.current) return;
+    handoffSent.current = true;
+    if (handoff.attempted) return;
+    saveHandoff({ ...handoff, attempted: true });
+    void handleSend(handoff.content);
+  }, [handoff, activeId, handleSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -566,6 +648,9 @@ export default function Chat() {
   };
 
   const allMessages = activeConv?.messages ?? [];
+  const last = allMessages.at(-1);
+  const candidate = last?.role === 'assistant' ? rueckfrageAus((last as { steps?: ToolStep[] }).steps ?? [], activeId) : null;
+  const question = candidate && !answeredQuestions.has(candidate.id) ? candidate : null;
   const face = faceOverride?.id === activeId ? faceOverride.expression : expressionFromSteps([...allMessages.flatMap(m => (m as { steps?: ToolStep[] }).steps ?? []), ...liveSteps]);
   const isMobile = useIsMobile();
   const showList = !isMobile || activeId === null;
@@ -574,12 +659,13 @@ export default function Chat() {
 
   return (
     <div className="chat-page" data-chat-view={activeId ? "thread" : "list"}>
+      {navigationError && <div role="alert" className="p-3 text-sm">{navigationError}<button type="button" onClick={() => { handoffStarted.current = false; window.location.reload(); }}>Erneut versuchen</button></div>}
       <div className="chat-workspace">
         {showList && (
           <aside className="chat-sidebar" aria-label="Gespräche">
             <div className="chat-sidebar-heading">
               <p className="chat-kicker">Dein Gesprächsraum</p><div><h1>Gespräche</h1><span>{convos.length}</span></div>
-              <Button onClick={handleNew} className="chat-new-button" disabled={createConvo.isPending}>
+              <Button onClick={handleNew} className="chat-new-button" disabled={createConvo.isPending || creating || streaming || uploading}>
                 <Plus className="w-4 h-4" aria-hidden="true" /> Neuer Chat
               </Button>
               <label className="chat-search">
@@ -593,7 +679,7 @@ export default function Chat() {
                 <Fragment key={c.id}>
                 {(index === 0 || relativeDay(c.createdAt) !== relativeDay(visibleConvos[index - 1].createdAt)) && <h2 className="chat-list-day">{relativeDay(c.createdAt)}</h2>}
                 <div className={"chat-conversation-item " + (activeId === c.id ? "is-selected" : "")}>
-                  <button type="button" onClick={() => setActiveId(c.id)} className="chat-conversation-select" aria-current={activeId === c.id ? "true" : undefined}>
+                  <button type="button" disabled={streaming || uploading || createConvo.isPending || creating} onClick={() => selectConversation(c.id)} className="chat-conversation-select" aria-current={activeId === c.id ? "true" : undefined}>
                     <MessageSquare size={17} aria-hidden="true" />
                     <span><span>{c.title}</span><small>Begonnen {chatTime(c.createdAt)}</small></span>
                   </button>
@@ -618,8 +704,8 @@ export default function Chat() {
                   {isMobile && <button type="button" onClick={openMenu} className="app-menu-toggle" aria-label="Menü öffnen" aria-haspopup="dialog"><Menu size={22} /></button>}
                   <LukasAvatar className="chat-thread-avatar" expression={face} mood={voice.status === "spricht" ? "speaking" : voice.aktiv ? "listening" : streaming || voice.status === "verbindet" ? "thinking" : "idle"} />
                   <div className="chat-thread-title"><span>Lukas</span><small>{streaming ? "Denkt nach …" : voiceRunning ? "Sprachchat aktiv" : activeConv?.title ?? "Gespräch"}</small></div>
-                  {isMobile && <button type="button" onClick={() => setActiveId(null)} className="chat-header-button" aria-label="Zurück zur Liste" title="Gespräche"><MessageSquare size={20} /></button>}
-                  <button type="button" onClick={handleNew} disabled={createConvo.isPending} className="chat-header-button" aria-label="Neuer Chat" title="Neuer Chat"><SquarePen size={20} /></button>
+                  {isMobile && <button type="button" onClick={() => selectConversation(null)} className="chat-header-button" aria-label="Zurück zur Liste" title="Gespräche"><MessageSquare size={20} /></button>}
+                  <button type="button" onClick={handleNew} disabled={createConvo.isPending || creating || streaming || uploading} className="chat-header-button" aria-label="Neuer Chat" title="Neuer Chat"><SquarePen size={20} /></button>
                 </div>
 
                 <div ref={scrollRef} onScroll={handleScroll} className="chat-scroll">
@@ -769,7 +855,7 @@ export default function Chat() {
                           <Square className="w-5 h-5 fill-current" />
                         </button>
                       ) : (
-                        <button onClick={handleSend} disabled={(!input.trim() && pending.length === 0)} className="chat-send-button" aria-label="Senden">
+                        <button onClick={() => void handleSend()} disabled={(!input.trim() && pending.length === 0)} className="chat-send-button" aria-label="Senden">
                           <ArrowUp className="w-5 h-5" />
                         </button>
                       )}
@@ -785,12 +871,13 @@ export default function Chat() {
                 <span className="chat-kicker">Raum für deine Ideen</span>
                 <h2>Große Dinge beginnen<br />mit einem Gespräch.</h2>
                 <p>Gedanken sortieren. Pläne entwickeln. Gemeinsam den nächsten Schritt finden.</p>
-                <Button onClick={handleNew} className="chat-welcome-action" disabled={createConvo.isPending}><Plus className="w-4 h-4" aria-hidden="true" /> Neues Gespräch</Button>
+                <Button onClick={handleNew} className="chat-welcome-action" disabled={createConvo.isPending || creating || streaming || uploading}><Plus className="w-4 h-4" aria-hidden="true" /> Neues Gespräch</Button>
               </div>
             )}
           </div>
         )}
       </div>
+      {question && <div className="absolute bottom-24 right-5 z-30"><RueckfrageFenster key={question.id} frage={question} busy={streaming} antworten={text => handleSend(text, question.id)} /></div>}
       {!activeId && <div className="chat-list-voice"><VoiceStatus voice={voice} /><div><span>Lieber sprechen?</span><VoiceButton voice={voice} /></div></div>}
     </div>
   );

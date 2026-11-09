@@ -1,7 +1,7 @@
 import { runToolBatch } from "../lib/tool-batch";
 import { withWorkProgress, workProgressContext, workProgressTask, planWorkBatch, startWorkStep, finishWorkStep, workProgressStatus } from "../lib/work-progress";
 import { istMisserfolg } from "../lib/werkzeug-ergebnis";
-import { mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
+import { aktuellerAuftragId, markiereAuftrag, mitVerbrauchsAuftrag, auftragsStatus } from "../lib/verbrauch-auftrag";
 import { zugangsFehler, werkzeugeNachFehler, gesperrteWerkzeugNamen, discoveredToolNames, mergeDiscoveredTools } from "../lib/werkzeug-auswahl";
 import { Router } from "express";
 import type OpenAI from "openai";
@@ -26,6 +26,10 @@ import { renderLukasVoice } from "../lib/ai/voice-renderer";
 import type { ToolStep } from "@workspace/db";
 import type { Response } from "express";
 import { Arbeitsschleife } from "../lib/arbeitsschleife";
+import { stoppWuensche, laufendeZuege, stopConversationWork } from "../lib/chat-work-state";
+import { toolStep } from "../lib/tool-step";
+
+import { mitRueckfrageKontext, rueckfrageRoutingText } from "../lib/frage-issa";
 
 const router = Router();
 
@@ -40,7 +44,6 @@ const router = Router();
  * Deshalb ein ausdrueckliches Signal: der Knopf ruft eine eigene Route auf.
  * Nur was hier drinsteht, ist ein Stopp.
  */
-const stoppWuensche = new Set<number>();
 
 /*
  * Welche Zuege gerade wirklich laufen.
@@ -58,12 +61,11 @@ const stoppWuensche = new Set<number>();
  * DIESER Prozess gerade daran", und die beantwortet ein Neustart ohnehin mit
  * nein — dann laeuft der Zug naemlich wirklich nicht mehr.
  */
-const laufendeZuege = new Map<number, number>();
 
 router.post("/anthropic/conversations/:id/stop", (req, res) => {
   const id = parseInt(req.params.id);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: "id ungültig" });
-  stoppWuensche.add(id);
+  stopConversationWork(id);
   logger.info({ conversationId: id }, "Stopp von Issa");
   res.json({ ok: true });
 });
@@ -80,18 +82,12 @@ router.post("/anthropic/conversations/:id/stop", (req, res) => {
  * Webseite sein, und die gehoert weder in die Leitung noch in die Datenbank.
  * 4000 Zeichen reichen, um zu verstehen, was passiert ist.
  */
-const SCHRITT_MAX = 4000;
 
 /** Erste Zeile eines Fehlers, kurz genug fuer eine Gefuehlsnotiz. */
 function kuerzeGrund(text: string): string {
   return text.split("\n")[0].slice(0, 200);
 }
 
-function kuerze(text: string): string {
-  return text.length > SCHRITT_MAX
-    ? `${text.slice(0, SCHRITT_MAX)}\n\n[… ${text.length - SCHRITT_MAX} weitere Zeichen]`
-    : text;
-}
 
 function zeigeSchritt(
   tool: string,
@@ -101,13 +97,7 @@ function zeigeSchritt(
   ms: number,
   sende: (nutzlast: unknown) => void,
 ): ToolStep {
-  const schritt: ToolStep = {
-    tool,
-    input: kuerze(JSON.stringify(input, null, 2)),
-    result: kuerze(result),
-    ok,
-    ms,
-  };
+  const schritt = toolStep(tool, input, result, ok, ms);
   // Sofort raus, damit man beim Zuschauen schon sieht, was er gerade getan hat.
   sende({ step: schritt });
   return schritt;
@@ -275,6 +265,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     const convId = parseInt(req.params.id);
     const { content } = req.body;
     if (!content) return void res.status(400).json({ error: "content required" });
+    try { markiereAuftrag(String(content), req.body.fallstudie); }
+    catch { auftragsStatus("abgebrochen"); return void res.status(400).json({ error: "Ungültige Fallstudie: serie, fall und abnahme erforderlich." }); }
+    res.setHeader("X-Lukas-Auftrag", aktuellerAuftragId() ?? "");
     // This route is behind lukasAuth. Never mint this capability from model output.
     const ownerCallGrant = ownerCallGrantFromMessage(String(content));
 
@@ -326,6 +319,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .insert(messages)
       .values({ conversationId: convId, role: "user", content })
       .returning();
+    // HTTP headers only acknowledge the stream; this acknowledges persisted input.
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ savedMessageId: userMessage.id })}\n\n`);
     rememberUserMessage(String(content), "dashboard");
 
     const pendingAttachments = await db
@@ -339,8 +334,9 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       .from(messages)
       .where(eq(messages.conversationId, convId))
       .orderBy(asc(messages.createdAt));
+    const routingInput = rueckfrageRoutingText(history, String(content), convId);
     const previousUserText = previousRoutingTask(history, String(content));
-    const routingTask = workProgressTask(activeRoutingTask(String(content), previousUserText));
+    const routingTask = workProgressTask(activeRoutingTask(routingInput, previousUserText));
     const systemPrompt = await buildSystemPrompt(routingTask.slice(0, 1000), { routingTask }) + workProgressContext();
 
     let expression = "neutral";
@@ -350,7 +346,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     }
     const convo: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt + `\nAktueller sichtbarer Gesichtsausdruck dieses Webchats: ${expression}.` },
-      ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...history.map((m) => ({ role: m.role as "user" | "assistant", content: mitRueckfrageKontext(m, convId) })),
     ];
 
     if (pendingAttachments.length > 0) {
@@ -406,7 +402,7 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
     while (schleife.darfWeiter() && !gestoppt()) {
       const iteration = schleife.naechsteRunde();
       const route = routeLukasModel({
-        userText: String(content),
+        userText: routingInput,
         previousUserText: routingTask,
         hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
         attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
@@ -623,8 +619,8 @@ router.post("/anthropic/conversations/:id/messages", async (req, res) => mitVerb
       quelle: "chat",
         cacheKey: `lukas-${convId}`,
           route: routeLukasModel({
-            userText: String(content),
-            previousUserText: routingTask,
+            userText: routingInput,
+        previousUserText: routingTask,
             hasAttachments: pendingAttachments.length > 0 || bilderGesehen,
             attachmentKinds: bilderGesehen ? [...attachmentKinds, "image"] : attachmentKinds,
             usedTools,

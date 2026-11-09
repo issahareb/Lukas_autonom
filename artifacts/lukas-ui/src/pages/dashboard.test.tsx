@@ -72,6 +72,7 @@ vi.mock("@workspace/api-client-react", () => ({
 vi.mock("@/components/wartet-auf-dich", () => ({ WartetAufDich: () => null }));
 
 import Dashboard from "./dashboard";
+import { readHandoff } from "@/lib/chat-draft";
 
 beforeEach(() => {
   navigiert.length = 0;
@@ -128,7 +129,8 @@ describe("Startseite", () => {
     await nutzer.click(screen.getByLabelText("Senden"));
 
     await waitFor(() => {
-      expect(sessionStorage.getItem("lukas_startfrage")).toBe("Wie steht es um die Ziele?");
+      expect(readHandoff()?.content).toBe("Wie steht es um die Ziele?");
+      expect(readHandoff()?.mode).toBe("send");
     });
     expect(navigiert).toContain("/chat");
     expect(feld.value).toBe("");

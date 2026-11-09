@@ -148,6 +148,12 @@ await ruf("test-openai", { input_tokens: 10000, output_tokens: 100, input_tokens
   pruefe(`OpenAI: die Quote ist 80% (war ${q.prozent}%)`, q.prozent === 80);
 }
 
+// Missing or impossible receipts must never look like measured zero-cost calls.
+for (const [model,usage] of [["invalid-empty",{}],["invalid-missing",{input_tokens:100}],["invalid-cache",{input_tokens:100,output_tokens:1,input_tokens_details:{cached_tokens:200}}]]) {
+  await ruf(model,usage);
+  pruefe("Ungueltiger Nutzungsbeleg bleibt unbekannt: " + model, !verbrauchsUebersicht().some(z=>z.model===model));
+}
+
 // Anthropic meldet dieselbe Lage anders: 2.000 frisch, 8.000 daneben.
 globalThis.__usage = {};
 globalThis.fetch = async () =>

@@ -14,6 +14,7 @@ export const verbrauchAuftraege = {}, verbrauchAufrufe = {};
 export const and = () => {}, isNull = () => {}, desc = () => {};
 export const meldungen = {id: 'id'};
 export const gte = () => {};
+export const lt = () => {}; export const lte = () => {};
 export const asc = x => x;
 export const eq = (k,v) => row => row[k] === v;
 export const inArray = (k,v) => row => v.includes(row[k]);

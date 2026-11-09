@@ -1,6 +1,10 @@
 import type OpenAI from "openai";
+import { istAntwortEntwurf } from "./aufgaben-bedarf";
 
+const WEBSITE_KENNZAHLEN = /aufrufzahl|\baufrufe\b|seitenaufruf|besucher|pageviews?|scrolltiefe|verweildauer|analytics|website.{0,30}(?:statistik|kennzahl|traffic)|(?:statistik|kennzahl|traffic).{0,30}website/i;
 const GRUPPEN: Array<[RegExp, string[]]> = [
+  [/frage_issa|r[uü]ckfrag|frage? (?:mich|issa)|entscheidungsfrage|auswahlfenster/i, ['frage_issa']],
+  [WEBSITE_KENNZAHLEN, ["lese_website_kennzahlen"]],
   [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
   [/such|recherch|aktuell|quelle|preis|kostet|internet|öffnungszeit|kommend|protest|news|wetter|ceo|präsident|\bmorgen\b|\bheute\b/i, ["web_search"]],
   [/https?:|webseite|website|fetch|url|link/i, ["fetch_url"]],
@@ -10,10 +14,10 @@ const GRUPPEN: Array<[RegExp, string[]]> = [
   [/implement|programmier|debug|reparier|behebe|refactor|deploy|(?:schreib|erstell|änder|aender|bau).*?(?:code|skript|repo|typescript)|(?:führ|fuehr).*?(?:test|build|befehl)/i, ["execute_command", "propose_code_change", "fix_error"]],
   [/mail|postfach|posteingang/i, ["email_search", "email_read"]],
   [/(?:schreib|sende|schick|versend).*?(?:mail|e-mail)|(?:mail|e-mail).*?(?:sende|schick|versend)/i, ["email_send"]],
-  [/telefon|anruf|gespräch|gespraech|kontakt|ruf.*an/i, ["telefon_status", "telefon_kontakte"]],
+  [/telefon|anruf|gespräch|gespraech|\bkontakte?\b|\bruf(?:e)?\b.{0,120}\ban\b/i, ["telefon_status", "telefon_kontakte"]],
   [/\banrufen\b|\bruf(?:e)?\b.*\ban\b|starte.*anruf/i, ["ruf_an"]],
-  [/r[uü]ckruf|zur[uü]ckruf|ruf.*zur[uü]ck/i, ["rueckruf_status"]],
-  [/\b(?:plane?|terminier\w*)\b.*r[uü]ckruf|ruf.*zur[uü]ck|\b(?:in|um)\b.*zur[uü]ckrufen/i, ["plane_rueckruf"]],
+  [/r[uü]ckruf|zur[uü]ckruf|\bruf(?:e)?\b.{0,120}\bzur[uü]ck\b/i, ["rueckruf_status"]],
+  [/\b(?:plane?|terminier\w*)\b.*r[uü]ckruf|\bruf(?:e)?\b.{0,120}\bzur[uü]ck\b|\b(?:in|um)\b.*zur[uü]ckrufen/i, ["plane_rueckruf"]],
   [/(?:stornier|absag|abbrechen).*r[uü]ckruf|r[uü]ckruf.*(?:stornier|absag|abbrechen)/i, ["storniere_rueckruf"]],
   [/fl[uü]ster|whisper|(?:sag|hinweis).*?(?:telefon|gespr[aä]ch|anruf)/i, ["telefon_hinweis"]],
   [/\bziele?\b|\bplan\b|\bplane\b|aufgab|fortschritt/i, ["create_goal", "update_goal"]],
@@ -41,9 +45,16 @@ export function waehleWerkzeuge(tools: OpenAI.Chat.Completions.ChatCompletionToo
   // Missing task context must never mean loading the complete catalogue.
   const text = task?.trim() ?? "";
   if (isToolFreeTask(text)) return [];
+  if (istAntwortEntwurf(text)) {
+    return tools.filter(t => t.type === 'function' &&
+      ['mcp_find_tool', 'mcp_call', 'query_memory'].includes(t.function.name));
+  }
   // Discovery remains available, so a missed synonym does not remove a capability.
   const names = new Set(["mcp_find_tool", "mcp_call"]);
   for (const [pattern, group] of GRUPPEN) if (pattern.test(text)) group.forEach(n => names.add(n));
+  if (WEBSITE_KENNZAHLEN.test(text) && !/internet|recherch|quelle|vergleich.*konkurrenz/i.test(text)) {
+    names.delete("web_search"); names.delete("fetch_url");
+  }
   if (/anfrag|postfach|posteingang|tokenverbrauch|anrufstatus/i.test(text) &&
       !/web|internet|recherch|quelle|öffnungszeit|wetter/i.test(text.replace(/websites?/gi, ""))) names.delete("web_search");
   if (/anfrag|postfach|posteingang/i.test(text) && !/https?:|\burl\b|verlink|webseite.*(?:les|prüf|pruef)/i.test(text)) names.delete("fetch_url");
