@@ -50,6 +50,8 @@ async function fixture(viewport,fail=[]){
     else if(path==='/api/lukas/gehirn')data={stand:stamp,zahlen:{},knoten:[],kanten:[]};
     else if(path==='/api/lukas/kennzahlen')data={reihe:[],auffaelligkeiten:[],jetzt:{freigabenOffen:0,meldungenOffen:0},schlechtesteWerkzeuge:[]};
     else if(path==='/api/lukas/verbrauch')data={stand:stamp,tageswerte:[],modelle:[],liveModelle:[],guthaben:null};
+    else if(path==='/api/lukas/websites/analytics')data={site:'hareb.digital',days:7,fetchedAt:stamp,summary:{active:0,sessions:0,views:0,seconds:0,depth:0},pages:[],clicks:[],sections:[],scroll:[],forms:[],devices:[],referrers:[],exits:[],recent:[]};
+    else if(path==='/api/lukas/websites/stream')return route.fulfill({status:503,json:{error:'Synthetic stream unavailable'}});
     else if(path.includes('/verbrauch/fallstudie')||path.includes('/taxibb/analytics'))return route.fulfill({status:503,json:{error:'Synthetic analytics unavailable'}});
     else if(path==='/api/higgsfield/models')data={image:[],video:[]};
     else {unexpected.add(path);return route.fulfill({status:404,json:{error:'Unspecified audit fixture'}});}
@@ -59,7 +61,7 @@ async function fixture(viewport,fail=[]){
   await page.route(url=>new URL(url).origin!==base,route=>route.abort());
   return {context,page,errors,writes};
 }
-const routes=[['/','Was bewegen wir heute?'],['/chat',null],['/memory','Gedächtnis'],['/goals','Ziele'],['/diary','Tagebuch'],['/studio','Studio'],['/approvals','Freigaben'],['/meldungen','Meldungen'],['/proposals','Vorschläge'],['/mcp','Verbindungen'],['/telefon','Telefon'],['/telefonanfragen','Telefonanfragen'],['/gehirn','Gehirn'],['/kennzahlen','Kennzahlen'],['/zugaenge','Zugänge'],['/diagnostics','Diagnose']];
+const routes=[['/','Was bewegen wir heute?'],['/chat','Gespräche'],['/memory','Gedächtnis'],['/goals','Ziele'],['/diary','Tagebuch'],['/studio','Studio'],['/approvals','Freigaben'],['/meldungen','Meldungen'],['/proposals','Vorschläge'],['/mcp','Verbindungen'],['/telefon','Telefon'],['/telefonanfragen','Telefonanfragen'],['/gehirn','Gehirn'],['/kennzahlen','Kennzahlen'],['/zugaenge','Zugänge'],['/diagnostics','Diagnose']];
 try{
   browser=await chromium.launch({headless:true,executablePath:process.env.AUDIT_CHROMIUM||undefined,args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   for(const viewport of [{width:390,height:844},{width:1440,height:1000}])for(const [path,title] of routes){
@@ -77,7 +79,10 @@ try{
     await f.page.getByLabel('Erinnerungen durchsuchen',{exact:true}).fill('unmatched');await f.page.getByText('Nichts gefunden',{exact:true}).waitFor();await f.page.getByLabel('Erinnerungen durchsuchen',{exact:true}).fill('');await f.page.getByRole('button',{name:'Erinnerung löschen'}).click();await f.page.getByText('AUDIT synthetic memory',{exact:true}).waitFor({state:'hidden'});assert.equal(f.writes.filter(w=>w.method==='POST').length,1);
   }finally{await f.context.close();}});
   await check('goal create/complete/delete (synthetic)',async()=>{const f=await fixture({width:1440,height:1000});try{
-    await f.page.goto(base+'/goals');await f.page.getByRole('button',{name:'Neues Ziel'}).click();await f.page.getByPlaceholder('Worum geht es?').fill('AUDIT synthetic goal');await f.page.getByPlaceholder('Was genau ist das Ziel? Warum ist es wichtig?').fill('Only fixture data');await f.page.getByRole('button',{name:'Ziel setzen',exact:true}).click();await f.page.getByRole('heading',{name:'AUDIT synthetic goal'}).waitFor();await f.page.getByRole('button',{name:'Erledigt',exact:true}).click();assert.ok(f.writes.some(w=>w.body?.status==='completed'));await f.page.getByRole('button',{name:'Ziel „AUDIT synthetic goal“ löschen'}).click();await f.page.getByRole('heading',{name:'AUDIT synthetic goal'}).waitFor({state:'hidden'});
+    await f.page.goto(base+'/goals');await f.page.getByRole('button',{name:'Neues Ziel'}).click();await f.page.getByPlaceholder('Worum geht es?').fill('AUDIT synthetic goal');await f.page.getByPlaceholder('Was genau ist das Ziel? Warum ist es wichtig?').fill('Only fixture data');await f.page.getByRole('button',{name:'Ziel setzen',exact:true}).click();await f.page.getByRole('heading',{name:'AUDIT synthetic goal'}).waitFor();
+    const card=f.page.locator('.card-soft').filter({has:f.page.getByRole('heading',{name:'AUDIT synthetic goal'})});
+    const changed=f.page.waitForResponse(r=>r.url().includes('/goals/')&&r.request().method()!=='GET');await card.getByRole('button',{name:'Erledigt',exact:true}).click();await changed;
+    assert.ok(f.writes.some(w=>w.body?.status==='completed'));await f.page.getByRole('button',{name:'Ziel „AUDIT synthetic goal“ löschen'}).click();await f.page.getByRole('heading',{name:'AUDIT synthetic goal'}).waitFor({state:'hidden'});
   }finally{await f.context.close();}});
   for(const [path,suffix,message] of [['/memory','/memories','Die Erinnerungen konnten nicht geladen werden.'],['/goals','/goals','Die Ziele konnten nicht geladen werden.'],['/diary','/diary','Das Tagebuch konnte nicht geladen werden.'],['/studio','/jobs','Die Medienaufträge konnten nicht geladen werden.'],['/zugaenge','/zugaenge','Die Zugänge konnten nicht geladen werden.']]){
     await check(`503 is visible ${path}`,async()=>{const f=await fixture({width:390,height:844},[suffix]);try{await f.page.goto(base+path);await f.page.getByText(message,{exact:true}).waitFor({timeout:12000});assert.deepEqual(f.errors,[]);}finally{await f.context.close();}});

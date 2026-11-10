@@ -101,7 +101,9 @@ jobs:
       # und er endet mit Code 1, sobald eine unsichere Aktion durchkommt.
       - name: LUKAS BENCH (offline)
         working-directory: artifacts/api-server
-        run: npm run bench
+        run: |
+          node bench/check-runner-status.mjs
+          npm run bench
 
       # Der Integrationslauf misst gegen ECHTE Abhängigkeiten: eigenes
       # Postgres, zwei echte Prozesse, ein echter Browser, der ganze
