@@ -59,7 +59,7 @@ export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
   }
   const text = task.slice(0, 5000);
   const code = /\b(code|coding|github|repos?|repository|repositories|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
-  const telefon = /telefon|anruf|\bruf(?:e)?\b.{0,120}\b(?:an|zur[uü]ck)\b|gespr[aä]ch|telnyx|\bsip\b|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ckruf/i.test(text);
+  const telefon = /telefon|anruf|angeruf|\brief\b|geklingelt|verpasste?\b|\bruf(?:e)?\b.{0,120}\b(?:an|zur[uü]ck)\b|gespr[aä]ch|telnyx|\bsip\b|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ckruf/i.test(text);
   const mail = /e-?mail|postfach|posteingang|imap|smtp/i.test(text);
   const sms = /\bsms\b|kurznachricht/i.test(text);
   const internet = /aktuell|kommend|protest|nachricht|news|recherch|webseite|website|internet|browser|scrap|crawl|such|google|fetch.url|browse.page|https?:\/\/|suchmaschine/i.test(text);
@@ -99,6 +99,7 @@ export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
   ].join("\n\n"));
   if (autonomie || team) add("autonomie", abschnitt("## WENN DU BEI DEINER ARBEIT", "## FEHLER SIND DEINE AUFGABE"));
   if (telefon) teile.push("<example>Ein Anruf wurde vom Anbieter angenommen: sage gestartet. Erst telefon_status kann den weiteren Verlauf belegen.</example>");
+  if (telefon) teile.push("Fragen, wer angerufen hat oder ob eine Firma angerufen hat, immer mit telefon_status prüfen. Dafür hast du Zugriff auf die gespeicherte Anrufliste. Suche nach Name/Nummer und prüfe bei unbekannter Firmenrufnummer eingehende Anrufe im Zeitraum. Nenne Zeit und Richtung. Fehlender Namenstreffer beweist keinen fehlenden Anruf; unbekannte Nummern nicht eigenmächtig zuordnen.");
   if (code) teile.push("<example>Ein Patch ist geschrieben: pruefe die passenden Tests und den Build. Ohne diese Ergebnisse bleibt die Verifikation offen.</example>");
 
   return {

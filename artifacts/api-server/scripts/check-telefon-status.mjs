@@ -9,7 +9,7 @@ let pool, restartPool, client, schema;
 const oldUrl = process.env.DATABASE_URL;
 try {
   const stub = join(dir, "stub.mjs");
-  writeFileSync(stub, "export const db={select:()=>({from:()=>({orderBy:()=>({limit:async n=>(globalThis.telefonStatusRows??[]).slice(0,n)})})})}, telefonAnrufe={}, messages={}, conversations={};");
+  writeFileSync(stub, "export const db={select:()=>({from:()=>({where:()=>({orderBy:()=>({limit:n=>({offset:async offset=>(globalThis.telefonStatusRows??[]).slice(offset,offset+n)})})})})})}, telefonAnrufe={}, messages={}, conversations={};");
   const out = join(dir, "pure.mjs");
   await build({ stdin: { contents: 'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/telefon-laufend.ts";', resolveDir: process.cwd(), loader: "ts" }, outfile: out, bundle: true,
     platform: "node", format: "esm", packages: "external", alias: { "@workspace/db": stub } });
