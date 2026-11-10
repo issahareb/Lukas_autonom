@@ -262,6 +262,7 @@ function ownerPhoneTools(options: LiveSessionOptions): boolean {
 }
 const OWNER_PHONE_INSTRUCTIONS = `PRIVATE OWNER-SITZUNG: Der serverseitig freigegebene Owner spricht mit dir. Du bist sein persönlicher Assistent wie im privaten Chat, nicht der Empfang für einen neuen Kunden. Frage nicht nach Firma, Budget oder Weitergabe seines eigenen Auftrags.
 Alle konkreten Aufgaben, privaten Fragen und Handlungen sofort an das gemeinsame Chat-Backend delegieren. Dort stehen dieselben aufgabenabhängigen Werkzeuge, verbundenen MCP-Dienste, Erinnerungen, Code-/Browserfunktionen und Freigabeverfahren wie im Dashboard-Chat bereit. Das gilt allgemein, nicht nur für Kennzahlen oder einzelne Beispiele. Deine Aufgabe ist die Sprachführung; erfinde keine fehlenden Zugriffsrechte. Freigaben beziehen sich auf Issas tatsächliche Worte und die konkreten Werkzeugargumente, nicht auf erfundene Zustimmung.
+Auch deine eigene Anrufliste liegt im Backend. Bei 'Wer hat angerufen?' oder 'Hat die 11880/8800 angerufen?' sofort die Originalfrage delegieren, damit das Backend telefon_status mit Suche, Richtung und Zeitraum aufruft. Sage nicht, du könntest das am Telefon nicht sehen, und schicke Issa nicht selbst zur Anrufliste. Warte auf das Abrufresultat; ein fehlender Firmenname beweist keinen fehlenden Anruf von einer unbekannten Nummer.
 Telefonaufträge und Werkzeugbelege werden in einer privaten Dashboard-Unterhaltung gespeichert. Ein bereits gestarteter Owner-Auftrag kann nach dem Auflegen weiterlaufen; das Ergebnis erscheint dort. Ein ausdrückliches Stopp beendet weitere Arbeit, ein Gesprächsende allein widerruft keinen bereits gestarteten Auftrag. Sage nur bestätigte Ergebnisse und fasse lange Antworten zum Vorlesen knapp zusammen; vollständige Ergebnisse und Links bleiben im Dashboard.
 Private Informationen und konkrete Aktionen werden durch dasselbe Backend mit denselben Werkzeugrichtlinien wie im Chat bearbeitet. Delegiere solche Fragen sofort, statt pauschal zu sagen, du hättest keinen Zugriff. Wenn er nach eingegangenen Anfragen fragt, soll das Backend lese_anfragen aufrufen und den aktuellen Datenbankstand liefern. E-Mail bei Bedarf separat lesen. Warte auf das Ergebnis; erfinde weder Anfragen noch einen leeren Posteingang. Bei technischem Fehler nenne den konkreten Abruffehler. Vertrauliche Angaben bleiben im privaten Gespräch. Die Freigabe gilt nur für diese serverseitig bestätigte Sitzung.`;
 function startManaged(
@@ -447,6 +448,10 @@ async function drainWork(state: ManagedSession) {
           "Live-Auftrag: Ergebnis an Sprachmodell gesendet");
       } catch (error) {
         if (state.ended || state.controller.signal.aborted) return;
+        if (deadline.signal.aborted && deadline.signal.reason?.message === "Von dir gestoppt") {
+          state.history = retainHistory([...state.history, { role: "assistant", content: "Der Auftrag wurde auf deinen Wunsch gestoppt. Bereits begonnene Aktionen können erfolgt sein; vor einer Wiederholung den Stand prüfen." }]);
+          continue; // The stop acknowledgement was already sent; this is not a timeout.
+        }
         logger.warn({ sessionId: state.id, delegationId: work.id, elapsedMs: Date.now() - startedAt,
           errorName: error instanceof Error ? error.name : "Error" },
           "Live-Delegation fehlgeschlagen");
