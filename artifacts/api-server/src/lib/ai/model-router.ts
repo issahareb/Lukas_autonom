@@ -16,10 +16,10 @@ const PROFILES: ModelProfile[] = ["fast", "general", "reasoning", "code", "visio
 // Offizielle SDK-IDs; die Freischaltung ist weiterhin accountabhaengig.
 // Astra ist kein Standard, aber per LUKAS_MODEL_REASONING explizit waehlbar.
 export const MODEL_DEFAULTS: Record<ModelProfile, string> = {
-  fast: "openai:gpt-6-luna",
-  general: "openai:gpt-5.6-terra",
-  vision: "openai:gpt-5.6-terra",
-  reasoning: "openai:gpt-6-sol",
+  fast: "openai:gpt-6.1-terra",
+  general: "openai:gpt-6.1-terra",
+  vision: "openai:gpt-6.1-terra",
+  reasoning: "openai:gpt-6.1-sol",
   code: "openai:gpt-6.1-sol",
   long_context: "openai:gpt-6.1-sol",
 };
@@ -57,9 +57,9 @@ export function providerAvailable(provider: LukasProvider): boolean {
 export function fallbackRoutes(route: ModelRoute): ModelRoute[] {
   const cheap = ["fast", "general", "vision"].includes(route.profile);
   const explicit = nonEmpty(process.env["LUKAS_MODEL_FALLBACK_" + route.profile.toUpperCase()]);
+  // Availability failures never grant permission for an Astra escalation.
   const specs = explicit ? [explicit] : [
-    ...(cheap ? [] : [nonEmpty(process.env.LUKAS_CORE_MODEL)].filter((s): s is string => Boolean(s))),
-    cheap ? "openai:gpt-4.1-mini" : "openai:gpt-4.1",
+    cheap ? "openai:gpt-6.1-sol" : "openai:gpt-6.1-terra",
   ];
   const seen = new Set([route.provider + ":" + route.model]);
   return specs.map((spec) => parseModelSpec(spec, route.profile, "Ersatz fuer " + route.provider + ":" + route.model))

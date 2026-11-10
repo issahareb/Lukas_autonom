@@ -3,7 +3,7 @@ import { METHODIK } from './verbrauch-methodik';
 import { verbrauchsZeitraum } from './verbrauch-zeitraum';
 type Messung = { version: number; revision: string | null; aufgabenart: string; promptHash?: string; fallstudie?: { serie: string; fall: string; abnahme: string } };
 export type Auftrag = { id: string; rootId: string; parentId: string | null; quelle: string; status: string; gestartetAt: Date; beendetAt: Date | null; messung: Messung | null };
-export type Aufruf = { id: string; rootId: string; auftragId: string; provider: string; model: string; quelle: string; phase: string; status: string; eingabe: number | null; ausgabe: number | null; cacheLesen: number | null; cacheSchreiben: number | null; dauerMs: number; gestartetAt: Date; nachweis: { version: number; profil?: string; nurBeleg?: boolean } | null; kontext?: unknown };
+export type Aufruf = { id: string; rootId: string; auftragId: string; provider: string; model: string; quelle: string; phase: string; status: string; eingabe: number | null; ausgabe: number | null; cacheLesen: number | null; cacheSchreiben: number | null; dauerMs: number; gestartetAt: Date; nachweis: { version: number; profil?: string; nurBeleg?: boolean; denkaufwand?: string; serviceTierAngefordert?: string; serviceTierGemeldet?: string } | null; kontext?: unknown };
 export type Abnahme = { id: string; rootId: string; ergebnis: string; beleg: string; pruefer: string; erstelltAt: Date };
 export function belegSerialisierung(value: unknown): string {
   return JSON.stringify(value,(_key,v)=>v && typeof v==='object' && !Array.isArray(v)
@@ -21,11 +21,14 @@ export function werteVerbrauchAus(auftraege: Auftrag[], aufrufe: Aufruf[], abnah
   const calls = aufrufe.filter(c => c.gestartetAt >= z.seit && c.gestartetAt < z.bisExklusiv);
   const roots = auftraege.filter(a => !a.parentId && a.gestartetAt >= z.seit && a.gestartetAt < z.bisExklusiv);
   const jobsById = new Map(auftraege.map(a => [a.id,a]));
-  const rows = new Map<string, { kanal: string; aufgabenart: string; model: string; provider: string; phase: string; aufrufe: number; gemessen: number; ohneMesswert: number; eingabe: number; ausgabe: number; cacheLesen: number; cacheSchreiben: number; gesamt: number; fehler: number; fallback: number; ms: number }>();
+  const rows = new Map<string, { kanal: string; aufgabenart: string; model: string; provider: string; phase: string; denkaufwand: string; serviceTierAngefordert: string; serviceTierGemeldet: string; aufrufe: number; gemessen: number; ohneMesswert: number; eingabe: number; ausgabe: number; cacheLesen: number; cacheSchreiben: number; gesamt: number; fehler: number; fallback: number; ms: number }>();
   for (const c of calls) {
     const kind = jobsById.get(c.auftragId)?.messung?.aufgabenart ?? 'unbekannt';
-    const key = JSON.stringify([c.quelle,kind,c.provider,c.model,c.phase]);
-    const r = rows.get(key) ?? { kanal: c.quelle, aufgabenart: kind, model: c.model, provider: c.provider, phase: c.phase, aufrufe: 0, gemessen: 0, ohneMesswert: 0, eingabe: 0, ausgabe: 0, cacheLesen: 0, cacheSchreiben: 0, gesamt: 0, fehler: 0, fallback: 0, ms: 0 };
+    const denkaufwand = c.nachweis?.denkaufwand ?? 'unbekannt';
+    const serviceTierAngefordert = c.nachweis?.serviceTierAngefordert ?? 'unbekannt';
+    const serviceTierGemeldet = c.nachweis?.serviceTierGemeldet ?? 'unbekannt';
+    const key = JSON.stringify([c.quelle,kind,c.provider,c.model,c.phase,denkaufwand,serviceTierAngefordert,serviceTierGemeldet]);
+    const r = rows.get(key) ?? { kanal: c.quelle, aufgabenart: kind, model: c.model, provider: c.provider, phase: c.phase, denkaufwand, serviceTierAngefordert, serviceTierGemeldet, aufrufe: 0, gemessen: 0, ohneMesswert: 0, eingabe: 0, ausgabe: 0, cacheLesen: 0, cacheSchreiben: 0, gesamt: 0, fehler: 0, fallback: 0, ms: 0 };
     r.aufrufe++; r.fehler += Number(c.status !== 'ok'); r.fallback += Number(c.phase === 'fallback'); r.ms += c.dauerMs;
     if (aufrufGemessen(c)) { r.gemessen++; r.eingabe += c.eingabe!; r.ausgabe += c.ausgabe!; r.cacheLesen += c.cacheLesen!; r.cacheSchreiben += c.cacheSchreiben ?? 0; r.gesamt += gesamt(c); }
     else r.ohneMesswert++;
