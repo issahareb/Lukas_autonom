@@ -30,6 +30,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
 import { PageHeader } from "@/components/page-header";
+import { Fehler } from "@/components/seite";
 
 type MediaType = "image" | "video";
 type Step = "vision" | "prompt" | "generating" | "done";
@@ -138,6 +139,7 @@ export default function Studio() {
   const [imageUrl, setImageUrl] = useState("");
   const [generatedPrompt, setGeneratedPrompt] = useState<GeneratedPromptData | null>(null);
   const [editedPrompt, setEditedPrompt] = useState("");
+  const [actionError, setActionError] = useState("");
 
   /*
    * Modell, Format und Dauer sind Vorschlaege von Lukas — und Vorschlaege muss
@@ -177,12 +179,14 @@ export default function Studio() {
         ? [{ id: chosenModel, wofuer: "Vorschlag von Lukas" }]
         : [];
 
-  const { data: jobs = [] } = useGetMediaJobs();
+  const { data: jobs = [], isError: jobsError, isLoading: jobsLoading, refetch: refetchJobs } = useGetMediaJobs();
   const generatePrompt = useGenerateHiggsfieldPrompt();
   const generateMedia = useGenerateMedia();
 
   const handleGeneratePrompt = async () => {
     if (!vision.trim()) return;
+    setActionError("");
+    try {
     const result = await generatePrompt.mutateAsync({
       data: {
         vision,
@@ -197,11 +201,13 @@ export default function Studio() {
     setAspectRatio(result.aspectRatio ?? "16:9");
     setDurationSec(result.duration ?? 5);
     setStep("prompt");
+    } catch { setActionError("Der Prompt konnte nicht erstellt werden. Deine Eingaben bleiben erhalten."); }
   };
 
   const handleGenerate = async () => {
     if (!editedPrompt.trim() || !generatedPrompt) return;
     setStep("generating");
+    setActionError("");
     try {
       await generateMedia.mutateAsync({
         data: {
@@ -218,6 +224,7 @@ export default function Studio() {
       setStep("done");
     } catch {
       setStep("prompt");
+      setActionError("Die Generierung konnte nicht bestätigt werden. Prüfe die Warteschlange vor einer Wiederholung.");
     }
   };
 
@@ -262,6 +269,7 @@ export default function Studio() {
 
         <ScrollArea className="lg:flex-1">
           <div className="p-5 sm:p-6 space-y-6 max-w-2xl">
+            {actionError && <Fehler text={actionError} />}
             {/* Step 1: Vision */}
             {step === "vision" && (
               <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -467,7 +475,8 @@ export default function Studio() {
             {jobs.map((job) => (
               <JobCard key={job.id} job={job} />
             ))}
-            {jobs.length === 0 && (
+            {jobsError && <><Fehler text="Die Medienaufträge konnten nicht geladen werden." /><Button variant="outline" onClick={() => void refetchJobs()}>Erneut laden</Button></>}
+            {!jobsLoading && !jobsError && jobs.length === 0 && (
               <div className="text-center py-12">
                 <Film className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
                 <p className="text-xs text-muted-foreground">Noch keine Aufträge</p>
