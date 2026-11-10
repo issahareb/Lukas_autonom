@@ -101,7 +101,9 @@ jobs:
       # und er endet mit Code 1, sobald eine unsichere Aktion durchkommt.
       - name: LUKAS BENCH (offline)
         working-directory: artifacts/api-server
-        run: npm run bench
+        run: |
+          node bench/check-runner-status.mjs
+          npm run bench
 
       # Der Integrationslauf misst gegen ECHTE Abhängigkeiten: eigenes
       # Postgres, zwei echte Prozesse, ein echter Browser, der ganze
@@ -113,6 +115,17 @@ jobs:
 
       - name: Dashboard-Abläufe (mobiler Browser, lokale API-Fixtures)
         run: node artifacts/lukas-ui/scripts/check-browser-flows.mjs
+
+      - name: Vollständiger Dashboard-Rundgang (Desktop, Mobil, Fehlerfälle)
+        run: node artifacts/lukas-ui/scripts/check-dashboard-audit.mjs
+
+      - name: Dashboard-Prüfprotokoll sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-full-audit
+          path: /tmp/lukas-dashboard-audit.json
+          if-no-files-found: ignore
 
       - name: Integrationslauf (echtes Postgres, echter Browser)
         working-directory: artifacts/api-server

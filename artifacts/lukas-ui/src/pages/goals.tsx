@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, CheckCircle2, Target, Clock, AlertCircle, RotateCcw, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
-import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
+import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 import { prioritaet, zielstand } from "@/lib/worte";
 
 const PRIO_TON = { high: "schlecht", medium: "warnung", low: "gut" } as const;
@@ -36,8 +36,9 @@ export default function Goals() {
   const [priority, setPriority] = useState("high");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [writeError, setWriteError] = useState("");
 
-  const { data: goals = [], isLoading } = useGetGoals();
+  const { data: goals = [], isLoading, isError, refetch } = useGetGoals();
   const createGoal = useCreateGoal();
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
@@ -46,21 +47,30 @@ export default function Goals() {
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) return;
+    setWriteError("");
+    try {
     await createGoal.mutateAsync({ data: { title, description, priority } });
     qc.invalidateQueries({ queryKey: getGetGoalsQueryKey() });
     setOpen(false);
     setTitle("");
     setDescription("");
+    } catch { setWriteError("Das Ziel konnte nicht gespeichert werden. Dein Entwurf bleibt erhalten."); }
   };
 
   const handleStatusChange = async (id: number, status: string) => {
+    setWriteError("");
+    try {
     await updateGoal.mutateAsync({ id, data: { status } });
     qc.invalidateQueries({ queryKey: getGetGoalsQueryKey() });
+    } catch { setWriteError("Der Zielstatus konnte nicht geändert werden."); }
   };
 
   const handleDelete = async (id: number) => {
+    setWriteError("");
+    try {
     await deleteGoal.mutateAsync({ id });
     qc.invalidateQueries({ queryKey: getGetGoalsQueryKey() });
+    } catch { setWriteError("Das Ziel konnte nicht gelöscht werden."); }
   };
 
   const aktiv = goals.filter((g) => g.status === "active").length;
@@ -109,6 +119,7 @@ export default function Goals() {
               >
                 Ziel setzen
               </Button>
+              {writeError && <Fehler text={writeError} />}
             </div>
           </DialogContent>
         </Dialog>
@@ -146,6 +157,8 @@ export default function Goals() {
       }
     >
       {isLoading && <Laedt was="Ziele werden geladen…" />}
+      {isError && <><Fehler text="Die Ziele konnten nicht geladen werden." /><Button variant="outline" onClick={() => void refetch()}>Erneut laden</Button></>}
+      {!open && writeError && <Fehler text={writeError} />}
 
       <div className="goal-grid">
         {filtered.map((g, idx) => (
@@ -222,7 +235,7 @@ export default function Goals() {
         ))}
       </div>
 
-      {!isLoading && filtered.length === 0 && (
+      {!isLoading && !isError && filtered.length === 0 && (
         <Leer
           icon={Target}
           titel={search ? "Keine passenden Ziele" : filter === "all" ? "Noch keine Ziele" : `Nichts unter „${zielstand(filter)}“`}
