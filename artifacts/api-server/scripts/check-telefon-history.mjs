@@ -10,15 +10,15 @@ let pool, client;
 try {
   const stub = join(dir, 'db.mjs');
   writeFileSync(stub, `
-    export {telefonAnrufe} from ${JSON.stringify(resolve('../../lib/db/src/schema/telefon.ts'))};
+    export {telefonAnrufe,telefonNummern} from ${JSON.stringify(resolve('../../lib/db/src/schema/telefon.ts'))};
     export const messages={}, conversations={};
-    export const db={select:()=>({from:()=>({where:condition=>({orderBy:()=>({limit:limit=>({offset:offset=>globalThis.__historyQuery(condition,limit,offset)})})})})})};
+    export const db={select:()=>({from:()=>({where:condition=>({orderBy:()=>({limit:limit=>({offset:offset=>globalThis.__historyQuery(condition,limit,offset),then:(resolve,reject)=>globalThis.__historyQuery(condition,limit,0).then(resolve,reject)})})})})})};
   `);
   const out = join(dir, 'history.mjs');
-  await build({stdin:{contents:'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/werkzeug-auswahl.ts"; export * from "./src/lib/lukas-prompt-auswahl.ts";',resolveDir:process.cwd(),loader:'ts'},outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',alias:{'@workspace/db':stub},logLevel:'silent'});
-  const {telefonStatus,waehleWerkzeuge,waehleLukasPrompt} = await import(out);
+  await build({stdin:{contents:'export * from "./src/lib/telefon-status.ts"; export * from "./src/lib/telefon-kontakte.ts"; export * from "./src/lib/werkzeug-auswahl.ts"; export * from "./src/lib/lukas-prompt-auswahl.ts";',resolveDir:process.cwd(),loader:'ts'},outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',alias:{'@workspace/db':stub},logLevel:'silent'});
+  const {telefonStatus,telefonKontakte,waehleWerkzeuge,waehleLukasPrompt} = await import(out);
   const tool={type:'function',function:{name:'telefon_status'}};
-  for(const phrase of ['Hat die 8800 angerufen?','Hat die 11880 angerufen?','Wer hat mich heute angerufen?','Wer rief gestern an?','Hat jemand geklingelt?','Zeig mir verpasste Anrufe']) {
+  for(const phrase of ['Hat die 8800 angerufen?','Hat die 11880 angerufen?','Wer hat mich heute angerufen?','Wer rief gestern an?','Hat jemand geklingelt?','Zeig mir verpasste Anrufe','Wurde ich zurückgerufen?','Wurde die Verbindung durchgestellt?','Prüf die Rufnummer']) {
     assert.equal(waehleWerkzeuge([tool],phrase).length,1,phrase);
     assert.ok(waehleLukasPrompt(phrase).module.includes('telefon'),phrase);
   }
@@ -35,12 +35,20 @@ try {
   assert.ok(captured.query.params.includes('%100\\%\\_\\\\%'),'LIKE wildcards stay literal');
   await telefonStatus({suche:'+49 (201) 12-34'});
   assert.ok(captured.query.params.includes('%492011234%'),'Formatted phone searches use digits');
+  for(const suche of ['0049 (201) 12-34','0201 12-34']) {
+    await telefonStatus({suche});
+    assert.ok(captured.query.params.includes('%492011234%'),'History normalizes international/domestic prefix: '+suche);
+    await telefonKontakte(suche);
+    assert.ok(captured.query.params.includes('%492011234%'),'Contact lookup normalizes phone formatting: '+suche);
+  }
   const stamp=new Date('2026-11-10T11:50:00Z');
   globalThis.__historyQuery=async()=>Array.from({length:3},(_,id)=>({id,nummer:id?'491234':'',richtung:'eingehend',ergebnis:'beendet',createdAt:stamp,updatedAt:stamp}));
   const page=JSON.parse(await telefonStatus({limit:2}));
   assert.equal(page.anrufe.length,2);assert.equal(page.naechsterOffset,2);assert.equal(page.weitereTreffer,true);
   assert.equal(page.anrufe[0].nummer,'nicht übermittelt');assert.equal(page.anrufe[0].richtung,'eingehend');
   assert.match(page.anrufe[0].zeitDeutschland,/12:50/);assert.equal(page.anrufe[0].begonnen,stamp.toISOString());
+  const boundary=JSON.parse(await telefonStatus({limit:2,offset:10000}));
+  assert.equal(boundary.naechsterOffset,null);assert.equal(boundary.suchgrenzeErreicht,true,'Never return a continuation that validation rejects');
   globalThis.__historyQuery=async()=>{throw Error('history DB unavailable');};
   await assert.rejects(()=>telefonStatus(),/history DB unavailable/);
   console.log('OK — Caller question routing, strict filters, bound literal search, pagination, German timestamps and DB errors.');

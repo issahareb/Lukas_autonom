@@ -448,6 +448,10 @@ async function drainWork(state: ManagedSession) {
           "Live-Auftrag: Ergebnis an Sprachmodell gesendet");
       } catch (error) {
         if (state.ended || state.controller.signal.aborted) return;
+        if (deadline.signal.aborted && deadline.signal.reason?.message === "Von dir gestoppt") {
+          state.history = retainHistory([...state.history, { role: "assistant", content: "Der Auftrag wurde auf deinen Wunsch gestoppt. Bereits begonnene Aktionen können erfolgt sein; vor einer Wiederholung den Stand prüfen." }]);
+          continue; // The stop acknowledgement was already sent; this is not a timeout.
+        }
         logger.warn({ sessionId: state.id, delegationId: work.id, elapsedMs: Date.now() - startedAt,
           errorName: error instanceof Error ? error.name : "Error" },
           "Live-Delegation fehlgeschlagen");

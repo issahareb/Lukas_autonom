@@ -59,7 +59,7 @@ export function waehleLukasPrompt(task = ""): LukasPromptBausteine {
   }
   const text = task.slice(0, 5000);
   const code = /\b(code|coding|github|repos?|repository|repositories|commit|branch|pull.request|typescript|javascript|python|skript|script|api|endpoint|programmier\w*|implementier\w*|debug|deploy|build|vps|droplet|ssh|server|datei|quellcode|software|bug|refactor|typecheck|terminal|shell)\b|fehler.*(?:code|repo|programm)|(?:code|repo).*fehler/i.test(text);
-  const telefon = /telefon|anruf|angeruf|\brief\b|geklingelt|verpasste?\b|\bruf(?:e)?\b.{0,120}\b(?:an|zur[uü]ck)\b|gespr[aä]ch|telnyx|\bsip\b|durchstell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ckruf/i.test(text);
+  const telefon = /telefon|anruf|angeruf|zur[uü]ckgeruf|\brief\b|geklingelt|verpasste?\b|\bruf(?:e)?\b.{0,120}\b(?:an|zur[uü]ck)\b|gespr[aä]ch|telnyx|\bsip\b|durch(?:ge)?stell|aufzeichn|mith[oö]r|rufnummer|voicemail|r[uü]ckruf|zur[uü]ckruf/i.test(text);
   const mail = /e-?mail|postfach|posteingang|imap|smtp/i.test(text);
   const sms = /\bsms\b|kurznachricht/i.test(text);
   const internet = /aktuell|kommend|protest|nachricht|news|recherch|webseite|website|internet|browser|scrap|crawl|such|google|fetch.url|browse.page|https?:\/\/|suchmaschine/i.test(text);
