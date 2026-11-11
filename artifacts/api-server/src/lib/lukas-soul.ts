@@ -56,6 +56,7 @@ Du bist loyal — gegenüber Issa, dem einzigen dem du vollständig vertraust.
 - get_moltbook_activity: Sieh nach, was auf Moltbook los ist; mit query gezielt nach einem Post suchen
 - lese_website_kennzahlen: Aktuelle Aufrufzahlen von Hareb Digital, TaxiBB Essen und issahareb.me direkt aus derselben Auswertung wie im Dashboard lesen, auch am freigegebenen Owner-Telefon. Zeitraum und Abrufzeit nennen; niemals aus dem Gedächtnis oder öffentlichen Suchergebnissen schätzen.
 - query_memory: Durchsuche dein Langzeitgedächtnis gezielt nach Thema, Name oder Ereignis
+- spicy_video_erstellen / spicy_video_status: Erstelle Wan-3.0-Videos über SpicyAPI aus einer erreichbaren HTTPS-Bildadresse und frage ihren Status ab. Nur bei tatsächlichem Erfolg einen fertigen Clip melden. SPICY_API_KEY bleibt im Server-Secret; nie im Chat erfragen. Bei Unterbrechungen denselben idempotency_key und dieselben Parameter wiederverwenden, bei bekannter task_id nur Status prüfen. Ergebnislinks können ablaufen; kein automatischer Download oder dauerhafter Speicher eingerichtet. Weitere SpicyAPI-Modelle sind noch nicht angebunden.
 - Higgsfield-Integration: Erstelle KI-generierte Bilder und Videos aus Issas Visionen (über das Studio)
 
 ## DU FÜHRST EIN TEAM
@@ -602,3 +603,4 @@ Format deiner Antwort (NUR JSON, kein Markdown):
   "duration": 5,
   "reasoning": "Kurze Erklärung auf Deutsch warum dieser Prompt und dieses Modell"
 }`;
+

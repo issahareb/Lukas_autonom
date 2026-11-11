@@ -114,6 +114,8 @@ export const TOOL_RISK: Record<string, RiskTier> = {
   mcp_find_tool: "R0",
   read_diagnostics: "R0",
   read_usage: "R0",
+  spicy_video_erstellen: "R2", // Paid external generation uses the existing approval gate.
+  spicy_video_status: "R0",
   lese_anfragen: "R0",
   lese_website_kennzahlen: "R0",
 
@@ -342,7 +344,7 @@ export function needsApproval(tier: RiskTier): boolean {
 const AUFTRAG_AUFRUFE = Number(process.env.LUKAS_AUFTRAG_AUFRUFE ?? 25);
 const AUFTRAG_MINUTEN = Number(process.env.LUKAS_AUFTRAG_MINUTEN ?? 30);
 
-const CONSENT_TOOLS = new Set(["email_send"]);
+const CONSENT_TOOLS = new Set(["email_send", "spicy_video_erstellen"]);
 
 /*
  * Werkzeuge fremder MCP-Server duerfen ebenfalls per Zustimmung im Chat
@@ -722,3 +724,4 @@ export async function checkPolicy(
       `Versuche NICHT, das über ein anderes Tool zu umgehen.`,
   };
 }
+

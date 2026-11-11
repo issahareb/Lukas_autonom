@@ -3,6 +3,7 @@ import { istAntwortEntwurf } from "./aufgaben-bedarf";
 
 const WEBSITE_KENNZAHLEN = /aufrufzahl|\baufrufe\b|seitenaufruf|besucher|pageviews?|scrolltiefe|verweildauer|analytics|website.{0,30}(?:statistik|kennzahl|traffic)|(?:statistik|kennzahl|traffic).{0,30}website/i;
 const GRUPPEN: Array<[RegExp, string[]]> = [
+  [/spicy|wan[ -]?3|video|videoclip|filmclip/i, ["spicy_video_erstellen", "spicy_video_status"]],
   [/frage_issa|r[uü]ckfrag|frage? (?:mich|issa)|entscheidungsfrage|auswahlfenster/i, ['frage_issa']],
   [WEBSITE_KENNZAHLEN, ["lese_website_kennzahlen"]],
   [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
@@ -96,3 +97,4 @@ export function werkzeugeNachFehler(tools: OpenAI.Chat.Completions.ChatCompletio
   const blocked = gesperrteWerkzeugNamen(name, error);
   return tools.filter(t => t.type !== "function" || !blocked.has(t.function.name));
 }
+
