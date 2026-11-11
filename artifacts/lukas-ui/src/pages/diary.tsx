@@ -26,8 +26,8 @@ const TON: Record<string, "gut" | "warnung" | "schlecht" | "info" | "akzent" | "
 };
 
 const ENERGIE_TON: Record<string, string> = {
-  high: "text-emerald-300",
-  normal: "text-amber-300",
+  high: "text-emerald-800",
+  normal: "text-amber-800",
   low: "text-muted-foreground",
 };
 
@@ -55,7 +55,7 @@ export default function Diary() {
             )}
             <div className="flex items-start gap-4">
               <span className="z-10 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                <BookOpen className="h-3.5 w-3.5 text-foreground" />
               </span>
               <Karte verzoegerung={staffel(idx)} className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">

@@ -75,7 +75,7 @@ export class Fehlergrenze extends Component<
             Die Meldung selbst, nicht versteckt. Sie ist technisch, aber sie
             ist das Einzige, womit man den Fehler melden oder suchen kann.
           */}
-          <p className="mt-4 rounded-2xl bg-white/[0.04] px-4 py-2.5 font-mono text-xs break-words text-muted-foreground">
+          <p className="mt-4 rounded-2xl bg-muted/60 px-4 py-2.5 font-mono text-xs break-words text-muted-foreground">
             {this.state.fehler.message}
           </p>
           <button

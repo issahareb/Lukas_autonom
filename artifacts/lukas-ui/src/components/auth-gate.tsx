@@ -67,7 +67,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full items-center justify-center bg-background text-foreground p-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="items-center text-center">
-            <TerminalSquare className="w-8 h-8 text-primary mb-2" />
+            <TerminalSquare className="w-8 h-8 text-foreground mb-2" />
             <CardTitle className="text-2xl">Lukas</CardTitle>
             <CardDescription>Zugangscode eingeben, um fortzufahren</CardDescription>
           </CardHeader>

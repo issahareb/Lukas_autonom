@@ -13,7 +13,7 @@ try {
   for(const input of [{tage:0},{tage:91},{status:'neu'},{limit:100},{offset:-1},{query:'SELECT secret'}]) await assert.rejects(()=>leseAnfragen(input));
   assert.equal(called,0);await assert.rejects(()=>leseAnfragen({}),/database unavailable/);
   const tool={type:'function',function:{name:'lese_anfragen'}};
-  for(const phrase of ['Sind Anfragen eingegangen?','Gibt es neue Interessenten?','Zeig mir offene Kundenanliegen']) assert.equal(waehleWerkzeuge([tool],phrase).length,1);
+  for(const phrase of ['Sind Anfragen eingegangen?','Gibt es neue Interessenten?','Zeig mir offene Kundenanliegen','Lies mir die Telefonnotizen vor','Was wollten die Personen beim Anruf?','Gesprächsnotizen bitte']) assert.equal(waehleWerkzeuge([tool],phrase).length,1);
   console.log('OK — Request questions select live reader; invalid filters and DB failures never become an empty inbox.');
   if(!process.env.BENCH_DATABASE_URL) console.log('SKIP — PostgreSQL request reader needs BENCH_DATABASE_URL.');
   else {
@@ -30,9 +30,17 @@ try {
       await db.query(`INSERT INTO lukas_meldungen(betreff,text) VALUES ('Anfrage: SYNTHETIC','Example website request'),('Internal diagnostic','MUST NOT INCLUDE')`);
       await db.query(`INSERT INTO lukas_telefon_anfragen(session_id,kategorie,weitergabe,auswertung,zusammenfassung,status,created_at)
         VALUES ($1,'anfrage','erlaubt','fertig','Old completed','erledigt',now()-interval '45 days')`,[suffix+'old']);
+      await db.query(`INSERT INTO lukas_telefon_anfragen(session_id,kategorie,weitergabe,auswertung,zusammenfassung)
+        VALUES ($1,'sonstiges','offen','fertig','SYNTHETIC directory verification'),($2,'unklar','offen','fertig',''),($3,'unklar','offen','fertig','SYNTHETIC question without agreed next step')`,[suffix+'pending',suffix+'missing',suffix+'unclear']);
       const result=JSON.parse(await leseAnfragen({}));
       assert.equal(result.gesamt,before.gesamt+2);assert.equal(result.telefon,before.telefon+1);assert.equal(result.website,before.website+1);
-      assert.equal(result.telefon_ungeklaert,before.telefon_ungeklaert+1);assert.equal(result.filter.tage,30);
+      assert.equal(result.telefon_ungeklaert,before.telefon_ungeklaert+2);
+      assert.equal(result.telefon_ohne_inhalt,before.telefon_ohne_inhalt+2);
+      assert.equal(result.telefon_weitergabe_offen,before.telefon_weitergabe_offen+4);
+      assert.equal(result.telefonnotizen_gesamt,before.telefonnotizen_gesamt+5);
+      assert.ok(result.telefonnotizen.some(n=>n.inhalt==='SYNTHETIC directory verification'&&n.weitergabe==='offen'));
+      assert.ok(result.telefonnotizen.some(n=>n.inhaltsstatus==='kein_inhalt_gespeichert'));
+      assert.match(result.hinweis,/verlange keine weitere Owner-Freigabe/);assert.equal(result.filter.tage,30);
       assert.doesNotMatch(JSON.stringify(result),/MUST NOT/);
       const long=JSON.parse(await leseAnfragen({tage:90}));assert.equal(long.gesamt,result.gesamt+1);
       const open=JSON.parse(await leseAnfragen({tage:90,status:'offen'}));assert.equal(open.gesamt,result.gesamt);

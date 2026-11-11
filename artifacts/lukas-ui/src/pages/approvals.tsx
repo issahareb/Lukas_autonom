@@ -122,7 +122,7 @@ export default function Approvals() {
         <button
           type="button"
           onClick={load}
-          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+          className="flex items-center gap-2 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-muted/60"
         >
           <RefreshCw className="h-4 w-4" /> Aktualisieren
         </button>
@@ -200,7 +200,7 @@ export default function Approvals() {
                     disabled={busy !== null}
                   onClick={() => decide(r.id, "allow-auftrag")}
                     title="Gilt für dieses Werkzeug in dieser Unterhaltung — 30 Minuten, höchstens 25 Aufrufe"
-                    className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-4 py-2 text-sm transition-colors hover:bg-white/[0.12]"
+                    className="flex items-center gap-1.5 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-white/[0.12]"
                   >
                     <CheckCheck className="h-4 w-4" /> Für die Aufgabe
                   </button>
@@ -209,7 +209,7 @@ export default function Approvals() {
                   type="button"
                   disabled={busy !== null}
                   onClick={() => decide(r.id, "deny")}
-                  className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-300 transition-colors hover:bg-destructive/20"
+                  className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-800 transition-colors hover:bg-destructive/20"
                 >
                   <X className="h-4 w-4" /> Ablehnen
                 </button>

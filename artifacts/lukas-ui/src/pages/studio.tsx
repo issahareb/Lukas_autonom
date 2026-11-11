@@ -46,10 +46,10 @@ interface GeneratedPromptData {
 
 function JobStatusBadge({ status }: { status: string }) {
   const configs: Record<string, { color: string; icon: React.ReactNode }> = {
-    pending: { color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20", icon: <Clock className="w-3 h-3" /> },
-    processing: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
-    completed: { color: "bg-green-500/10 text-green-400 border-green-500/20", icon: <CheckCircle2 className="w-3 h-3" /> },
-    failed: { color: "bg-red-500/10 text-red-400 border-red-500/20", icon: <AlertCircle className="w-3 h-3" /> },
+    pending: { color: "bg-yellow-500/10 text-yellow-800 border-yellow-500/20", icon: <Clock className="w-3 h-3" /> },
+    processing: { color: "bg-blue-500/10 text-blue-800 border-blue-500/20", icon: <Loader2 className="w-3 h-3 animate-spin" /> },
+    completed: { color: "bg-green-500/10 text-green-800 border-green-500/20", icon: <CheckCircle2 className="w-3 h-3" /> },
+    failed: { color: "bg-red-500/10 text-red-800 border-red-500/20", icon: <AlertCircle className="w-3 h-3" /> },
   };
   const cfg = configs[status] ?? configs.pending;
   // Kein GESCHREI in Grossbuchstaben — der Zustand auf Deutsch reicht.
@@ -107,12 +107,12 @@ function JobCard({ job }: { job: { id: number; requestId?: string | null; status
       </div>
       {/* Fehlgeschlagene Jobs zeigen jetzt den echten Grund statt nur "FAILED" */}
       {displayStatus === "failed" && (job as { error?: string | null }).error && (
-        <div className="mt-3 text-xs bg-red-500/10 border border-red-500/20 text-red-300 rounded-md px-3 py-2 break-words">
+        <div className="mt-3 text-xs bg-red-500/10 border border-red-500/20 text-red-800 rounded-md px-3 py-2 break-words">
           {(job as { error?: string | null }).error}
         </div>
       )}
       <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/50">
-        <span className={`text-xs flex items-center gap-1 ${job.mediaType === "video" ? "text-purple-400" : "text-blue-400"}`}>
+        <span className={`text-xs flex items-center gap-1 ${job.mediaType === "video" ? "text-purple-800" : "text-blue-800"}`}>
           {job.mediaType === "video" ? <Film className="w-3 h-3" /> : <Image className="w-3 h-3" />}
           {job.mediaType === "video" ? "Video" : "Bild"}
         </span>
@@ -120,7 +120,7 @@ function JobCard({ job }: { job: { id: number; requestId?: string | null; status
           {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true, locale: de })}
         </span>
         {resultUrl && (
-          <a href={resultUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+          <a href={resultUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-foreground hover:underline flex items-center gap-1">
             Öffnen <ExternalLink className="w-3 h-3" />
           </a>
         )}
@@ -249,7 +249,7 @@ export default function Studio() {
               <div key={s} className="flex items-center gap-2">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                   step === s ? "bg-primary text-primary-foreground" :
-                  ["vision", "prompt", "generating", "done"].indexOf(step) > i ? "bg-primary/30 text-primary" : "bg-secondary text-muted-foreground"
+                  ["vision", "prompt", "generating", "done"].indexOf(step) > i ? "bg-primary/30 text-foreground" : "bg-secondary text-muted-foreground"
                 }`}>{i + 1}</div>
                 <span className="text-xs text-muted-foreground hidden sm:block">
                   {s === "vision" ? "Vision" : s === "prompt" ? "Prompt" : s === "generating" ? "Rendern" : "Fertig"}
@@ -335,7 +335,7 @@ export default function Studio() {
             {step === "prompt" && generatedPrompt && (
               <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-                  <div className="text-xs text-primary mb-2">LUKAS' BEGRÜNDUNG:</div>
+                  <div className="text-xs text-foreground mb-2">LUKAS' BEGRÜNDUNG:</div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{generatedPrompt.reasoning}</p>
                 </div>
 
@@ -370,7 +370,7 @@ export default function Studio() {
                     <select
                       value={chosenModel}
                       onChange={(e) => setChosenModel(e.target.value)}
-                      className="w-full bg-secondary/50 rounded-full bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+                      className="w-full bg-secondary/50 rounded-full bg-muted/60 px-4 py-2.5 text-sm outline-none transition-colors focus:bg-muted/60"
                     >
                       {modelle.map((m) => (
                         <option key={m.id} value={m.id}>
@@ -385,7 +385,7 @@ export default function Studio() {
                     <select
                       value={aspectRatio}
                       onChange={(e) => setAspectRatio(e.target.value)}
-                      className="w-full bg-secondary/50 rounded-full bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+                      className="w-full bg-secondary/50 rounded-full bg-muted/60 px-4 py-2.5 text-sm outline-none transition-colors focus:bg-muted/60"
                     >
                       {["16:9", "9:16", "1:1", "4:3", "3:4"].map((r) => (
                         <option key={r} value={r}>
@@ -429,7 +429,7 @@ export default function Studio() {
                 <div className="relative">
                   <div className="w-20 h-20 rounded-full border-2 border-primary/20 animate-pulse" />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    <Loader2 className="w-8 h-8 text-foreground animate-spin" />
                   </div>
                 </div>
                 <div className="text-center space-y-2">
@@ -442,7 +442,7 @@ export default function Studio() {
             {/* Step 4: Done */}
             {step === "done" && (
               <div className="flex flex-col items-center justify-center py-12 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                <CheckCircle2 className="w-16 h-16 text-green-400" />
+                <CheckCircle2 className="w-16 h-16 text-green-800" />
                 <div className="text-center space-y-2">
                   <div className="font-bold text-lg">Auftrag läuft</div>
                   <div className="text-sm text-muted-foreground">Den Fortschritt siehst du in der Warteschlange</div>

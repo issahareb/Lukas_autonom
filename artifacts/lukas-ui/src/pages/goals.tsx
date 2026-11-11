@@ -21,9 +21,9 @@ import { prioritaet, zielstand } from "@/lib/worte";
 const PRIO_TON = { high: "schlecht", medium: "warnung", low: "gut" } as const;
 
 const STAND_SYMBOL: Record<string, React.ReactNode> = {
-  active: <Clock className="h-4 w-4 text-sky-300" />,
-  completed: <CheckCircle2 className="h-4 w-4 text-emerald-300" />,
-  failed: <AlertCircle className="h-4 w-4 text-red-300" />,
+  active: <Clock className="h-4 w-4 text-sky-800" />,
+  completed: <CheckCircle2 className="h-4 w-4 text-emerald-800" />,
+  failed: <AlertCircle className="h-4 w-4 text-red-800" />,
 };
 
 const FILTER = ["all", "active", "completed", "failed"];
@@ -133,7 +133,7 @@ export default function Goals() {
                 className={`rounded-full px-4 py-1.5 text-sm transition-colors ${
                   gewaehlt
                     ? "bg-primary text-primary-foreground"
-                    : "bg-white/[0.06] text-muted-foreground hover:bg-white/[0.1] hover:text-foreground"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 }`}
               >
                 {zielstand(s)}
@@ -166,7 +166,7 @@ export default function Goals() {
                 </p>
 
                 {g.progress && (
-                  <div className="mt-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+                  <div className="mt-3 rounded-2xl bg-muted/60 px-4 py-3">
                     <p className="text-[11px] text-muted-foreground">Wie weit er ist</p>
                     <p className="mt-1 text-sm leading-relaxed break-words">{g.progress}</p>
                   </div>
@@ -178,14 +178,14 @@ export default function Goals() {
                       <button
                         type="button"
                         onClick={() => handleStatusChange(g.id, "completed")}
-                        className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-1.5 text-xs text-emerald-300 transition-colors hover:bg-emerald-400/20"
+                        className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-3.5 py-1.5 text-xs text-emerald-800 transition-colors hover:bg-emerald-400/20"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" /> Erledigt
                       </button>
                       <button
                         type="button"
                         onClick={() => handleStatusChange(g.id, "failed")}
-                        className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-3.5 py-1.5 text-xs text-red-300 transition-colors hover:bg-destructive/20"
+                        className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-3.5 py-1.5 text-xs text-red-800 transition-colors hover:bg-destructive/20"
                       >
                         <AlertCircle className="h-3.5 w-3.5" /> Gescheitert
                       </button>
@@ -194,7 +194,7 @@ export default function Goals() {
                     <button
                       type="button"
                       onClick={() => handleStatusChange(g.id, "active")}
-                      className="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3.5 py-1.5 text-xs transition-colors hover:bg-white/[0.1]"
+                      className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3.5 py-1.5 text-xs transition-colors hover:bg-muted/60"
                     >
                       <RotateCcw className="h-3.5 w-3.5" /> Wieder aufnehmen
                     </button>

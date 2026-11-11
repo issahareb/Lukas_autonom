@@ -57,7 +57,7 @@ export default function Diagnostics() {
           type="button"
           onClick={load}
           data-testid="button-refresh-debug-log"
-          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+          className="flex items-center gap-2 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-muted/60"
         >
           <RefreshCw className="h-4 w-4" /> Aktualisieren
         </button>

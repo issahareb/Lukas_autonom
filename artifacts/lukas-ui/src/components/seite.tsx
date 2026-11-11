@@ -67,12 +67,12 @@ export const staffel = (i: number) => Math.min(i, 8) * 45;
 type Ton = "neutral" | "gut" | "warnung" | "schlecht" | "info" | "akzent";
 
 const TON: Record<Ton, string> = {
-  neutral: "bg-white/[0.06] text-muted-foreground",
-  gut: "bg-emerald-400/10 text-emerald-300",
-  warnung: "bg-amber-400/10 text-amber-300",
-  schlecht: "bg-destructive/15 text-red-300",
-  info: "bg-sky-400/10 text-sky-300",
-  akzent: "bg-primary/12 text-primary",
+  neutral: "bg-muted/60 text-muted-foreground",
+  gut: "bg-emerald-400/10 text-emerald-800",
+  warnung: "bg-amber-400/10 text-amber-800",
+  schlecht: "bg-destructive/15 text-red-800",
+  info: "bg-sky-400/10 text-sky-800",
+  akzent: "bg-primary/12 text-foreground",
 };
 
 /**
@@ -109,7 +109,7 @@ export function Leer({
 }) {
   return (
     <div className="workspace-empty rise flex flex-col items-center py-12 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.04]">
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/60">
         <Icon className="h-7 w-7 text-muted-foreground/50" />
       </span>
       <p className="mt-4 font-medium">{titel}</p>
@@ -133,6 +133,6 @@ export function Laedt({ was = "Wird geladen…" }: { was?: string }) {
  */
 export function Fehler({ text }: { text: string }) {
   return (
-    <div role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-red-300">{text}</div>
+    <div role="alert" className="rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-red-800">{text}</div>
   );
 }

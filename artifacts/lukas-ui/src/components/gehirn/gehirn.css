@@ -1,10 +1,10 @@
 .gehirn-page,
 .gehirn-reader {
-  --brain-ink: #edf2fa;
-  --brain-muted: #94a3ba;
-  --brain-line: rgba(152, 180, 217, 0.12);
-  --brain-panel: #0b101b;
-  --brain-accent: #8dbbff;
+  --brain-ink: var(--foreground);
+  --brain-muted: var(--muted-foreground);
+  --brain-line: var(--border);
+  --brain-panel: var(--card);
+  --brain-accent: var(--ring);
   color: var(--brain-ink);
 }
 .gehirn-page {
@@ -81,13 +81,13 @@
   padding: 9px 13px;
   border: 1px solid var(--brain-line);
   border-radius: 10px;
-  background: #0d1420;
+  background: var(--brain-panel);
   color: var(--brain-ink);
   font-size: 12px !important;
   transition: background 0.2s;
 }
 .gehirn-button:hover {
-  background: #172236;
+  background: var(--brain-panel);
 }
 .gehirn-workspace {
   display: grid;
@@ -100,7 +100,7 @@
   border: 1px solid var(--brain-line);
   border-radius: 22px;
   overflow: hidden;
-  background: #080d16;
+  background: var(--brain-panel);
 }
 .gehirn-toolbar {
   display: flex;
@@ -130,7 +130,7 @@
   border-radius: 4px;
 }
 .gehirn-search input::placeholder {
-  color: #8898b0;
+  color: var(--brain-muted);
 }
 .gehirn-search input::-webkit-search-cancel-button {
   display: none;
@@ -146,7 +146,7 @@
   display: flex;
   flex-shrink: 0;
   gap: 3px;
-  background: #101826;
+  background: var(--brain-panel);
   border: 1px solid var(--brain-line);
   border-radius: 9px;
   padding: 3px;
@@ -163,8 +163,8 @@
   font-size: 11px;
 }
 .gehirn-view-switch button[aria-pressed="true"] {
-  background: #23324a;
-  color: #e5efff;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
 }
 .gehirn-regions {
   display: flex;
@@ -197,15 +197,15 @@
   font-size: 10px;
 }
 .gehirn-regions button[aria-pressed="true"] {
-  background: #152039;
-  border-color: #2b3b56;
+  background: var(--brain-panel);
+  border-color: var(--brain-line);
   color: var(--brain-ink);
 }
 .gehirn-stage {
   position: relative;
   height: clamp(470px, 65vh, 780px);
   isolation: isolate;
-  background: #050912;
+  background: var(--brain-panel);
   overflow: hidden;
 }
 .gehirn-canvas,
@@ -236,8 +236,8 @@
   border: none;
   border-left: 2px solid var(--neuron-color);
   border-radius: 2px;
-  background: rgba(5, 9, 18, 0.88);
-  color: #c6d4e9;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
   font-size: 11px !important;
   font-weight: 400;
   line-height: 18px;
@@ -248,8 +248,8 @@
 }
 .gehirn-label:hover,
 .gehirn-label.is-selected {
-  background: #15253b;
-  color: #fff;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
 }
 .gehirn-stage-top {
   position: absolute;
@@ -266,11 +266,11 @@
   font-family: var(--font-mono, monospace);
   font-size: 9px;
   letter-spacing: 0.13em;
-  color: #9bb0d0;
+  color: var(--brain-muted);
 }
 .gehirn-snapshot {
   font-size: 10px;
-  color: #8193b0;
+  color: var(--brain-muted);
   white-space: nowrap;
 }
 .gehirn-snapshot:before {
@@ -278,7 +278,7 @@
   display: inline-block;
   width: 5px;
   height: 5px;
-  background: #637694;
+  background: var(--brain-panel);
   border-radius: 50%;
   margin-right: 6px;
   vertical-align: middle;
@@ -303,8 +303,8 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--brain-line);
-  background: #101927;
-  color: #b1bfd3;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
   border-radius: 9px;
   padding: 9px 11px;
   font-size: 11px !important;
@@ -315,7 +315,7 @@
   padding: 3px;
   border: 1px solid var(--brain-line);
   border-radius: 10px;
-  background: #101927;
+  background: var(--brain-panel);
 }
 .gehirn-stage-tools button,
 .gehirn-icon-button {
@@ -327,11 +327,11 @@
   border: 0;
   border-radius: 6px;
   background: none;
-  color: #bccbe0;
+  color: var(--brain-muted);
 }
 .gehirn-stage-tools button:hover,
 .gehirn-icon-button:hover {
-  background: #23334b;
+  background: var(--brain-panel);
 }
 .gehirn-stage-message {
   position: absolute;
@@ -343,7 +343,7 @@
   gap: 16px;
   padding: 40px;
   text-align: center;
-  background: #050912;
+  background: var(--brain-panel);
   color: var(--brain-muted);
   font-size: 13px;
   z-index: 3;
@@ -362,16 +362,16 @@
   max-width: 340px;
   margin-left: auto;
   padding: 20px;
-  background: #122035;
-  border: 1px solid #304665;
+  background: var(--brain-panel);
+  border: 1px solid var(--brain-line);
   border-radius: 12px;
   z-index: 5;
   font-size: 12px;
-  color: #c6d3e7;
+  color: var(--brain-muted);
 }
 .gehirn-help > button {
   float: right;
-  color: #c6d3e7;
+  color: var(--brain-muted);
   padding: 4px;
   background: none;
   border: none;
@@ -392,12 +392,12 @@
   padding: 14px 18px;
   border-top: 1px solid var(--brain-line);
   font-size: 10px;
-  color: #8d9db5;
+  color: var(--brain-muted);
   font-family: var(--font-mono, monospace);
 }
 .gehirn-status strong {
   font-weight: 500;
-  color: #c4d4ed;
+  color: var(--brain-muted);
 }
 .gehirn-status-dot {
   margin: 0 9px;
@@ -448,10 +448,10 @@
   color: var(--brain-ink);
 }
 .gehirn-entry:hover {
-  background: rgba(121, 160, 222, 0.045);
+  background: var(--brain-panel);
 }
 .gehirn-entry[aria-pressed="true"] {
-  background: #142035;
+  background: var(--brain-panel);
 }
 .gehirn-entry-dot {
   width: 6px;
@@ -474,11 +474,11 @@
 }
 .gehirn-entry-text > small {
   font-size: 10px;
-  color: #899bb7;
+  color: var(--brain-muted);
 }
 .gehirn-entry > svg {
   flex-shrink: 0;
-  color: #667b9e;
+  color: var(--brain-muted);
 }
 .gehirn-all {
   display: flex;
@@ -487,7 +487,7 @@
   gap: 8px;
   border: 0;
   background: none;
-  color: #9fbfeb;
+  color: var(--brain-muted);
   padding: 20px 0;
   font-size: 12px !important;
   text-align: left;
@@ -498,7 +498,7 @@
   line-height: 1.85;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #b5c5dc;
+  color: var(--brain-muted);
   margin: 20px 0;
 }
 .gehirn-metadata {
@@ -524,7 +524,7 @@
   overflow-wrap: anywhere;
   min-width: 0;
   max-width: 65%;
-  color: #ccd8ea;
+  color: var(--brain-muted);
 }
 .gehirn-connections-heading {
   display: flex;
@@ -548,8 +548,8 @@
 }
 .gehirn-connections-heading select {
   font-size: 11px;
-  background: #142035;
-  color: #bdcde5;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
   border: 1px solid var(--brain-line);
   border-radius: 7px;
   padding: 7px;
@@ -567,7 +567,7 @@
   text-align: left;
 }
 .gehirn-connection:hover {
-  background: #101927;
+  background: var(--brain-panel);
 }
 .gehirn-connection > span:first-child {
   width: 5px;
@@ -583,7 +583,7 @@
   flex: 1;
 }
 .gehirn-connection small {
-  color: #8c9fbd;
+  color: var(--brain-muted);
   font-size: 10px;
 }
 .gehirn-connection > span:nth-child(2) > span {
@@ -592,7 +592,7 @@
 }
 .gehirn-connection > svg {
   flex-shrink: 0;
-  color: #637b9f;
+  color: var(--brain-muted);
 }
 .gehirn-note {
   font-size: 11px;
@@ -612,10 +612,10 @@
 .gehirn-error {
   padding: 12px 16px;
   margin-bottom: 18px;
-  background: #2c1820;
-  border: 1px solid #703645;
+  background: var(--brain-panel);
+  border: 1px solid var(--brain-line);
   border-radius: 10px;
-  color: #fac1cd;
+  color: var(--brain-muted);
   font-size: 13px;
 }
 .gehirn-empty {
@@ -811,10 +811,10 @@
   place-items: center;
   width: 44px;
   height: 44px;
-  border: 1px solid #ffffff18;
+  border: 1px solid var(--brain-line);
   border-radius: 14px;
-  color: #c9d4ea;
-  background: #0a1220e6;
+  color: var(--brain-muted);
+  background: var(--brain-panel);
 }
 .gehirn-dive {
   position: absolute;
@@ -827,10 +827,10 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border: 1px solid #c7bcfa40;
+  border: 1px solid var(--brain-line);
   border-radius: 14px;
-  background: #151a2aeb;
-  color: #e2d9ff;
+  background: var(--brain-panel);
+  color: var(--brain-muted);
   font-size: 12px;
   text-align: left;
   overflow-wrap: anywhere;
@@ -877,7 +877,7 @@
 .gehirn-direction input {
   width: 20px;
   height: 20px;
-  accent-color: #c7bcfa;
+  accent-color: var(--brain-accent);
 }
 
 /* Der Leser scrollt unabhängig von der Karte. Seine Navigation bleibt da. */
@@ -896,7 +896,7 @@
 .gehirn-reader-header {
   flex-shrink: 0;
   padding: 8px 0 12px;
-  background: #0b101b;
+  background: var(--brain-panel);
   border-bottom: 1px solid var(--brain-line);
 }
 .gehirn-reader-header .gehirn-icon-button {
@@ -926,14 +926,14 @@
   min-height: 44px;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: #111a28;
+  background: var(--brain-panel);
   color: var(--brain-muted);
   font-size: 13px;
 }
 .gehirn-reader-tabs button[aria-pressed="true"] {
-  border-color: #c7bcfa55;
-  background: #c7bcfa16;
-  color: #e2d9ff;
+  border-color: var(--brain-line);
+  background: var(--brain-panel);
+  color: var(--brain-muted);
 }
 .gehirn-reader-tabs span {
   margin-left: 4px;
@@ -965,7 +965,7 @@
   position: fixed;
   inset: 0;
   z-index: 69;
-  background: #0009;
+  background: var(--brain-panel);
 }
 .gehirn-reader {
   position: fixed;
@@ -977,7 +977,7 @@
   height: 100dvh;
   min-height: 0;
   padding: max(8px, env(safe-area-inset-top)) 18px 0;
-  background: #0b101b;
+  background: var(--brain-panel);
 }
 .gehirn-reader .gehirn-reader-body {
   flex: 1;
@@ -1017,3 +1017,9 @@
     line-height: 1.5;
   }
 }
+
+/* Selected controls remain distinct on paper, including the reader portal. */
+:is(.gehirn-page,.gehirn-reader) button[aria-pressed="true"],
+.gehirn-label:is(:hover,.is-selected) { background: var(--primary); color: var(--foreground); }
+.gehirn-label { color: var(--foreground); }
+.gehirn-error { color: var(--destructive); background: color-mix(in srgb,var(--destructive) 7%,var(--card)); }

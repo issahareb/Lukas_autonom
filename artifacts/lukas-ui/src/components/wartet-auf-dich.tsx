@@ -50,10 +50,10 @@ function authHeaders(): Record<string, string> {
  * Freigabe erteilt, soll lesen koennen, worauf er sich einlaesst.
  */
 const TIER_STYLE: Record<string, string> = {
-  R0: "bg-white/[0.06] text-muted-foreground",
-  R1: "bg-white/[0.06] text-muted-foreground",
-  R2: "bg-amber-400/10 text-amber-300",
-  R3: "bg-destructive/15 text-red-300",
+  R0: "bg-muted/60 text-muted-foreground",
+  R1: "bg-muted/60 text-muted-foreground",
+  R2: "bg-amber-400/10 text-amber-800",
+  R3: "bg-destructive/15 text-red-800",
 };
 
 const TIER_WORT: Record<string, string> = {
@@ -245,7 +245,7 @@ export function WartetAufDich({ kompakt = false }: { kompakt?: boolean } = {}) {
             <div className="flex min-w-0 items-start gap-2 font-medium">
               {m.dringend && (
                 <AlertTriangle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-800"
                   aria-label="dringend"
                 />
               )}
@@ -259,7 +259,7 @@ export function WartetAufDich({ kompakt = false }: { kompakt?: boolean } = {}) {
             </span>
           </div>
 
-          {m.veraltet && <p className="text-xs text-amber-400">Ältere Meldung · erneut prüfen, bevor sie als aktueller Blocker gilt.</p>}
+          {m.veraltet && <p className="text-xs text-amber-800">Ältere Meldung · erneut prüfen, bevor sie als aktueller Blocker gilt.</p>}
           {m.geprueftAt && <p className="text-xs text-muted-foreground">Von dir bestätigt: {new Date(m.geprueftAt).toLocaleString("de-DE")}</p>}
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {m.text}

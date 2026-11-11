@@ -48,12 +48,12 @@ export default function VerbrauchFallstudie() {
       </div></details>
       <button disabled={busy} className="rounded-full border px-4 py-2 text-sm">{busy?'Lädt …':'Vergleichen'}</button>
     </form>
-    {fehler&&<p role="alert" className="text-sm text-amber-400">{fehler} {daten?'Die vorherigen Werte bleiben angezeigt.':''}</p>}
+    {fehler&&<p role="alert" className="text-sm text-amber-800">{fehler} {daten?'Die vorherigen Werte bleiben angezeigt.':''}</p>}
     {daten&&<>
       <p className="text-sm">{daten.aktuell.zeitraum.von} bis {daten.aktuell.zeitraum.bis} gegen {daten.vorher.zeitraum.von} bis {daten.vorher.zeitraum.bis}</p>
       <p className="text-sm">{zahl(daten.aktuell.abdeckung.gemessen)} von {zahl(daten.aktuell.abdeckung.aufrufe)} Aufrufen mit vollständigen Tokenwerten · {zahl(daten.aktuell.abdeckung.abgenommen)} von {zahl(daten.aktuell.abdeckung.auftraege)} Aufträgen abgenommen.</p>
-      {daten.aktuell.abdeckung.ohneMesswert>0&&<p className="text-sm text-amber-400">{daten.aktuell.abdeckung.ohneMesswert} Aufrufe ohne vollständigen Nutzungsbeleg. Ihre Kosten sind unbekannt.</p>}
-      {(!daten.abgleich.aktuell.passt||!daten.abgleich.vorher.passt)&&<p className="text-sm text-amber-400">Tagesaggregate und Einzelbelege stimmen nicht vollständig überein. Historische oder fehlende Belege sind im Export erkennbar.</p>}
+      {daten.aktuell.abdeckung.ohneMesswert>0&&<p className="text-sm text-amber-800">{daten.aktuell.abdeckung.ohneMesswert} Aufrufe ohne vollständigen Nutzungsbeleg. Ihre Kosten sind unbekannt.</p>}
+      {(!daten.abgleich.aktuell.passt||!daten.abgleich.vorher.passt)&&<p className="text-sm text-amber-800">Tagesaggregate und Einzelbelege stimmen nicht vollständig überein. Historische oder fehlende Belege sind im Export erkennbar.</p>}
       {daten.vergleich.length?daten.vergleich.map(v=><div key={v.key} className="border-t pt-3 text-sm space-y-1">
         <p className="font-medium">{v.kanal} · {v.aufgabenart}{v.fall?` · ${v.fall}`:''}: {urteil[v.bewertung]??v.bewertung}</p>
         <p>Tokens je bestätigtem Erfolg, inklusive Fehlversuchen: {zahl(v.vorher?.tokensJeErfolg??null)} → {zahl(v.aktuell?.tokensJeErfolg??null)}</p>

@@ -14,7 +14,7 @@ type Enquiry = {
   details: Record<string, string>; weitergabe: string; auswertung: string; notiz: string;
   email_status: string; beendet_am: string | null; created_at: string; updated_at: string;
 };
-const labels: Record<string, string> = { name: "Name", unternehmen: "Unternehmen", leistungen: "Leistungen", wuensche: "Wünsche & Funktionen", website: "Bestehende Website", zeitrahmen: "Zeitrahmen", budget: "Budget", rueckruf: "Rückrufwunsch", email: "E-Mail", offeneFragen: "Noch zu klären" };
+const labels: Record<string, string> = { name: "Name", unternehmen: "Unternehmen", leistungen: "Leistungen", wuensche: "Wünsche & Funktionen", website: "Bestehende Website", zeitrahmen: "Zeitrahmen", budget: "Budget", rueckruf: "Rückrufwunsch", email: "E-Mail", ergebnis: "Ergebnis", naechsteSchritte: "Nächste Schritte", offeneFragen: "Noch zu klären" };
 async function request(path: string, options?: RequestInit) {
   const token = localStorage.getItem("lukas_token");
   const response = await fetch(`${BASE}/api/telefon/anfragen${path}`, {
@@ -32,7 +32,15 @@ function EnquiryCard({ row }: { row: Enquiry }) {
     onSuccess: (_data, variables) => { if (variables.notiz !== undefined) setNote(null); void client.invalidateQueries({ queryKey: ["telefonanfragen"] }); },
   });
   const number = /^[1-9]\d{5,14}$/.test(row.nummer) ? "+" + row.nummer : "";
-  const fields = Object.entries(labels).filter(([key]) => row.details[key]);
+  const stale = row.auswertung === "laeuft" && Date.now() - new Date(row.updated_at).getTime() > 180000;
+  const missingNote = row.weitergabe === "abgelehnt"
+    ? "Keine Gesprächsdetails gespeichert: Der Gesprächspartner hat die Weitergabe abgelehnt."
+    : row.auswertung === "fehler"
+      ? "Die Gesprächsnotiz konnte nicht erstellt werden. Das Anliegen ist nicht zuverlässig erfasst."
+      : row.auswertung === "laeuft" && !stale
+        ? "Die Gesprächsnotiz wird erstellt und erscheint hier automatisch."
+        : "Für diesen Anruf ist keine Gesprächsnotiz gespeichert. Was besprochen wurde, ist hier nicht verfügbar.";
+  const fields = Object.entries(labels).filter(([key]) => row.weitergabe !== "abgelehnt" && row.details[key]);
   return <Karte>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -50,14 +58,17 @@ function EnquiryCard({ row }: { row: Enquiry }) {
       {row.email_status === "fehler" && <Chip ton="warnung">E-Mail nicht bestätigt</Chip>}
       {row.email_status === "sendet" && <Chip ton="warnung">E-Mail-Bestätigung ausstehend</Chip>}
     </div>
-    {row.zusammenfassung && <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed">{row.zusammenfassung}</p>}
-    {row.weitergabe !== "erlaubt" && <p className="mt-4 text-sm text-muted-foreground">{row.weitergabe === "abgelehnt" ? "Der Anrufer hat die Weitergabe abgelehnt. Es werden keine Anfragedetails weitergegeben." : "Die Freigabe zur Weitergabe der Anfragedaten ist noch offen."}</p>}
+    <section aria-label={`Gesprächsnotiz Anruf ${row.id}`} className="mt-4 rounded-xl border border-border bg-background p-4">
+      <h3 className="text-xs font-semibold text-muted-foreground">Gesprächsnotiz</h3>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{row.weitergabe !== "abgelehnt" && row.zusammenfassung ? row.zusammenfassung : missingNote}</p>
+    </section>
+    {row.weitergabe === "offen" && <p className="mt-3 text-xs text-muted-foreground">E-Mail-Weiterleitung nicht freigegeben. Eine vorhandene interne Gesprächsnotiz bleibt hier sichtbar.</p>}
     {fields.length > 0 && <dl className="mt-4 grid gap-3 sm:grid-cols-2">{fields.map(([key, label]) => <div key={key} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm">{row.details[key]}</dd></div>)}</dl>}
-    {row.auswertung === "fehler" && <p className="mt-3 text-sm text-amber-300">Die automatische Notiz konnte nicht vollständig erstellt werden. Vorhandene Angaben können unvollständig sein.</p>}
+    {row.auswertung === "fehler" && <p className="mt-3 text-sm text-amber-800">Die automatische Notiz konnte nicht vollständig erstellt werden. Vorhandene Angaben können unvollständig sein.</p>}
     <div className="mt-5 flex flex-wrap items-center gap-3">
       {number && <Button asChild size="sm" variant="outline"><a href={`tel:${number}`} aria-label={`Rückruf ${number}`}><Phone size={14} className="mr-2" />Rückruf</a></Button>}
       <label className="flex items-center gap-2 text-sm">Status
-        <select aria-label={`Status Anfrage ${row.id}`} className="rounded-lg border border-white/10 bg-background p-2 text-sm" value={row.status} disabled={mutation.isPending} onChange={e => mutation.mutate({ status: e.target.value as Status })}>
+        <select aria-label={`Status Anfrage ${row.id}`} className="rounded-lg border border-border bg-background p-2 text-sm" value={row.status} disabled={mutation.isPending} onChange={e => mutation.mutate({ status: e.target.value as Status })}>
           {Object.entries(statuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
       </label>
@@ -82,7 +93,7 @@ export default function Telefonanfragen() {
   return <Seite icon={PhoneIncoming} titel="Telefonanfragen" unterzeile="Wer hat angerufen, was wird gebraucht und was ist noch offen?" aktionen={<Button size="sm" variant="outline" onClick={() => void query.refetch()}><RefreshCw size={15} className="mr-2" />Aktualisieren</Button>}>
     <div className="flex flex-col gap-3 sm:flex-row">
       <label className="workspace-search flex-1"><Search size={18} /><input type="search" aria-label="Telefonanfragen suchen" placeholder="Name, Rufnummer oder Anliegen suchen" maxLength={200} value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} /></label>
-      <select aria-label="Anfragen nach Status filtern" className="rounded-xl border border-white/10 bg-background p-3 text-sm" value={status} onChange={e => { setStatus(e.target.value); setOffset(0); }}><option value="">Alle Status</option>{Object.entries(statuses).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select>
+      <select aria-label="Anfragen nach Status filtern" className="rounded-xl border border-border bg-background p-3 text-sm" value={status} onChange={e => { setStatus(e.target.value); setOffset(0); }}><option value="">Alle Status</option>{Object.entries(statuses).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select>
     </div>
     <p className="text-xs text-muted-foreground">{query.data ? `${query.data.total} Anrufe` : "Anfragen werden geladen"} · Zeiten in Deutschland · <Link className="underline" href="/telefon">Zum Anrufprotokoll</Link></p>
     {query.isPending && <p role="status">Telefonanfragen werden geladen …</p>}
@@ -90,6 +101,6 @@ export default function Telefonanfragen() {
     {query.data?.total === 0 && <Karte><h2 className="font-semibold">Noch keine passenden Telefonanfragen</h2><p className="mt-2 text-sm text-muted-foreground">Neue eingehende Anrufe erscheinen hier automatisch. Bestätigte Kundenwünsche und Rückrufdaten werden zu einer Anfrage zusammengefasst. Frühere Anrufe bleiben im Anrufprotokoll.</p></Karte>}
     {query.data?.rows.map(row => <EnquiryCard key={row.id} row={row} />)}
     {(query.data?.total ?? 0) > 50 && <div className="flex items-center justify-between"><Button variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}><ArrowLeft size={15} className="mr-2" />Zurück</Button><span className="text-sm">Seite {Math.floor(offset / 50) + 1}</span><Button variant="outline" disabled={offset + 50 >= (query.data?.total ?? 0)} onClick={() => setOffset(offset + 50)}>Weiter<ArrowRight size={15} className="ml-2" /></Button></div>}
-    <p className="text-xs text-muted-foreground">Automatisch erstellte Gesprächsnotizen bitte vor einem verbindlichen Angebot prüfen. Hier werden Anfragedaten gespeichert, keine Audioaufnahmen.</p>
+    <p className="text-xs text-muted-foreground">Automatisch erstellte Gesprächsnotizen bitte vor einem verbindlichen Angebot prüfen. Interne Gesprächsnotizen und E-Mail-Weiterleitung werden getrennt behandelt. Hier werden keine Audioaufnahmen gespeichert.</p>
   </Seite>;
 }

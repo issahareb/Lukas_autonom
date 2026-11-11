@@ -25,7 +25,7 @@ export default function NotFound() {
         }}
       />
       <div className="relative flex flex-col items-center text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.04]">
+        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/60">
           <Compass className="h-7 w-7 text-muted-foreground/50" />
         </span>
         <h1 className="mt-5 text-2xl font-semibold tracking-tight">Hier ist nichts</h1>

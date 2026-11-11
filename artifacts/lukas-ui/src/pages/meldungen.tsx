@@ -114,7 +114,7 @@ export default function Meldungen() {
     >
       <div className="space-y-9">
         {laedt && <Laedt />}
-        {fehler && <p role="alert" className="text-sm text-amber-400">{fehler}</p>}
+        {fehler && <p role="alert" className="text-sm text-amber-800">{fehler}</p>}
         {alt.length > 0 && <div className="card-soft rounded-3xl p-4 text-sm space-y-2"><p>{alt.length} ältere Meldung(en) ohne aktuelle Bestätigung. Sie bleiben offen, gelten aber nicht automatisch als aktuelle Störung.</p><button onClick={() => setAlteZeigen(v => !v)} className="underline">{alteZeigen ? "Ältere Meldungen einklappen" : "Ältere Meldungen prüfen"}</button></div>}
 
         {!laedt && !fehler && rows.length === 0 && (
@@ -142,7 +142,7 @@ export default function Meldungen() {
                   <div className="font-medium flex items-start gap-2">
                     {m.dringend && (
                       <AlertTriangle
-                        className="w-4 h-4 text-amber-400 shrink-0 mt-1"
+                        className="w-4 h-4 text-amber-800 shrink-0 mt-1"
                         aria-label="dringend"
                       />
                     )}
@@ -155,7 +155,7 @@ export default function Meldungen() {
                   </div>
                 </div>
 
-                {m.veraltet && <p className="text-xs text-amber-400">Aktualität ungeprüft</p>}
+                {m.veraltet && <p className="text-xs text-amber-800">Aktualität ungeprüft</p>}
                 {m.geprueftAt && <p className="text-xs text-muted-foreground">Von dir bestätigt: {new Date(m.geprueftAt).toLocaleString("de-DE")}</p>}
                 <div className="flex flex-wrap gap-3 text-sm"><button disabled={sendet === m.id} onClick={() => bestaetigen(m.id)} className="rounded-full border px-3 py-2">Weiterhin aktuell</button><button disabled={sendet === m.id} onClick={() => antworten(m.id, true)} className="rounded-full border px-3 py-2">Als erledigt markieren</button></div>
                 {offen.length > 1 && <details className="text-sm"><summary className="cursor-pointer text-muted-foreground">Doppelte Meldung zuordnen</summary><div className="mt-2 space-y-2"><p className="text-xs text-muted-foreground">Der Inhalt wird an die gewählte Meldung angehängt; das Anliegen bleibt dort offen.</p><select aria-label={`Zusammenführen: ${m.betreff}`} className="w-full rounded-xl border bg-background p-2" value={mergeZiele[m.id] ?? ""} onChange={e => setMergeZiele(v => ({ ...v, [m.id]: e.target.value }))}><option value="">Offene Zielmeldung wählen</option>{offen.filter(z => z.id !== m.id).map(z => <option value={z.id} key={z.id}>{z.betreff}</option>)}</select><button disabled={!mergeZiele[m.id] || sendet === m.id} onClick={() => zusammenfassen(m.id)} className="rounded-full border px-3 py-2 disabled:opacity-40">In gewählte Meldung zusammenführen</button></div></details>}
@@ -166,7 +166,7 @@ export default function Meldungen() {
                     value={entwuerfe[m.id] ?? ""}
                     onChange={(e) => setEntwuerfe((v) => ({ ...v, [m.id]: e.target.value }))}
                     placeholder="Deine Antwort — ein Satz reicht meistens."
-                    className="min-h-[80px] resize-none rounded-2xl border-0 bg-white/[0.05] text-sm"
+                    className="min-h-[80px] resize-none rounded-2xl border-0 bg-muted/60 text-sm"
                   />
                   <div className="flex justify-end">
                     <button
@@ -196,7 +196,7 @@ export default function Meldungen() {
               <div key={m.id} className="card-soft space-y-2 rounded-3xl p-4 opacity-80">
                 <div className="flex items-start justify-between gap-3">
                   <div className="font-medium flex items-start gap-2 min-w-0">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-1" />
+                    <Check className="w-4 h-4 text-emerald-800 shrink-0 mt-1" />
                     <span className="text-pretty">{m.betreff}</span>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
