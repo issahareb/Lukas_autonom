@@ -46,7 +46,17 @@ function recoveryContext(journal: Journal): string {
 }
 
 export function workProgressContext(): string { return current.getStore()?.recovered ?? ""; }
-export function workProgressTask(fallback: string): string { return current.getStore()?.journal.auftrag ?? fallback; }
+export function workProgressTask(fallback: string): string {
+  const work = current.getStore();
+  if (!work) return fallback;
+  // A new/legacy journal may contain only "weiter" while chat history still
+  // resolves the real task. Keep that resolved task for routing and the next
+  // checkpoint; a concrete persisted task remains authoritative on recovery.
+  if (isTaskContinuation(work.journal.auftrag) && fallback.trim() && !isTaskContinuation(fallback)) {
+    work.journal.auftrag = fallback;
+  }
+  return work.journal.auftrag;
+}
 export function workProgressStatus(status: string): void { const work = current.getStore(); if (work) work.journal.status = status; }
 
 /** Reserve all calls before running any. No automatic replay of effects. */
