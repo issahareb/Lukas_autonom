@@ -860,7 +860,7 @@ export async function acceptLiveSipSession(options: LiveSessionOptions & {
       }
       const ownerSession = ownerPhoneTools(options);
       const businessReception = options.telefonBusiness && !ownerSession;
-      if (businessReception && options.telefonPeer?.richtung === "eingehend") {
+      if (options.telefonPeer) {
         try {
           const { preparePhoneEnquiry } = await import("../telefon-anfragen");
           phoneEnquiry = await preparePhoneEnquiry(options.sessionId, options.telefonPeer.nummer, options.telefonKontextId,

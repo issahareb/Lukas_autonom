@@ -3,7 +3,7 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
-/* Shared dark palette: graphite surfaces, readable secondary text and lilac actions. */
+/* One paper/ink/lime palette for pages, controls and portalled dialogs. */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -60,54 +60,45 @@
 }
 
 :root {
-  color-scheme: dark;
-
-  --background: #0c1113;
-  --foreground: oklch(0.97 0 0);
-
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: #b1edcd;
-
-  --card: oklch(0.16 0.008 265);
-  --card-foreground: oklch(0.97 0 0);
-  --card-border: oklch(1 0 0 / 8%);
-
-  --popover: oklch(0.16 0.008 265);
-  --popover-foreground: oklch(0.97 0 0);
-  --popover-border: oklch(1 0 0 / 8%);
-
-  --sidebar: oklch(0.13 0.008 265);
-  --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-primary: oklch(0.72 0.11 250);
-  --sidebar-primary-foreground: oklch(0.15 0.01 265);
-  --sidebar-accent: oklch(0.22 0.006 265);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-ring: oklch(0.6 0.12 265);
-
-  /* soft, desaturated accents — identisch zum Portfolio */
-  --blue: oklch(0.72 0.11 250);
-  --purple: oklch(0.68 0.11 300);
-
-  --primary: #b1edcd;
-  --primary-foreground: #10251b;
-
-  --secondary: oklch(0.22 0.006 265);
-  --secondary-foreground: oklch(0.97 0 0);
-
-  --muted: oklch(0.22 0.006 265);
-  --muted-foreground: #a5adbf;
-
-  --accent: oklch(0.22 0.006 265);
-  --accent-foreground: oklch(0.97 0 0);
-
-  --destructive: oklch(0.62 0.2 25);
-  --destructive-foreground: oklch(0.97 0 0);
-
-  --app-font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  color-scheme: light;
+  --hd-paper: #f3f1eb;
+  --hd-ink: #20211e;
+  --hd-muted: #62645c;
+  --hd-line: #d3d3c9;
+  --hd-lime: #d4ed8a;
+  --background: var(--hd-paper);
+  --foreground: var(--hd-ink);
+  --border: var(--hd-line);
+  --input: #b9bcb0;
+  --ring: #4f642b;
+  --card: #faf9f5;
+  --card-foreground: var(--hd-ink);
+  --card-border: var(--hd-line);
+  --popover: #faf9f5;
+  --popover-foreground: var(--hd-ink);
+  --popover-border: var(--hd-line);
+  --primary: var(--hd-lime);
+  --primary-foreground: var(--hd-ink);
+  --secondary: #e9e7df;
+  --secondary-foreground: var(--hd-ink);
+  --muted: #e9e7df;
+  --muted-foreground: var(--hd-muted);
+  --accent: #e6e8dc;
+  --accent-foreground: var(--hd-ink);
+  --destructive: #a32b35;
+  --destructive-foreground: #fff;
+  --sidebar: var(--hd-paper);
+  --sidebar-foreground: var(--hd-ink);
+  --sidebar-border: var(--hd-line);
+  --sidebar-primary: var(--hd-lime);
+  --sidebar-primary-foreground: var(--hd-ink);
+  --sidebar-accent: #e6e8dc;
+  --sidebar-accent-foreground: var(--hd-ink);
+  --sidebar-ring: #4f642b;
+  --blue: #32688a;
+  --purple: #73528a;
+  --app-font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --app-font-mono: 'Geist Mono', ui-monospace, monospace;
-
   --radius: 0.75rem;
 }
 
@@ -128,7 +119,7 @@
   }
   ::selection {
     background: color-mix(in oklch, var(--blue) 40%, transparent);
-    color: white;
+    color: var(--foreground);
   }
 }
 

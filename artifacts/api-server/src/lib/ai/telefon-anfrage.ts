@@ -9,6 +9,11 @@ export const enquirySummarySchema = z.object({
   name: field, unternehmen: field, leistungen: field, wuensche: field,
   website: field, zeitrahmen: field, budget: field, rueckruf: field, email: field,
   offeneFragen: field,
+  ergebnis: field.default(""), naechsteSchritte: field.default(""),
+}).superRefine((summary, context) => {
+  if (summary.weitergabe !== "abgelehnt" && !summary.zusammenfassung.trim()) {
+    context.addIssue({ code: "custom", path: ["zusammenfassung"], message: "Gesprächsnotiz fehlt" });
+  }
 });
 export type EnquirySummary = z.infer<typeof enquirySummarySchema>;
 export type EnquirySink = {
@@ -49,8 +54,8 @@ export class PhoneEnquiry {
           const summary = enquirySummarySchema.parse(await this.sink.summarize(transcript));
           await this.sink.save(summary, revision, complete);
           this.lastSaved = revision;
-          if (!this.closed && summary.kategorie === "anfrage" && summary.weitergabe === "erlaubt") {
-            try { this.acknowledge("Technische Bestätigung: Die bisher bestätigten Angaben dieser Telefonanfrage sind im privaten Dashboard von Hareb Digital gespeichert. Eine E-Mail ist damit noch nicht bestätigt. Spätere Ergänzungen werden weiter erfasst."); } catch { /* Stored even if the caller disconnected. */ }
+          if (!this.closed && summary.weitergabe !== "abgelehnt") {
+            try { this.acknowledge("Technische Bestätigung: Die bisherige interne Gesprächsnotiz ist im privaten Dashboard von Hareb Digital gespeichert. Das bestätigt weder eine E-Mail-Weiterleitung noch einen Rückruf oder Termin. Spätere Ergänzungen werden weiter erfasst."); } catch { /* Stored even if the caller disconnected. */ }
           }
           return;
         } catch { /* One bounded retry; no raw speech or credentials in errors. */ }

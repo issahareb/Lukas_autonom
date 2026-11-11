@@ -209,7 +209,7 @@ export default function Zugaenge() {
           <section key={name} className="space-y-2">
             {/* Mono: der Sitzungsname ist ein Bezeichner, kein Wort. */}
             <h2 className="px-1 font-mono text-sm font-medium">{name}</h2>
-            <div className="overflow-hidden rounded-3xl bg-white/[0.03]">
+            <div className="overflow-hidden rounded-3xl bg-muted/60">
               {felder.map((z, i) => (
                 <div
                   key={z.feld}

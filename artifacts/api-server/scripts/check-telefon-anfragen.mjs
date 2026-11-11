@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const directory = await mkdtemp(join(tmpdir(), 'phone-enquiries-'));
 const rows = new Map(), mails = [], writes = [], acknowledgements = [];
-let summary, modelFails = false, failSave = false;
+let summary, modelFails = false, failSave = false, modelCalls = 0;
 const base = { kategorie:'anfrage', weitergabe:'erlaubt', zusammenfassung:'Website mit Terminbuchung gewünscht.', name:'Muster', unternehmen:'Testfirma', leistungen:'Webdesign', wuensche:'Terminbuchung', website:'', zeitrahmen:'November', budget:'', rueckruf:'Auf der Anrufnummer', email:'', offeneFragen:'' };
 globalThis.__enquiry = {
-  async model(input) { assert.deepEqual(input.tools, []); assert.equal(input.quelle, 'telefon'); if(modelFails) throw Error('unavailable'); return {content:JSON.stringify(summary)}; },
+  async model(input) { modelCalls++; assert.deepEqual(input.tools, []); assert.equal(input.quelle, 'telefon'); if(modelFails) throw Error('unavailable'); return {content:JSON.stringify(summary)}; },
   async mail(...args) { mails.push(args); },
   async query(sql, args) {
     writes.push({sql,args});
@@ -61,5 +61,31 @@ try {
   modelFails=true;c.observe(fragment);await c.close();
   assert.equal(rows.get('call-c').auswertung,'fehler','visible failure instead of dropped lead');
   assert.equal(mails.length,1);
-  console.log('PASS telephone enquiries: caller identity, deduplication, corrected wishes, bounded retry, refusal, no raw persistence, fixed recipient, failure visibility.');
+  modelFails=false;
+  for (const kategorie of ['anfrage','sonstiges','unklar']) {
+    const id='internal-'+kategorie;
+    const call=await preparePhoneEnquiry(id,'4915100000004',undefined,()=>{});
+    summary={...base,kategorie,weitergabe:'offen',zusammenfassung:'Die Person fragt nach dem Firmeneintrag.',ergebnis:'Adresse abgeglichen.',naechsteSchritte:'Unterlagen anfordern.'};
+    call.observe(fragment);await call.close();
+    assert.equal(rows.get(id).zusammenfassung,summary.zusammenfassung,'every category retains its internal note with pending forwarding');
+    assert.equal(JSON.parse(rows.get(id).details).naechsteSchritte,'Unterlagen anfordern.');
+    assert.equal(JSON.parse(rows.get(id).details).ergebnis,'Adresse abgeglichen.');
+    assert.equal(mails.length,1,'internal note never authorizes email');
+  }
+  const revoked=await preparePhoneEnquiry('revoked','4915100000005',undefined,()=>{});
+  summary={...base};revoked.observe(fragment);await revoked.flush(false);
+  assert.ok(rows.get('revoked').zusammenfassung);
+  summary={...base,weitergabe:'abgelehnt',ergebnis:'DO_NOT_RETAIN',naechsteSchritte:'DO_NOT_RETAIN'};
+  revoked.observe({...fragment,text:'Bitte nicht weitergeben.',startMs:1001,endMs:2000});await revoked.close();
+  assert.equal(rows.get('revoked').zusammenfassung,'','refusal removes an earlier checkpoint');
+  assert.equal(rows.get('revoked').details,'{}');assert.equal(mails.length,1);
+  for(const assistantOnly of [false,true]) {
+    const silent=await preparePhoneEnquiry('silent-'+assistantOnly,'',undefined,()=>{});
+    if(assistantOnly) silent.observe({...fragment,role:'assistant',text:'Wie kann ich helfen?'});
+    const before=modelCalls;await silent.close();
+    assert.equal(modelCalls,before,'no model inference from silence or assistant-only speech');
+    assert.match(rows.get('silent-'+assistantOnly).zusammenfassung,/Keine Äußerung/);
+    assert.equal(rows.get('silent-'+assistantOnly).auswertung,'fertig');
+  }
+  console.log('PASS telephone enquiries: all categories, pending forwarding, results/next steps, silence, refusal and revocation, deduplication, bounded retry, no raw persistence, fixed recipient, failure visibility.');
 } finally { await rm(directory,{recursive:true,force:true}); }

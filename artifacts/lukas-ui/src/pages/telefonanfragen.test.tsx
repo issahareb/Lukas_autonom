@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import Telefonanfragen from "./telefonanfragen";
-const row = { id: 7, nummer: "4915100000001", status: "neu", kategorie: "anfrage", zusammenfassung: "Website mit Terminbuchung gewünscht", details: { name: "Max", unternehmen: "Musterfirma", wuensche: "Terminbuchung" }, weitergabe: "erlaubt", auswertung: "fertig", notiz: "", email_status: "fehler", beendet_am: "2026-10-15T17:00:00Z", created_at: "2026-10-15T16:55:00Z", updated_at: "2026-10-15T17:00:00Z" };
+const row = { id: 7, nummer: "4915100000001", status: "neu", kategorie: "anfrage", zusammenfassung: "Website mit Terminbuchung gewünscht", details: { name: "Max", unternehmen: "Musterfirma", wuensche: "Terminbuchung" } as Record<string, string>, weitergabe: "erlaubt", auswertung: "fertig", notiz: "", email_status: "fehler", beendet_am: "2026-10-15T17:00:00Z", created_at: "2026-10-15T16:55:00Z", updated_at: "2026-10-15T17:00:00Z" };
 function setup(rows = [row], patchStatus=200) {
   const calls: {url:string; init?:RequestInit}[] = [];
   vi.stubGlobal("fetch", async (url:string, init?:RequestInit) => { calls.push({url:String(url),init}); return Response.json(init?.method === "PATCH" ? {ok:patchStatus===200} : {rows,total:rows.length}, {status:init?.method === "PATCH" ? patchStatus : 200}); });
@@ -38,5 +38,27 @@ describe("Telefonanfragen", () => {
   it("empty state explains new calls and keeps access to earlier call records", async () => {
     setup([]);expect(await screen.findByText("Noch keine passenden Telefonanfragen")).toBeVisible();
     expect(screen.getByRole("link",{name:"Zum Anrufprotokoll"})).toHaveAttribute("href","/telefon");
+  });
+  it("shows an internal note, result and next steps without email permission", async () => {
+    setup([{...row,kategorie:"sonstiges",weitergabe:"offen",zusammenfassung:"Anbieter möchte den Firmeneintrag abgleichen.",details:{...row.details,ergebnis:"Firmenadresse bestätigt.",naechsteSchritte:"Unterlagen per E-Mail anfordern."}}]);
+    expect(await screen.findByText("Anbieter möchte den Firmeneintrag abgleichen.")).toBeVisible();
+    expect(screen.getByText("Firmenadresse bestätigt.")).toBeVisible();
+    expect(screen.getByText("Unterlagen per E-Mail anfordern.")).toBeVisible();
+    expect(screen.getByText(/E-Mail-Weiterleitung nicht freigegeben/)).toBeVisible();
+    expect(screen.queryByText("Die Freigabe zur Weitergabe der Anfragedaten ist noch offen.")).toBeNull();
+  });
+  it("explains missing historic notes without inventing content", async () => {
+    setup([{...row,zusammenfassung:"",weitergabe:"offen",details:{name:"",unternehmen:"",wuensche:""}}]);
+    expect(await screen.findByText(/Für diesen Anruf ist keine Gesprächsnotiz gespeichert/)).toBeVisible();
+  });
+  it("makes extraction failures visible within the note", async () => {
+    setup([{...row,zusammenfassung:"",auswertung:"fehler"}]);
+    expect(await screen.findByText(/Das Anliegen ist nicht zuverlässig erfasst/)).toBeVisible();
+  });
+  it("does not render stale refused content as a conversation note", async () => {
+    setup([{...row,weitergabe:"abgelehnt",zusammenfassung:"Nicht anzeigen",details:{...row.details,wuensche:"Vertraulicher Wunsch"}}]);
+    expect(await screen.findByText(/Keine Gesprächsdetails gespeichert/)).toBeVisible();
+    expect(screen.queryByText("Nicht anzeigen")).toBeNull();
+    expect(screen.queryByText("Vertraulicher Wunsch")).toBeNull();
   });
 });

@@ -18,11 +18,11 @@ const buttonVariants = cva(
          * ist die Hauptsache hier", aufgehellt heisst "auch moeglich".
          */
         default: "bg-primary text-primary-foreground",
-        destructive: "bg-destructive/15 text-red-300 hover:bg-destructive/25",
-        outline: "bg-white/[0.06] hover:bg-white/[0.1]",
+        destructive: "bg-destructive/15 text-red-800 hover:bg-destructive/25",
+        outline: "bg-muted/60 hover:bg-muted/60",
         secondary: "bg-secondary text-secondary-foreground",
-        ghost: "hover:bg-white/[0.06]",
-        link: "text-primary underline-offset-4 hover:underline",
+        ghost: "hover:bg-muted/60",
+        link: "text-foreground underline-offset-4 hover:underline",
       },
       size: {
         // @replit changed sizes

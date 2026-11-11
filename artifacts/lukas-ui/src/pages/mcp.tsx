@@ -25,9 +25,9 @@ type McpServer = {
 
 const STATUS: Record<McpServer["status"], { label: string; cls: string }> = {
   new: { label: "Nicht verbunden", cls: "bg-secondary text-muted-foreground" },
-  awaiting_auth: { label: "Anmeldung nötig", cls: "bg-amber-500/15 text-amber-300" },
-  connected: { label: "Verbunden", cls: "bg-emerald-500/15 text-emerald-300" },
-  error: { label: "Fehler", cls: "bg-red-500/15 text-red-300" },
+  awaiting_auth: { label: "Anmeldung nötig", cls: "bg-amber-500/15 text-amber-800" },
+  connected: { label: "Verbunden", cls: "bg-emerald-500/15 text-emerald-800" },
+  error: { label: "Fehler", cls: "bg-red-500/15 text-red-800" },
 };
 
 const RISK_HINT: Record<McpServer["riskTier"], string> = {
@@ -141,7 +141,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
       </div>
 
       {server.lastError && server.status === "error" && (
-        <pre className="rounded-2xl bg-destructive/10 p-3 text-xs break-words whitespace-pre-wrap text-red-300">
+        <pre className="rounded-2xl bg-destructive/10 p-3 text-xs break-words whitespace-pre-wrap text-red-800">
           {server.lastError}
         </pre>
       )}
@@ -162,7 +162,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
               {server.tools.map((t) => {
                 const an = proposalSelection().includes(t.name);
                 return (
-                  <li key={t.name} className="rounded-xl bg-white/[0.04] px-2.5 py-1.5 text-xs">
+                  <li key={t.name} className="rounded-xl bg-muted/60 px-2.5 py-1.5 text-xs">
                     <label className="flex items-start gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -194,7 +194,7 @@ function ServerCard({ server, onChange }: { server: McpServer; onChange: () => v
             value={server.riskTier}
             disabled={busy}
             onChange={(e) => patch({ riskTier: e.target.value as McpServer["riskTier"] })}
-            className="ml-1 rounded-lg bg-white/[0.06] px-2 py-1 text-xs outline-none"
+            className="ml-1 rounded-lg bg-muted/60 px-2 py-1 text-xs outline-none"
           >
             <option value="R1">R1 — ohne Rückfrage</option>
             <option value="R2">R2 — Freigabe nötig</option>
@@ -284,7 +284,7 @@ export default function Mcp() {
         <button
           type="button"
           onClick={load}
-          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+          className="flex items-center gap-2 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-muted/60"
         >
           <RefreshCw className="h-4 w-4" /> Aktualisieren
         </button>
@@ -312,7 +312,7 @@ export default function Mcp() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Name, z.B. Kalender"
               aria-label="Name des Servers"
-              className="h-11 min-w-0 w-full flex-1 rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              className="h-11 min-w-0 w-full flex-1 rounded-full bg-muted/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-muted/60"
               data-testid="input-mcp-name"
             />
             <input
@@ -320,7 +320,7 @@ export default function Mcp() {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://…/mcp"
               aria-label="Adresse des Servers"
-              className="h-11 min-w-0 w-full flex-[2] rounded-full bg-white/[0.05] px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              className="h-11 min-w-0 w-full flex-[2] rounded-full bg-muted/60 px-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-muted/60"
               data-testid="input-mcp-url"
             />
             <button

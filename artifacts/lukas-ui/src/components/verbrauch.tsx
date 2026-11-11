@@ -50,7 +50,7 @@ export default function Verbrauch() {
   return <section className="space-y-4" aria-label="Verbrauch und OpenAI-Guthaben">
     <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Verbrauch im Detail</h2><button onClick={laden} className="rounded-full border px-4 py-2 text-sm">Aktualisieren</button></div>
     <VerbrauchFallstudie />
-    {fehler && <p role="alert" className="text-sm text-amber-400">{fehler}</p>}
+    {fehler && <p role="alert" className="text-sm text-amber-800">{fehler}</p>}
     {!daten && !fehler && <p role="status">Verbrauch wird geladen …</p>}
     {daten && <>
       <div className="card-soft rounded-3xl p-5 space-y-2">
@@ -82,13 +82,13 @@ export default function Verbrauch() {
             <dt>Live-Minuten gemeldet</dt><dd>{t.liveSitzungen ? zahl(t.liveSekunden / 60) : "–"}</dd>
           </dl>
           {!t.erfasst && <p className="mt-2 text-xs text-muted-foreground">Ohne Messdaten ist kein Nullverbrauch belegt.</p>}
-          {(t.liveOhneMesswert > 0 || t.liveOffen > 0) && <p className="mt-2 text-xs text-amber-400">Live: {t.liveOhneMesswert} ohne Messwert, {t.liveOffen} ohne bestätigtes Ende. Werte können unvollständig sein.</p>}
+          {(t.liveOhneMesswert > 0 || t.liveOffen > 0) && <p className="mt-2 text-xs text-amber-800">Live: {t.liveOhneMesswert} ohne Messwert, {t.liveOffen} ohne bestätigtes Ende. Werte können unvollständig sein.</p>}
         </details>)}
       </div>
       </details>
       <details className="card-soft rounded-3xl p-5" open><summary className="cursor-pointer font-medium">Nach Modell und Bereich</summary>
         <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{["Modell / Bereich", "Aufrufe", "Eingabe", "Ausgabe", "Cache lesen", "Cache schreiben", "Gesamt"].map(h => <th key={h} className="p-2 whitespace-nowrap">{h}</th>)}</tr></thead>
-          <tbody>{daten.modelle.map(m => <tr key={`${m.provider}:${m.model}:${m.quelle}`} className="border-t border-white/10"><td className="p-2">{m.model}<div className="text-xs text-muted-foreground">{m.provider} · {quellen[m.quelle] ?? m.quelle}</div></td>{[m.aufrufe,m.eingabe,m.ausgabe,m.cacheLesen,m.cacheSchreiben,m.gesamt].map((v,i) => <td key={i} className="p-2 tabular-nums">{i === 4 && m.provider === "openai" ? "Nicht separat gemeldet" : zahl(v)}</td>)}</tr>)}</tbody></table></div>
+          <tbody>{daten.modelle.map(m => <tr key={`${m.provider}:${m.model}:${m.quelle}`} className="border-t border-border"><td className="p-2">{m.model}<div className="text-xs text-muted-foreground">{m.provider} · {quellen[m.quelle] ?? m.quelle}</div></td>{[m.aufrufe,m.eingabe,m.ausgabe,m.cacheLesen,m.cacheSchreiben,m.gesamt].map((v,i) => <td key={i} className="p-2 tabular-nums">{i === 4 && m.provider === "openai" ? "Nicht separat gemeldet" : zahl(v)}</td>)}</tr>)}</tbody></table></div>
         {!daten.modelle.length && <p className="mt-2 text-sm text-muted-foreground">Keine Modellmessungen für diesen Zeitraum.</p>}
       </details>
       {daten.cacheHinweis && <p className="text-xs text-muted-foreground">{daten.cacheHinweis}</p>}

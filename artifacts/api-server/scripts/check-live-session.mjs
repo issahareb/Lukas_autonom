@@ -17,7 +17,7 @@ const stubSources = {
         const options={quelle:'telefon',conversationId:id,telefonOwnerContactId:contactId,userText,history:[{role:'user',content:userText}],systemPromptExtra:context,signal:controller.signal};
         f.calls.push(options);return f.backend?await f.backend(options):f.answer; }};
   }`,
-  "../telefon-anfragen": `export async function preparePhoneEnquiry(id, number, context, acknowledge) { const f=globalThis.__liveSessionTest; f.enquiry={id, number, context, acknowledge, parts:[], closed:0}; return {observe: part=>f.enquiry.parts.push(part), close:async()=>{f.enquiry.closed++}}; }`,
+  "../telefon-anfragen": `export async function preparePhoneEnquiry(id, number, context, acknowledge) { const f=globalThis.__liveSessionTest; const note={id, number, context, acknowledge, parts:[], closed:0}; f.enquiry=note; (f.enquiries??=[]).push(note); return {observe: part=>note.parts.push(part), close:async()=>{note.closed++}}; }`,
   "./telefon-memory": `export async function preparePhoneMemory(id, peer, visibility) { const f = globalThis.__liveSessionTest; f.memoryPeer = {id, peer, visibility}; return {input: [{type:"message", role:"user", content:[{type:"input_text", text:"ARCHIVE_SAMSTAG"}]}], observe: part => f.memoryParts.push(part), recall: async () => "ARCHIVE_SAMSTAG", close: async complete => f.memoryClosed.push({id,complete})}; }`,
   undici: [
     'const fixture = globalThis.__liveSessionTest;',
@@ -534,6 +534,16 @@ try {
   assert.equal(fixture.enquiry.parts.length, 1);
   businessSocket.emit({ type: "session.closed", reason: "remote_hangup" });
   assert.equal(fixture.enquiry.closed, 1);
+  // Every SIP peer gets a note, independently of reception mode and direction.
+  for (const [direction, visibility] of [["ausgehend", "public"], ["eingehend", "private"]]) {
+    const id="note_"+direction+visibility;
+    await api.acceptLiveSipSession({sessionId:id,telefonPeer:{nummer:"4915100000088",richtung:direction},visibility,instructions:"test"});
+    const note=fixture.enquiry;assert.equal(note.id,id);
+    input(socketFor(id),"Ich möchte Unterlagen bekommen.");await settle();
+    assert.ok(note.parts.some(p=>p.text.includes("Unterlagen")));
+    socketFor(id).emit({type:"session.closed",reason:"remote_hangup"});await settle();
+    assert.equal(note.closed,1,"outgoing and private calls finalize their own note");
+  }
   for (const number of ["", "anonymous", "000000", "123"]) {
     const id = "anonymous_business_" + (number || "empty");
     await api.acceptLiveSipSession({ sessionId: id, telefonBusiness: true,

@@ -5,7 +5,7 @@ const WEBSITE_KENNZAHLEN = /aufrufzahl|\baufrufe\b|seitenaufruf|besucher|pagevie
 const GRUPPEN: Array<[RegExp, string[]]> = [
   [/frage_issa|r[uü]ckfrag|frage? (?:mich|issa)|entscheidungsfrage|auswahlfenster/i, ['frage_issa']],
   [WEBSITE_KENNZAHLEN, ["lese_website_kennzahlen"]],
-  [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange/i, ["lese_anfragen"]],
+  [/anfrag|interessent|kunden?anliegen|leads?\b|eingegangen|eingänge|eingange|telefonnotiz|gesprächsnotiz|gespraechsnotiz|(?:anruf|telefonat).*(?:gesagt|wollt|anliegen)|(?:gesagt|wollt|anliegen).*(?:anruf|telefonat)/i, ["lese_anfragen"]],
   [/such|recherch|aktuell|quelle|preis|kostet|internet|öffnungszeit|kommend|protest|news|wetter|ceo|präsident|\bmorgen\b|\bheute\b/i, ["web_search"]],
   [/https?:|webseite|website|fetch|url|link/i, ["fetch_url"]],
   [/browser|scrap|crawl|render|seite.*(?:öffn|oeffn|anseh|les)/i, ["browse_page"]],

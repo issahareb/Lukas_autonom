@@ -34,6 +34,11 @@ jobs:
         run: npm run build:ui
       - name: Browser installieren
         run: npx playwright install --with-deps chromium
+      - name: Creme-Oberflächen und Telefonnotizen in allen Bereichen
+        run: node artifacts/lukas-ui/scripts/check-cream-dashboard.mjs
+        env:
+          CREAM_SCREENSHOTS: artifacts/lukas-ui/ui-preview/cream
+          CREAM_REPORT: artifacts/lukas-ui/ui-preview/cream-report.json
       - name: Layout und Bedienung mit festen Beispieldaten
         run: node artifacts/lukas-ui/scripts/check-ui-layout.mjs
         env:

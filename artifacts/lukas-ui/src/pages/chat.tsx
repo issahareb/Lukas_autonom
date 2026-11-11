@@ -73,7 +73,7 @@ function relativeDay(iso: string) {
 function renderWithLinks(text: string) {
   return text.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
     /^https?:\/\//.test(part) ? (
-      <a key={i} href={part} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 break-all hover:opacity-80">
+      <a key={i} href={part} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2 break-all hover:opacity-80">
         {part}
       </a>
     ) : <span key={i}>{part}</span>,
@@ -749,9 +749,9 @@ export default function Chat() {
                                     href={`${BASE}${a.url}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="flex items-center gap-2 rounded-2xl bg-white/[0.05] px-3.5 py-2 text-sm transition-colors hover:bg-white/[0.09]"
+                                    className="flex items-center gap-2 rounded-2xl bg-muted/60 px-3.5 py-2 text-sm transition-colors hover:bg-white/[0.09]"
                                   >
-                                    <Icon className="w-4 h-4 text-primary shrink-0" />
+                                    <Icon className="w-4 h-4 text-foreground shrink-0" />
                                     <span className="truncate max-w-[180px]">{a.filename}</span>
                                     <span className="text-muted-foreground text-xs">{formatSize(a.sizeBytes)}</span>
                                   </a>
@@ -790,7 +790,7 @@ export default function Chat() {
                     {wartetAufNachzuegler && (
                       <div className="flex min-w-0 animate-in fade-in slide-in-from-left-3 duration-300">
                         <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-sm border border-amber-400/30 bg-amber-400/10 px-4 py-3">
-                          <div className="text-sm font-medium text-amber-300 mb-1 flex items-center gap-2">
+                          <div className="text-sm font-medium text-amber-800 mb-1 flex items-center gap-2">
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Verbindung war weg
                           </div>
@@ -829,8 +829,8 @@ export default function Chat() {
                         {pending.map((a) => {
                           const Icon = attachmentIcon(a.kind);
                           return (
-                            <div key={a.id} className="flex max-w-[240px] items-center gap-2 rounded-2xl bg-white/[0.06] py-1.5 pl-2 pr-1">
-                              {a.kind === "image" ? <img src={`${BASE}${a.url}`} alt={a.filename} className="w-8 h-8 rounded-lg object-cover shrink-0" /> : <Icon className="w-4 h-4 text-primary shrink-0" />}
+                            <div key={a.id} className="flex max-w-[240px] items-center gap-2 rounded-2xl bg-muted/60 py-1.5 pl-2 pr-1">
+                              {a.kind === "image" ? <img src={`${BASE}${a.url}`} alt={a.filename} className="w-8 h-8 rounded-lg object-cover shrink-0" /> : <Icon className="w-4 h-4 text-foreground shrink-0" />}
                               <div className="min-w-0"><div className="text-xs truncate">{a.filename}</div><div className="text-[10px] text-muted-foreground">{formatSize(a.sizeBytes)}</div></div>
                               <button onClick={() => removePending(a.id)} className="text-muted-foreground hover:text-destructive shrink-0 p-1" aria-label={`${a.filename} entfernen`}><X className="w-3.5 h-3.5" /></button>
                             </div>

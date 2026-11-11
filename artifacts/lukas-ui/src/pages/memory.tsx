@@ -160,11 +160,11 @@ export default function Memory() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Erinnerungen durchsuchen…"
               aria-label="Erinnerungen durchsuchen"
-              className="h-11 w-full rounded-full bg-white/[0.05] pl-11 pr-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+              className="h-11 w-full rounded-full bg-muted/60 pl-11 pr-4 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-muted/60"
             />
           </div>
           <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="h-11 w-full rounded-full border-0 bg-white/[0.05] px-5 text-sm sm:w-52">
+            <SelectTrigger className="h-11 w-full rounded-full border-0 bg-muted/60 px-5 text-sm sm:w-52">
               <SelectValue placeholder="Kategorie" />
             </SelectTrigger>
             <SelectContent>
@@ -191,7 +191,7 @@ export default function Memory() {
                * sprengt damit die ganze Karte nach rechts aus dem Bild.
                */}
               <div className="min-w-0 flex-1"><p id={`memory-content-${m.id}`} className="text-[15px] leading-relaxed break-words whitespace-pre-wrap">{m.content.length > 400 && !expanded.has(m.id) ? `${m.content.slice(0, 400)}…` : m.content}</p>
-                {m.content.length > 400 && <button type="button" aria-expanded={expanded.has(m.id)} aria-controls={`memory-content-${m.id}`} className="mt-3 text-xs text-primary" onClick={() => setExpanded(old => { const next = new Set(old); if (next.has(m.id)) next.delete(m.id); else next.add(m.id); return next; })}>{expanded.has(m.id) ? "Weniger anzeigen" : "Vollständig lesen"}</button>}
+                {m.content.length > 400 && <button type="button" aria-expanded={expanded.has(m.id)} aria-controls={`memory-content-${m.id}`} className="mt-3 text-xs text-foreground" onClick={() => setExpanded(old => { const next = new Set(old); if (next.has(m.id)) next.delete(m.id); else next.add(m.id); return next; })}>{expanded.has(m.id) ? "Weniger anzeigen" : "Vollständig lesen"}</button>}
               </div>
               <button
                 onClick={() => handleDelete(m.id)}

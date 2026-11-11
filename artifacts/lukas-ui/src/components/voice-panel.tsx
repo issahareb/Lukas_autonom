@@ -23,8 +23,8 @@ export function VoicePanel({ autoStart = false }: { autoStart?: boolean }) {
           {verbindet ? "Abbrechen" : aktiv ? "Beenden" : "Sprechen"}
         </Button>
         <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0" role="status">
-          {status === "spricht" && <Volume2 className="w-3.5 h-3.5 shrink-0 text-primary animate-pulse" />}
-          {status === "hoert" && <Ear className="w-3.5 h-3.5 shrink-0 text-primary animate-pulse" />}
+          {status === "spricht" && <Volume2 className="w-3.5 h-3.5 shrink-0 text-foreground animate-pulse" />}
+          {status === "hoert" && <Ear className="w-3.5 h-3.5 shrink-0 text-foreground animate-pulse" />}
           <span className="truncate">{fehler ?? statusLabel[status]}</span>
         </div>
       </div>

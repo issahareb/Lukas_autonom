@@ -1,7 +1,7 @@
 /* Hareb Digital's source tokens: app/globals.css. Manrope, paper, ink, lime. */
 @font-face { font-family: "Manrope"; font-style:normal; font-weight:200 800; font-display:swap; src:url('/fonts/manrope-latin.woff2') format('woff2'); }
 .app-shell, .app-drawer { --hd-paper:#f3f1eb; --hd-ink:#20211e; --hd-muted:#62645c; --hd-line:#d3d3c9; --hd-lime:#d4ed8a; font-family:"Manrope",Arial,sans-serif; }
-.app-shell { --app-font-sans:"Manrope",Arial,sans-serif; --area:var(--hd-lime); background:var(--hd-paper); }
+.app-shell { --app-font-sans:"Manrope",Arial,sans-serif; --area:var(--ring); background:var(--hd-paper); }
 .app-shell :is(.app-sidebar,.app-mobile-header,.app-topbar) { background:var(--hd-paper); color:var(--hd-ink); border-color:var(--hd-line); }
 .app-shell :is(.app-brand,.app-mobile-brand,.app-breadcrumb strong) { color:var(--hd-ink); }
 .app-shell :is(.app-brand small,.app-nav-heading,.app-sidebar-link,.app-breadcrumb,.app-connection) { color:var(--hd-muted); }

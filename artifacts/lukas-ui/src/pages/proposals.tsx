@@ -102,7 +102,7 @@ function OpenProposal({
     >
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <Lightbulb className="h-4 w-4 shrink-0 text-amber-300" />
+          <Lightbulb className="h-4 w-4 shrink-0 text-amber-800" />
           <span className="text-[1.05rem] font-semibold tracking-tight">{proposal.title}</span>
           <span className="text-[11px] text-muted-foreground">#{proposal.id}</span>
         </div>
@@ -147,10 +147,10 @@ function OpenProposal({
         {showFiles && (
           <div className="mt-2 space-y-1.5">
             {proposal.files.map((f) => (
-              <div key={f.path} className="overflow-hidden rounded-2xl bg-white/[0.04]">
+              <div key={f.path} className="overflow-hidden rounded-2xl bg-muted/60">
                 <button
                   onClick={() => setOpenFile(openFile === f.path ? null : f.path)}
-                  className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs transition-colors hover:bg-white/[0.04]"
+                  className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-xs transition-colors hover:bg-muted/60"
                 >
                   {/* Mono: das ist ein Dateipfad. */}
                   <span className="truncate font-mono">{f.path}</span>
@@ -175,7 +175,7 @@ function OpenProposal({
           onChange={(e) => setComment(e.target.value)}
           placeholder="Kommentar (nötig zum Zurückschicken, sonst optional)…"
           rows={2}
-          className="w-full resize-y rounded-2xl bg-white/[0.05] px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-white/[0.08]"
+          className="w-full resize-y rounded-2xl bg-muted/60 px-4 py-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:bg-muted/60"
           data-testid={`proposal-comment-${proposal.id}`}
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -192,7 +192,7 @@ function OpenProposal({
             type="button"
             disabled={busy}
             onClick={() => decide("revise")}
-            className="flex items-center gap-1.5 rounded-full bg-white/[0.08] px-4 py-2 text-sm transition-colors hover:bg-white/[0.12] disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-white/[0.12] disabled:opacity-40"
           >
             <Undo2 className="h-4 w-4" /> Mit Kommentar zurück
           </button>
@@ -200,7 +200,7 @@ function OpenProposal({
             type="button"
             disabled={busy}
             onClick={() => decide("reject")}
-            className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-300 transition-colors hover:bg-destructive/20 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-full bg-destructive/12 px-4 py-2 text-sm text-red-800 transition-colors hover:bg-destructive/20 disabled:opacity-40"
           >
             <X className="h-4 w-4" /> Ablehnen
           </button>
@@ -265,7 +265,7 @@ export default function Proposals() {
         <button
           type="button"
           onClick={load}
-          className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm transition-colors hover:bg-white/[0.1]"
+          className="flex items-center gap-2 rounded-full bg-muted/60 px-4 py-2 text-sm transition-colors hover:bg-muted/60"
         >
           <RefreshCw className="h-4 w-4" /> Aktualisieren
         </button>
@@ -318,7 +318,7 @@ export default function Proposals() {
                     href={r.pullRequestUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs transition-colors hover:bg-white/[0.1]"
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5 text-xs transition-colors hover:bg-muted/60"
                   >
                     <GitPullRequest className="h-3.5 w-3.5" />
                     Pull Request ansehen

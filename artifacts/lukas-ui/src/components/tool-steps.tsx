@@ -117,7 +117,7 @@ function Argumente({ input }: { input: string }) {
   return (
     <div className="space-y-2">
       <div className="text-xs font-medium text-muted-foreground">Womit</div>
-      <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-white/[0.04]">
+      <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-muted/60">
         {eintraege.map(([schluessel, wert]) => {
           const einfach = typeof wert !== "object" || wert === null;
           return (
@@ -166,7 +166,7 @@ export function ToolSteps({ steps }: { steps: ToolStep[] }) {
                 }`}
             >
               <Icon
-                className={`w-3.5 h-3.5 shrink-0 ${step.ok ? "text-primary" : "text-destructive"}`}
+                className={`w-3.5 h-3.5 shrink-0 ${step.ok ? "text-foreground" : "text-destructive"}`}
               />
               <span className="font-medium shrink-0">{label}</span>
               {kern && (
@@ -193,7 +193,7 @@ export function ToolSteps({ steps }: { steps: ToolStep[] }) {
                 <SheetTitle className="flex items-center gap-2.5 text-base">
                   <span
                     className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                      offen.ok ? "bg-primary/15 text-primary" : "bg-destructive/15 text-destructive"
+                      offen.ok ? "bg-primary/15 text-foreground" : "bg-destructive/15 text-destructive"
                     }`}
                   >
                     <info.icon className="w-4 h-4" />
@@ -207,7 +207,7 @@ export function ToolSteps({ steps }: { steps: ToolStep[] }) {
                   <span>·</span>
                   <span
                     className={`inline-flex items-center gap-1 ${
-                      offen.ok ? "text-emerald-400" : "text-destructive"
+                      offen.ok ? "text-emerald-800" : "text-destructive"
                     }`}
                   >
                     {offen.ok ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}

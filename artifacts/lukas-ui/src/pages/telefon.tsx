@@ -59,7 +59,7 @@ type Antwort = {
 const STUFE: Record<Stufe, { label: string; cls: string; hilfe: string }> = {
   privat: {
     label: "PRIVAT",
-    cls: "bg-emerald-500/15 text-emerald-300",
+    cls: "bg-emerald-500/15 text-emerald-800",
     hilfe: "Voller Lukas mit Gedächtnis, Zielen und Tagebuch. Nur für dich.",
   },
   oeffentlich: {
@@ -69,7 +69,7 @@ const STUFE: Record<Stufe, { label: string; cls: string; hilfe: string }> = {
   },
   gesperrt: {
     label: "GESPERRT",
-    cls: "bg-red-500/15 text-red-300",
+    cls: "bg-red-500/15 text-red-800",
     hilfe: "Wird abgewiesen, bevor überhaupt eine Sitzung entsteht.",
   },
 };
@@ -151,9 +151,9 @@ function Aufnahme({ anruf }: { anruf: Anruf }) {
   return <div className="w-full space-y-2">
     {url ? <>
       <audio controls src={url} className="h-10 w-full" aria-label="Gesprächsaufzeichnung" />
-      <a href={url} download={`anruf-${anruf.id}.${blob?.type.includes("wav") ? "wav" : "mp3"}`} className="text-xs text-primary underline">Aufnahme herunterladen</a>
+      <a href={url} download={`anruf-${anruf.id}.${blob?.type.includes("wav") ? "wav" : "mp3"}`} className="text-xs text-foreground underline">Aufnahme herunterladen</a>
     </> : <Button variant="secondary" size="sm" disabled={busy} onClick={laden}>{busy ? "Aufnahme lädt …" : "Aufnahme anhören"}{anruf.aufnahmeDauer != null ? ` · ${anruf.aufnahmeDauer}s` : ""}</Button>}
-    {fehler && <p role="alert" className="text-xs text-red-400">{fehler}</p>}
+    {fehler && <p role="alert" className="text-xs text-red-800">{fehler}</p>}
   </div>;
 }
 
@@ -211,7 +211,7 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
 
   return <article className="card-soft rounded-2xl p-4">
     <div className="flex items-center gap-3">
-      <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{(eintrag.name || "?").slice(0, 1).toLocaleUpperCase("de")}</span>
+      <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-foreground">{(eintrag.name || "?").slice(0, 1).toLocaleUpperCase("de")}</span>
       <div className="min-w-0 flex-1">
         <h3 className="truncate font-medium">{eintrag.name || "Ohne Namen"}</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">{zeigeNummer(eintrag.nummer)}</p>
@@ -262,10 +262,10 @@ function NummerZeile({ eintrag, onChange }: { eintrag: Nummer; onChange: () => v
       </p>}
 
 
-      <Button variant="ghost" size="sm" onClick={loeschen} disabled={busy} className="mt-3 gap-2 text-red-300"><Trash2 className="size-4" /> Kontakt entfernen</Button>
+      <Button variant="ghost" size="sm" onClick={loeschen} disabled={busy} className="mt-3 gap-2 text-red-800"><Trash2 className="size-4" /> Kontakt entfernen</Button>
     </details>
-    {meldung && <p role="status" className="mt-2 text-xs text-emerald-300">{meldung}</p>}
-    {fehler && <p role="alert" className="mt-2 text-xs text-red-400">{fehler}</p>}
+    {meldung && <p role="status" className="mt-2 text-xs text-emerald-800">{meldung}</p>}
+    {fehler && <p role="alert" className="mt-2 text-xs text-red-800">{fehler}</p>}
   </article>;
 }
 
@@ -332,7 +332,7 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
       </h2>
 
       {fertig ? (
-        <p className="mt-2 text-sm text-emerald-300">
+        <p className="mt-2 text-sm text-emerald-800">
           Eingerichtet. Anrufe auf {stand.amTrunk.join(", ")} landen bei Lukas.
         </p>
       ) : (
@@ -352,9 +352,9 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
         {stand.nummern.map((n) => {
           const dran = stand.amTrunk.includes(n.nummer);
           return (
-            <div key={n.nummer} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3.5 py-2.5">
+            <div key={n.nummer} className="flex items-center gap-3 rounded-2xl bg-muted/60 px-3.5 py-2.5">
               <span className="font-mono text-sm">{n.nummer}</span>
-              {dran && <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[0.65rem] text-emerald-300">AM TRUNK</span>}
+              {dran && <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[0.65rem] text-emerald-800">AM TRUNK</span>}
               <Button
                 size="sm"
                 variant={dran ? "ghost" : "default"}
@@ -376,7 +376,7 @@ function Einrichtung({ onChange }: { onChange: () => void }) {
           ))}
         </ul>
       )}
-      {fehler && <p className="mt-3 text-sm text-red-400">{fehler}</p>}
+      {fehler && <p className="mt-3 text-sm text-red-800">{fehler}</p>}
       {stand.ziel && (
         <p className="mt-3 font-mono text-xs break-all text-muted-foreground">Ziel: {stand.ziel}</p>
       )}
@@ -408,11 +408,11 @@ function TelnyxEinrichtung() {
     </div>
     {stand && <>
       <p className="font-mono text-sm">{stand.nummer}</p>
-      <p className={stand.bereit ? "text-sm text-emerald-300" : "text-sm text-amber-300"}>{stand.hinweis}</p>
+      <p className={stand.bereit ? "text-sm text-emerald-800" : "text-sm text-amber-800"}>{stand.hinweis}</p>
       <p className="text-sm text-muted-foreground">Technik: {stand.konfiguriert ? "eingerichtet" : "unvollständig"} · Rufnummer: {stand.freigeschaltet ? "aktiv" : "Freischaltung ausstehend"}</p>
       {!stand.freigeschaltet && <a className="inline-block text-sm underline" href="https://portal.telnyx.com/" target="_blank" rel="noreferrer">Rufnummer in Telnyx freischalten</a>}
     </>}
-    {fehler && <p role="alert" className="text-sm text-red-400">{fehler}</p>}
+    {fehler && <p role="alert" className="text-sm text-red-800">{fehler}</p>}
   </div>;
 }
 
@@ -502,13 +502,13 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
   return (
     <div className="card-soft p-4">
       <div className="mb-3 flex items-center gap-2">
-        <MessageSquare className="size-4 text-primary" />
+        <MessageSquare className="size-4 text-foreground" />
         <h2 className="font-medium">SMS schreiben</h2>
       </div>
 
       {!bereit && (
         <div className="mb-3 rounded-2xl bg-amber-400/10 p-3.5 text-sm ring-1 ring-amber-400/25">
-          <p className="font-medium text-amber-200">Noch keine Zugangsdaten</p>
+          <p className="font-medium text-amber-800">Noch keine Zugangsdaten</p>
           <p className="mt-1 text-muted-foreground">
             Setz <code>CLICKSEND_USERNAME</code> und <code>CLICKSEND_API_KEY</code>, optional{" "}
             <code>CLICKSEND_ABSENDER</code> als sichtbaren Absender.
@@ -522,7 +522,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
           onChange={(e) => setAn(e.target.value)}
           list="bekannte-nummern"
           placeholder="+49…"
-          className="h-10 w-full rounded-full bg-white/[0.05] px-4 font-mono text-sm outline-none transition-colors focus:bg-white/[0.08]"
+          className="h-10 w-full rounded-full bg-muted/60 px-4 font-mono text-sm outline-none transition-colors focus:bg-muted/60"
         />
         {/* Die eingetragenen Kontakte als Vorschlag — Nummern tippt niemand gern ab. */}
         <datalist id="bekannte-nummern">
@@ -538,7 +538,7 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
           onChange={(e) => setText(e.target.value)}
           rows={3}
           placeholder="Kurz und direkt — eine SMS ist kein Brief."
-          className="w-full resize-none rounded-2xl bg-white/[0.05] px-4 py-2.5 text-sm outline-none transition-colors focus:bg-white/[0.08]"
+          className="w-full resize-none rounded-2xl bg-muted/60 px-4 py-2.5 text-sm outline-none transition-colors focus:bg-muted/60"
         />
 
         <div className="flex items-center gap-3">
@@ -547,10 +547,10 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
             {teile > 0 && (
               <>
                 {" · "}
-                <span className={teile > 1 ? "text-amber-300" : ""}>
+                <span className={teile > 1 ? "text-amber-800" : ""}>
                   {teile} SMS
                 </span>
-                {unicode && <span className="text-amber-300"> · Unicode, nur 70 je Teil</span>}
+                {unicode && <span className="text-amber-800"> · Unicode, nur 70 je Teil</span>}
               </>
             )}
           </span>
@@ -565,8 +565,8 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
           </Button>
         </div>
 
-        {fehler && <p className="text-sm text-red-400">{fehler}</p>}
-        {meldung && <p className="text-sm text-emerald-400">{meldung}</p>}
+        {fehler && <p className="text-sm text-red-800">{fehler}</p>}
+        {meldung && <p className="text-sm text-emerald-800">{meldung}</p>}
       </div>
 
       {zeilen.length > 0 && (
@@ -576,8 +576,8 @@ function SmsBereich({ nummern }: { nummern: Nummer[] }) {
               <span className="font-mono shrink-0">{zeigeNummer(z.nummer)}</span>
               <span className="truncate text-muted-foreground">{z.text}</span>
               <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                {z.quelle === "lukas" && <span className="text-primary">von Lukas</span>}
-                <span className={/success/i.test(z.status) ? "" : "text-amber-300"}>{z.status}</span>
+                {z.quelle === "lukas" && <span className="text-foreground">von Lukas</span>}
+                <span className={/success/i.test(z.status) ? "" : "text-amber-800"}>{z.status}</span>
                 {new Date(z.createdAt).toLocaleString("de-DE")}
               </span>
             </div>
@@ -606,7 +606,7 @@ function RueckrufListe({ kontakte }: { kontakte: Nummer[] }) {
   };
   return <section aria-label="Rückrufaufträge" className="space-y-3 rounded-2xl bg-secondary/30 p-4">
     <h2 className="font-medium">Rückrufaufträge</h2>
-    {error && <p role="alert" className="text-sm text-amber-300">{error}</p>}
+    {error && <p role="alert" className="text-sm text-amber-800">{error}</p>}
     {!rows.length && !error && <p className="text-sm text-muted-foreground">Hier erscheinen dauerhaft eingeplante Rückrufe.</p>}
     {rows.slice(0, 10).map(r => <div key={r.id} className="space-y-1 border-t border-border pt-3 text-sm">
       <p>{kontakte.find(k => k.id === r.kontakt_id)?.name || "Kontakt"} · {new Date(r.faellig_am).toLocaleString("de-DE")} · {r.status}</p>
@@ -688,7 +688,7 @@ export default function Telefon() {
   const aufnahmeListe = aufnahmen.filter(a => passt(nameFuer(a), a.nummer));
   const anrufKarte = (a: Anruf, live = false, recordingOnly = false) => <article key={a.id} className={`card-soft space-y-3 rounded-2xl p-4 ${live ? "ring-1 ring-primary/35" : ""}`}>
     <div className="flex items-start gap-3">
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${live ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+      <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${live ? "bg-primary/15 text-foreground" : "bg-secondary text-muted-foreground"}`}>
         {recordingOnly ? <AudioLines className="size-4" /> : a.richtung === "eingehend" ? <PhoneIncoming className="size-4" /> : <PhoneOutgoing className="size-4" />}
       </span>
       <div className="min-w-0 flex-1">
@@ -719,14 +719,14 @@ export default function Telefon() {
           <TabsTrigger value="aufnahmen" className="min-h-11 gap-1.5 rounded-xl px-1 text-xs sm:text-sm">Aufnahmen <span className="text-[10px] opacity-60">{aufnahmen.length}</span></TabsTrigger>
           <TabsTrigger value="rueckrufe" className="min-h-11 rounded-xl px-1 text-xs sm:text-sm">Rückrufe</TabsTrigger>
         </TabsList>
-        {laufend.length > 0 && bereich !== "anrufe" && <button onClick={() => wechsel("anrufe")} className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary/10 px-3 text-left text-xs text-primary"><span className="size-2 shrink-0 rounded-full bg-emerald-400" /><span className="min-w-0 flex-1 truncate">{laufend.length === 1 ? `${nameFuer(laufend[0])} · Anruf läuft` : `${laufend.length} Anrufe laufen`}</span><span className="shrink-0">Zum Gespräch →</span></button>}
+        {laufend.length > 0 && bereich !== "anrufe" && <button onClick={() => wechsel("anrufe")} className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary/10 px-3 text-left text-xs text-foreground"><span className="size-2 shrink-0 rounded-full bg-emerald-400" /><span className="min-w-0 flex-1 truncate">{laufend.length === 1 ? `${nameFuer(laufend[0])} · Anruf läuft` : `${laufend.length} Anrufe laufen`}</span><span className="shrink-0">Zum Gespräch →</span></button>}
         {bereich !== "rueckrufe" && <label className="flex h-11 items-center gap-2 rounded-xl bg-secondary/60 px-3 text-muted-foreground">
           <Search className="size-4 shrink-0" /><input aria-label="Kontakte oder Anrufe suchen" type="search" value={suche} onChange={e => { setSuche(e.target.value); setSichtbar(8); }} placeholder={bereich === "kontakte" ? "Name oder Rufnummer suchen" : "Nach Kontakt suchen"} className="w-full min-w-0 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground" />
         </label>}
       </div>
-      {fehler && <p role="alert" className="text-sm text-red-400">{fehler}</p>}
+      {fehler && <p role="alert" className="text-sm text-red-800">{fehler}</p>}
       {!daten && !fehler && <p className="py-8 text-center text-sm text-muted-foreground">Telefon wird geladen …</p>}
-      {daten && (!daten.bereit.webhook || !daten.bereit.anrufen) && <button onClick={() => setDialog("einrichtung")} className="flex w-full items-center gap-2 rounded-xl bg-amber-400/10 p-3 text-left text-sm text-amber-200"><ShieldAlert className="size-4 shrink-0" /> Telefonie noch nicht vollständig eingerichtet <ChevronRight className="ml-auto size-4 shrink-0" /></button>}
+      {daten && (!daten.bereit.webhook || !daten.bereit.anrufen) && <button onClick={() => setDialog("einrichtung")} className="flex w-full items-center gap-2 rounded-xl bg-amber-400/10 p-3 text-left text-sm text-amber-800"><ShieldAlert className="size-4 shrink-0" /> Telefonie noch nicht vollständig eingerichtet <ChevronRight className="ml-auto size-4 shrink-0" /></button>}
       <TabsContent value="kontakte" forceMount hidden={bereich !== "kontakte"} className="space-y-3">
         <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">Deine Kontakte</h2><Button size="sm" className="h-11 gap-1.5" onClick={() => setDialog("kontakt")}><Plus className="size-4" /> Kontakt hinzufügen</Button></div>
         <div className="phone-contact-grid">{kontaktListe.slice(0, sichtbar).map(n => <NummerZeile key={n.id} eintrag={n} onChange={laden} />)}</div>
@@ -757,20 +757,20 @@ export default function Telefon() {
                 value={neu.nummer}
                 onChange={(e) => setNeu({ ...neu, nummer: e.target.value })}
                 placeholder="+49 151 12345678"
-                className="h-11 min-w-0 w-full rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08] sm:w-auto sm:flex-1"
+                className="h-11 min-w-0 w-full rounded-full bg-muted/60 px-4 text-base outline-none transition-colors focus:bg-muted/60 sm:w-auto sm:flex-1"
               />
               <input
                 aria-label="Kontaktname"
                 value={neu.name}
                 onChange={(e) => setNeu({ ...neu, name: e.target.value })}
                 placeholder="Name"
-                className="h-11 rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08] sm:w-40"
+                className="h-11 rounded-full bg-muted/60 px-4 text-base outline-none transition-colors focus:bg-muted/60 sm:w-40"
               />
               <select
                 aria-label="Zugriff des neuen Kontakts"
                 value={neu.stufe}
                 onChange={(e) => setNeu({ ...neu, stufe: e.target.value as Stufe })}
-                className="h-11 rounded-full bg-white/[0.05] px-4 text-base outline-none transition-colors focus:bg-white/[0.08]"
+                className="h-11 rounded-full bg-muted/60 px-4 text-base outline-none transition-colors focus:bg-muted/60"
               >
                 <option value="privat">Privat</option>
                 <option value="oeffentlich">Öffentlich</option>
@@ -792,12 +792,12 @@ export default function Telefon() {
             <p className="mt-2 text-xs text-muted-foreground">
               Du kannst anschließend im Chat sagen: „Rufe {neu.name.trim() || "Kontaktname"} an.“
             </p>
-          {fehler && <p role="alert" className="mt-3 text-sm text-red-400">{fehler}</p>}
+          {fehler && <p role="alert" className="mt-3 text-sm text-red-800">{fehler}</p>}
         </div>}
         {dialog === "sms" && <SmsBereich nummern={kontakte} />}
         {dialog === "einrichtung" && <div className="space-y-4">
           {daten?.anbieter === "telnyx" ? <TelnyxEinrichtung /> : daten && <Einrichtung onChange={laden} />}
-          <details className="rounded-2xl bg-secondary/40 p-4 text-sm"><summary className="cursor-pointer">Technische Hinweise</summary><p className="mt-3 break-words text-xs text-muted-foreground">Für GPT Live muss der OpenAI-Webhook das Ereignis <code>live.transport.incoming</code> an <code>/api/telefon/eingehend</code> zustellen. Ein hinterlegter Signaturschlüssel bestätigt noch nicht, dass das Ereignis aktiviert ist.</p>{daten && !daten.bereit.webhook && <p className="mt-2 text-amber-200">Der Signaturschlüssel für eingehende Anrufe fehlt.</p>}</details>
+          <details className="rounded-2xl bg-secondary/40 p-4 text-sm"><summary className="cursor-pointer">Technische Hinweise</summary><p className="mt-3 break-words text-xs text-muted-foreground">Für GPT Live muss der OpenAI-Webhook das Ereignis <code>live.transport.incoming</code> an <code>/api/telefon/eingehend</code> zustellen. Ein hinterlegter Signaturschlüssel bestätigt noch nicht, dass das Ereignis aktiviert ist.</p>{daten && !daten.bereit.webhook && <p className="mt-2 text-amber-800">Der Signaturschlüssel für eingehende Anrufe fehlt.</p>}</details>
         </div>}
       </DialogContent>
     </Dialog>
