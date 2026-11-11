@@ -9,6 +9,11 @@ import { pathToFileURL } from 'node:url';
 // (DB, model, tool execution and side effects) are stubbed. Routing, tool
 // selection, prompt modules and the access-error filter remain real.
 const directory = await mkdtemp(join(process.cwd(), '.chat-access-check-'));
+const deploymentEnvironment = { DATABASE_URL: process.env.DATABASE_URL, LUKAS_WORK_PROGRESS: process.env.LUKAS_WORK_PROGRESS };
+// Exercise production's journal-enabled path with the isolated pg adapter.
+// Never inherit a real deployment database URL or an ambient disable flag.
+process.env.DATABASE_URL = 'postgresql://fixture.invalid/chat-access';
+delete process.env.LUKAS_WORK_PROGRESS;
 let server;
 const state = { calls: [], modelCalls: 0, rows: [], statuses: [] };
 globalThis.__chatAccessCheck = state;
@@ -255,6 +260,9 @@ try {
   if(failures.length){console.log('PR39 FAILURES '+JSON.stringify(failures));process.exitCode=1;}
 
 } finally {
+  for (const [key, value] of Object.entries(deploymentEnvironment)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
   delete globalThis.__chatAccessCheck;
   await rm(directory,{recursive:true,force:true});

@@ -63,6 +63,19 @@ if(process.argv[2]==='--worker'){
     await assert.rejects(m.withWorkProgress('failed-write','task',async()=>{await m.planWorkBatch([first]);state.failWrites=true;await m.startWorkStep(first);effects++;}),/write failure/);
     state.failWrites=false;assert.equal(effects,0);assert.equal(state.locks.size,0);
     await m.withWorkProgress('new-scope','task',async()=>assert.equal(m.workProgressContext(),''));
+    const historyTask='Implementiere einen Cache im TypeScript Repo';
+    await m.withWorkProgress('history-only','Ja, mach das',async()=>{
+      assert.equal(m.workProgressContext(),'','missing journal has no prior action evidence');
+      assert.equal(m.workProgressTask(historyTask),historyTask,'history resolves a continuation-only journal');
+      assert.equal(m.workProgressTask('weiter'),historyTask,'later routing calls retain the resolved task');
+    });
+    assert.equal(state.rows.get('history-only').auftrag,historyTask,'resolved task persists at final checkpoint');
+    await m.withWorkProgress('history-only','weiter',async()=>{
+      assert.equal(m.workProgressTask('Lies mein Postfach'),historyTask,'concrete recovered journal wins over a different fallback');
+    });
+    await m.withWorkProgress('unresolved','weiter',async()=>{
+      assert.equal(m.workProgressTask('weiter'),'weiter','absent history must not invent a task');
+    });
     await m.withWorkProgress('uncertain-write','task',async()=>{
       await m.planWorkBatch([second]);await m.startWorkStep(second);await m.finishWorkStep(second,'transport failed after dispatch',true);
     });
