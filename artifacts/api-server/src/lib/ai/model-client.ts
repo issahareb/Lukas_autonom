@@ -1,3 +1,4 @@
+import { modelExecutionPolicy, type ModelEscalation } from "./model-policy";
 import { usageBeleg } from "../verbrauch-methodik";
 import { merkeProviderBeleg, hatAufrufMessung, bucheEinzelBeleg, merkeAufrufUsage, merkeToolSchema, messeModellAufruf, hatAktivenAuftrag, mitVerbrauchsAuftrag } from "../verbrauch-auftrag";
 import type OpenAI from "openai";
@@ -41,6 +42,7 @@ type CallInput = {
    * EINES Zuges teilen sich den Praefix.
    */
   cacheKey?: string;
+  escalation?: ModelEscalation;
   /** Cancels a disconnected voice session or an expired delegation. */
   signal?: AbortSignal;
 };
@@ -461,12 +463,6 @@ function outputLimit(input: CallInput): number {
     positiveInteger(process.env["LUKAS_MAX_OUTPUT_TOKENS_" + input.route.profile.toUpperCase()]) ??
     positiveInteger(process.env.LUKAS_MAX_OUTPUT_TOKENS) ?? OUTPUT_LIMITS[input.route.profile];
 }
-function reasoningEffort(route: ModelRoute): string | undefined {
-  if (!/^gpt-(?:5|6)(?:[.-]|$)/.test(route.model) || /chat-latest/.test(route.model)) return undefined;
-  const configured = process.env["LUKAS_REASONING_EFFORT_" + route.profile.toUpperCase()]?.trim();
-  if (configured && ["low", "medium", "high"].includes(configured)) return configured;
-  return ["fast", "general", "vision"].includes(route.profile) ? "low" : "medium";
-}
 async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   /*
    * Lukas ist ein Tool-Agent. Die 5.6-Reasoning-Modelle unterstuetzen Function
@@ -493,8 +489,13 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
    * Praefix, und genau die sollen sich treffen.
    */
   request.prompt_cache_key = input.cacheKey ?? "lukas";
-  const effort = reasoningEffort(input.route);
-  if (effort) request.reasoning = { effort };
+  const policy = modelExecutionPolicy(input.route, input.quelle, input.escalation);
+  if (policy.effort) request.reasoning = { effort: policy.effort };
+  request.service_tier = policy.tier;
+  merkeProviderBeleg({ denkaufwand: policy.effort, serviceTierAngefordert: policy.tier,
+    eskalation: input.escalation, routingGrund: input.route.reason });
+  logger.info({ model: input.route.model, profil: input.route.profile, ...policy,
+    eskalation: input.escalation }, "Lukas execution policy");
 
   const tools = toResponsesTools(input.tools);
   if (tools.length) request.tools = tools;
@@ -503,7 +504,7 @@ async function callOpenAI(input: CallInput): Promise<LukasModelResult> {
   merkeToolSchema(tools);
 
   const response: any = await openai.responses.create(request, { signal: input.signal });
-  merkeProviderBeleg({ responseId: response.id, gemeldetesModell: response.model });
+  merkeProviderBeleg({ responseId: response.id, gemeldetesModell: response.model, serviceTierGemeldet: response.service_tier });
   const toolCalls: LukasToolCall[] = [];
   for (const item of response.output ?? []) {
     if (item?.type !== "function_call") continue;
@@ -776,14 +777,15 @@ export async function callLukasModel(input: CallInput): Promise<LukasModelResult
     typeof m?.content === "string" && m.content.includes(CACHE_TRENNER)
       ? { ...m, content: ohneTrenner(m.content) } : m,
   );
-  const routes = [input.route, ...fallbackRoutes(input.route)];
+  const primary = modelExecutionPolicy(input.route, input.quelle, input.escalation).route;
+  const routes = [primary, ...fallbackRoutes(primary)];
   let lastError: unknown = new Error("Kein konfiguriertes, erreichbares Modell fuer " + input.route.profile);
   for (const route of routes) {
     input.signal?.throwIfAborted();
     if (!providerAvailable(route.provider) || isModelBroken(route.model, route.provider)) continue;
     const prepared = { ...input, route, messages: route.provider === "anthropic" ? messages : clean };
     try {
-      const result = await messeModellAufruf(prepared, route !== input.route ? "fallback" : !input.tools?.length ? "antwort" : input.messages.some(m => m.role === "tool") ? "werkzeugfortsetzung" : "start", async () => route.provider === "anthropic" ? await callAnthropic(prepared)
+      const result = await messeModellAufruf(prepared, route !== primary ? "fallback" : !input.tools?.length ? "antwort" : input.messages.some(m => m.role === "tool") ? "werkzeugfortsetzung" : "start", async () => route.provider === "anthropic" ? await callAnthropic(prepared)
         : route.provider === "google" ? await callGoogle(prepared)
         : route.provider === "local" ? await callLocal(prepared)
         : await callOpenAI(prepared));

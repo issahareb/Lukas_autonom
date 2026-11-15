@@ -8,7 +8,7 @@ type Auftrag = { id: string; rootId: string; parentId: string | null; quelle: st
 const auftrag = new AsyncLocalStorage<Auftrag>();
 type Usage = { eingabe: number; ausgabe: number; cacheLesen: number; cacheSchreiben: number | null };
 type ToolSchema = { schemaZeichen: number; schemaBytes: number; werkzeuge: number; schemaFormat: "openai-responses" };
-type Nachweis = { version: number; revision: string | null; profil?: string; responseId?: string; gemeldetesModell?: string; usage?: Record<string, unknown>; nurBeleg?: boolean };
+type Nachweis = { version: number; revision: string | null; profil?: string; responseId?: string; gemeldetesModell?: string; usage?: Record<string, unknown>; nurBeleg?: boolean; denkaufwand?: string; serviceTierAngefordert?: string; serviceTierGemeldet?: string; routingGrund?: string; eskalation?: { stufe: number; grund: string } };
 const aufruf = new AsyncLocalStorage<{ usage?: Usage; schema?: ToolSchema; nachweis?: Nachweis }>();
 
 function speichern(job: Promise<unknown>) {

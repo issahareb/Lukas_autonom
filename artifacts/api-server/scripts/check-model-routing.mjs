@@ -10,7 +10,7 @@ writeFileSync(stub, [
   "export const verbucheTag = async (u) => { globalThis.__booked.push(u); };",
   "export const openai = { responses: { create: async (r, options) => { globalThis.__requests.push(r); return globalThis.__reply(r, options); } } };",
 ].join("\n"));
-writeFileSync(entry, ["model-router", "model-client", "context-window", "voice-renderer"]
+writeFileSync(entry, ["model-policy", "model-router", "model-client", "context-window", "voice-renderer"]
   .map((n) => 'export * from "../src/lib/ai/' + n + '.ts";').join("\n"));
 await build({
   entryPoints: [entry], outfile: join(dir, "test.mjs"), bundle: true, format: "esm", platform: "node",
@@ -19,14 +19,14 @@ await build({
     b.onResolve({ filter: /(^|\/)(logger|tagesbudget)$/ }, () => ({ path: stub }));
   } }], logLevel: "silent",
 });
-const { routeLukasModel, previousRoutingTask, directRoute, callLukasModel, fitLukasContext, renderLukasVoice, isModelBroken } =
+const { ModelProgress, modelExecutionPolicy, routeLukasModel, previousRoutingTask, directRoute, callLukasModel, fitLukasContext, renderLukasVoice, isModelBroken } =
   await import(pathToFileURL(join(dir, "test.mjs")));
 const savedEnv = { ...process.env };
 let checks = 0;
 const equal = (name, actual, expected) => { assert.deepEqual(actual, expected, name); checks++; };
 const ok = (name, value) => { assert.ok(value, name); checks++; };
 function reset() {
-  for (const k of Object.keys(process.env)) if (/^LUKAS_(MODEL|CORE_MODEL|FAST_MODEL|PUBLIC_MODEL|MAX_OUTPUT|REASONING_EFFORT|CONTEXT|VOICE)/.test(k)) delete process.env[k];
+  for (const k of Object.keys(process.env)) if (/^LUKAS_(MODEL|CORE_MODEL|FAST_MODEL|PUBLIC_MODEL|MAX_OUTPUT|REASONING_EFFORT|SERVICE_TIER|ASTRA_ESCALATION|CONTEXT|VOICE)/.test(k)) delete process.env[k];
   globalThis.__requests = []; globalThis.__booked = [];
   globalThis.__reply = async () => ({ output: [], output_text: "Antwort.", status: "completed", usage: { input_tokens: 100, output_tokens: 20 } });
 }
@@ -41,10 +41,10 @@ try {
   for (const text of ["Was ist Python?", "Was bedeutet JSON?", "Erklär mir kurz Docker", "Was ist eine API?", "Was ist eine Strategie?", "Danke für den Commit!", "Danke für die Analyse!", "Wie spät ist es?", "Hallo", "Was heißt SQL?", "What is React?"]) {
     equal("Billige Frage: " + text, routeLukasModel({ userText: text }).profile, "fast");
   }
-  equal("Analyse auf Sol", routeLukasModel({ userText: "Analysiere die Ursachen und begründe deine Empfehlung" }).model, "gpt-6-sol");
+  equal("Analyse auf Sol", routeLukasModel({ userText: "Analysiere die Ursachen und begründe deine Empfehlung" }).model, "gpt-6.1-sol");
   equal("Code auf 6.1", routeLukasModel({ userText: "Fix den Fehler in router.ts" }).model, "gpt-6.1-sol");
-  equal("FAST auf Luna", directRoute("fast").model, "gpt-6-luna");
-  equal("GENERAL auf Terra", directRoute("general").model, "gpt-5.6-terra");
+  equal("FAST auf Luna", directRoute("fast").model, "gpt-6.1-terra");
+  equal("GENERAL auf Terra", directRoute("general").model, "gpt-6.1-terra");
   for (const profile of ["fast", "general", "reasoning", "code", "vision", "long_context"]) ok("Astra nur explizit: " + profile, !directRoute(profile).model.includes("astra"));
   equal("Code-Fortsetzung", routeLukasModel({ userText: "Ja, mach das", previousUserText: "Implementiere den Cache in router.ts" }).profile, "code");
   const continued = [{ role: "user", content: "Fix router.ts" }, { role: "assistant", content: "Entwurf" }, { role: "user", content: "weiter" }, { role: "user", content: "weiter" }];
@@ -56,7 +56,7 @@ try {
   equal("Bild bleibt sichtbar", routeLukasModel({ userText: "Was siehst du?", attachmentKinds: ["image"] }).profile, "vision");
   equal("Langer Code", routeLukasModel({ userText: "const x = 1;\n".repeat(1500) }).profile, "long_context");
   process.env.LUKAS_PUBLIC_MODEL = "public-only";
-  equal("Oeffentlicher Chat steuert FAST nicht", directRoute("fast").model, "gpt-6-luna");
+  equal("Oeffentlicher Chat steuert FAST nicht", directRoute("fast").model, "gpt-6.1-terra");
   reset();
   for (const [profile, limit, effort] of [["fast", 2048, "low"], ["general", 4096, "low"], ["vision", 4096, "low"], ["code", 16384, "medium"], ["reasoning", 16384, "medium"], ["long_context", 16384, "medium"]]) {
     await call(profile);
@@ -77,9 +77,9 @@ try {
     return { output_text: "Ersatz", output: [], status: "completed" };
   };
   const fallback = await call();
-  equal("Billiger Ersatz trotz Core", fallback.route.model, "gpt-4.1-mini");
+  equal("Billiger Ersatz trotz Core", fallback.route.model, "gpt-6.1-sol");
   equal("Profil bleibt erhalten", fallback.route.profile, "fast");
-  equal("Begrenzter Rueckfall", globalThis.__requests.map((r) => r.model), ["missing-luna", "gpt-4.1-mini"]);
+  equal("Begrenzter Rueckfall", globalThis.__requests.map((r) => r.model), ["missing-luna", "gpt-6.1-sol"]);
   ok("Keine Cachemarke im Ersatz", !JSON.stringify(globalThis.__requests.at(-1)).includes("LUKAS_CACHE_TRENNER"));
   await call();
   equal("Defekte ID nicht erneut gefragt", globalThis.__requests.filter((r) => r.model === "missing-luna").length, 1);
@@ -91,10 +91,10 @@ try {
     reset(); globalThis.__reply = async () => { throw Object.assign(new Error("request failed"), { status }); };
     await assert.rejects(call());
     equal("Kein Modellwechsel bei " + status, globalThis.__requests.length, 1);
-    ok("Kein Modelldefekt bei " + status, !isModelBroken("gpt-6-luna"));
+    ok("Kein Modelldefekt bei " + status, !isModelBroken("gpt-6.1-terra"));
   }
   reset(); process.env.LUKAS_MODEL_FAST = "anthropic:missing-key"; delete process.env.ANTHROPIC_API_KEY;
-  equal("Fehlender Provider: billiger Ersatz", directRoute("fast").model, "gpt-4.1-mini");
+  equal("Fehlender Provider: billiger Ersatz", directRoute("fast").model, "gpt-6.1-sol");
   equal("Fehlender Provider: gleiches Profil", directRoute("fast").profile, "fast");
   reset(); process.env.LUKAS_MODEL_FAST = "unavailable-primary"; process.env.LUKAS_MODEL_FALLBACK_FAST = "unavailable-secondary";
   globalThis.__reply = async () => { throw Object.assign(new Error("model not found"), { status: 404 }); };
@@ -105,6 +105,51 @@ try {
   equal("Verbrauch pro Zug", result.usage, { rein: 100, raus: 20 });
   await new Promise((r) => setTimeout(r, 0));
   equal("Verbrauch dauerhaft gebucht", globalThis.__booked.length, 1);
+
+  reset();
+  equal("Chat explizit Standard", modelExecutionPolicy(directRoute("fast"), "chat").tier, "default");
+  equal("Hintergrund Flex", modelExecutionPolicy(directRoute("reasoning"), "reflexion").tier, "flex");
+  process.env.LUKAS_SERVICE_TIER = "flex";
+  equal("Telefon erbt niemals Flex", modelExecutionPolicy(directRoute("fast"), "telefon").tier, "default");
+  process.env.LUKAS_SERVICE_TIER_CHAT = "fast";
+  await call("code", {quelle:"chat"});
+  equal("Fast erreicht Responses", globalThis.__requests.at(-1).service_tier, "fast");
+  process.env.LUKAS_SERVICE_TIER_CHAT = "ultrafast";
+  await call("code", {quelle:"chat"});
+  equal("Ultrafast auf Sol", globalThis.__requests.at(-1).service_tier, "ultrafast");
+  await call("fast", {quelle:"chat"});
+  equal("Terra ohne ungueltiges Ultrafast", globalThis.__requests.at(-1).service_tier, "default");
+  for (const effort of ["low", "medium", "high", "xhigh", "max", "ultra"]) {
+    process.env.LUKAS_REASONING_EFFORT_CODE = effort;
+    await call("code");
+    equal("Effort erreicht Provider: " + effort, globalThis.__requests.at(-1).reasoning.effort, effort === "ultra" ? "max" : effort);
+  }
+  process.env.LUKAS_REASONING_EFFORT_CODE = "none";
+  await call("code"); equal("Sol nie none", globalThis.__requests.at(-1).reasoning.effort, "low");
+  reset();
+  const progress = new ModelProgress();
+  const reads = [{name:"github_read_path", arguments:'{"path":"router.ts"}'}];
+  for (let i=0;i<11;i++) {
+    progress.observe(reads, ["unchanged source"]);
+    const policy = modelExecutionPolicy(directRoute("code"), "chat", progress.escalation);
+    equal("Astra erst nach max bei Runde " + i, policy.route.model, i === 10 ? "gpt-6-astra" : "gpt-6.1-sol");
+    if (i === 2) equal("Stillstand erhoeht Denken", policy.effort, "high");
+    if (i === 4) equal("Weiterer Stillstand xhigh", policy.effort, "xhigh");
+    if (i === 6) equal("Vor Astra max", policy.effort, "max");
+  }
+  await call("code", {escalation:progress.escalation});
+  equal("Eskalation erreicht Provider", globalThis.__requests.at(-1).model, "gpt-6-astra");
+  equal("Einfaches Profil nie automatisch Astra", modelExecutionPolicy(directRoute("fast"), "chat", progress.escalation).route.model, "gpt-6.1-terra");
+  process.env.LUKAS_ASTRA_ESCALATION = "false";
+  equal("Eskalation abschaltbar", modelExecutionPolicy(directRoute("code"), "chat", progress.escalation).route.model, "gpt-6.1-sol");
+  for (const barrier of ['Fehler: Test', 'HTTP 403 forbidden', '{"status":"blocked"}', 'Freigabe erforderlich', 'insufficient_quota']) {
+    progress.observe(reads, [barrier]); equal("Fehler eskaliert nicht: " + barrier, progress.escalation, undefined);
+  }
+  for (let i=0;i<15;i++) progress.observe(reads, ["result " + i]);
+  equal("Fortschritt eskaliert nicht", progress.escalation, undefined);
+  for (let i=0;i<15;i++) progress.observe([{name:"execute_command", arguments:"same"}], ["same"]);
+  equal("Schreib-/Shellaufrufe keine Eskalation", progress.escalation, undefined);
+  reset();
 
   // Caller cancellation must not start another paid provider.
   reset();
@@ -196,7 +241,7 @@ try {
   equal("Kein zweiter Modellaufruf", globalThis.__requests.length, 0);
   process.env.LUKAS_VOICE_POLISH = "true"; await renderLukasVoice(voiceOpts);
   equal("Politur explizit aktivierbar", globalThis.__requests.length, 1);
-  equal("Politur auf Luna", globalThis.__requests[0].model, "gpt-6-luna");
+  equal("Politur auf Luna", globalThis.__requests[0].model, "gpt-6.1-terra");
   process.env.LUKAS_VOICE_HISTORY = "0"; globalThis.__requests = [];
   await renderLukasVoice({ ...voiceOpts, conversation: [{ role: "user", content: "OLD_HISTORY_MARKER" }] });
   ok("Historienlimit 0 sendet keinen Verlauf", !JSON.stringify(globalThis.__requests[0]).includes("OLD_HISTORY_MARKER"));

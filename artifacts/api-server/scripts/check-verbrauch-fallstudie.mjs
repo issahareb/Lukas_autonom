@@ -41,6 +41,16 @@ try {
  assert.equal(m.aufrufGemessen({...calls[0],provider:'anthropic',cacheSchreiben:null}),false);assert.equal(m.aufrufGemessen(calls[0]),true);
  assert.equal(m.belegHash({a:1,b:{c:2,d:3}}),m.belegHash({b:{d:3,c:2},a:1}));
  assert.notEqual(m.belegHash({rows:calls}),m.belegHash({rows:calls.slice(1)}));
+ // Speed and reasoning dimensions must never collapse into the same consumption row.
+ const receipt = calls[0];
+ const variants = ['low','high'].map((denkaufwand,i)=>({...receipt,id:'policy-'+i,
+   nachweis:{version:2,denkaufwand,serviceTierAngefordert:i?'fast':'default',serviceTierGemeldet:i?'fast':'default'}}));
+ const split=m.werteVerbrauchAus(jobs,variants,[], '2026-10-31','2026-11-06',now);
+ assert.equal(split.bereiche.length,2);
+ assert.deepEqual(new Set(split.bereiche.map(r=>r.denkaufwand)),new Set(['low','high']));
+ assert.deepEqual(new Set(split.bereiche.map(r=>r.serviceTierGemeldet)),new Set(['fast','default']));
+ const unknown=m.werteVerbrauchAus(jobs,[receipt],[], '2026-10-31','2026-11-06',now);
+ assert.equal(unknown.bereiche[0].serviceTierGemeldet,'unbekannt');
  const stub=join(dir,'logger.mjs');await writeFile(stub,'export const logger={error(){}}');
  const authFile=join(dir,'auth.mjs');await build({entryPoints:['src/middlewares/auth.ts'],outfile:authFile,bundle:true,platform:'node',format:'esm',plugins:[{name:'logger-stub',setup(b){b.onResolve({filter:/lib\/logger$/},()=>({path:stub}));}}],logLevel:'silent'});
  const {lukasAuth}=await import(authFile);process.env.LUKAS_API_TOKEN='owner-test';process.env.LUKAS_USAGE_READ_TOKEN='reader-test';
