@@ -1,3 +1,4 @@
+import { erzeugeSpicyVideo, spicyVideoStatus } from "./spicy-video";
 import { webSearch } from "./web-search";
 import { waehleWerkzeuge } from "./werkzeug-auswahl";
 import type OpenAI from "openai";
@@ -31,6 +32,29 @@ import { zugangFuer } from "./zugaenge";
 import { nurEinmal, fingerabdruck } from "./versandsperre";
 
 export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function", function: {
+      name: "spicy_video_erstellen",
+      description: "Erstelle ein kostenpflichtiges Wan-3.0-Video über SpicyAPI aus einer für den Anbieter erreichbaren HTTPS-Bildadresse. SPICY_API_KEY muss als Server-Secret hinterlegt sein. API-Schlüssel nie als Parameter oder im Chat anfordern. Je neuem Nutzerauftrag einen neuen idempotency_key mit mindestens 16 Zeichen erzeugen; bei unklarer Antwort exakt denselben Schlüssel und dieselben Parameter wiederverwenden. Annahme ist keine Fertigstellung. Zur weiteren Prüfung ausschließlich spicy_video_status mit task_id verwenden. Andere Modelle und Video-Editing sind hier noch nicht verfügbar.",
+      parameters: { type: "object", properties: {
+        image_url: { type: "string", description: "Öffentlich oder zeitlich begrenzt erreichbare HTTPS-URL des Startbilds; kein lokaler Dateipfad." },
+        last_image_url: { type: "string", description: "Optionales Schlussbild als HTTPS-URL." },
+        prompt: { type: "string", maxLength: 10000 },
+        duration_seconds: { type: "integer", minimum: 2, maximum: 30, description: "Standard 5 Sekunden; beeinflusst Kosten." },
+        resolution: { type: "string", enum: ["480p", "720p", "1080p"], description: "Standard 720p; beeinflusst Kosten." },
+        aspect_ratio: { type: "string", enum: ["16:9", "9:16", "1:1", "4:3", "3:4", "adaptive"] },
+        generate_audio: { type: "boolean", description: "Standard true." },
+        idempotency_key: { type: "string", minLength: 16, maxLength: 128, pattern: "^[A-Za-z0-9_-]+$", description: "Einmal pro Auftrag festlegen, bei Wiederholung unverändert lassen." },
+      }, required: ["image_url", "idempotency_key"], additionalProperties: false },
+    },
+  },
+  {
+    type: "function", function: {
+      name: "spicy_video_status",
+      description: "Lies den aktuellen Status eines bereits angenommenen SpicyAPI-Videos anhand seiner task_id. Nur bei succeeded Ergebnislinks ausgeben; queued/running sind noch kein fertiges Video. Ergebnislinks können ablaufen. Nicht durch erneute Erstellung ersetzen.",
+      parameters: { type: "object", properties: { task_id: { type: "string", maxLength: 160 } }, required: ["task_id"], additionalProperties: false },
+    },
+  },
   { type: 'function', function: {
     name: 'frage_issa',
     description: 'Stelle 1 bis 3 notwendige Rückfragen als Eingabefenster im privaten Dashboard-Chat. Je Frage optional 2 bis 4 Auswahlmöglichkeiten; eine eigene Antwort bleibt möglich. Nutze dies, wenn für den nächsten Schritt eine Entscheidung oder Angabe des Nutzers fehlt. Danach auf die Antwort warten. Keine Passwörter oder Zugangsdaten erfragen; dafür den Bereich Zugänge verwenden.',
@@ -1230,6 +1254,10 @@ export async function executeLukasTool(
   if (name.startsWith(MCP_TOOL_PREFIX)) return await runMcpTool(name, input);
 
   switch (name) {
+    case "spicy_video_erstellen":
+      return await erzeugeSpicyVideo(input, ctx.signal);
+    case "spicy_video_status":
+      return await spicyVideoStatus(input, ctx.signal);
     case 'frage_issa': {
       const { frageIssa } = await import('./frage-issa');
       return frageIssa(input, ctx.conversationId, ctx.telefonOwnerContactId !== undefined);
@@ -1765,3 +1793,4 @@ export async function allLukasTools(task?: string, discovered?: string[]): Promi
   }
   return mitPolicyHinweis([...LUKAS_TOOLS.filter(t => t.type === "function" && wanted.has(t.function.name)), ...extra]);
 }
+
