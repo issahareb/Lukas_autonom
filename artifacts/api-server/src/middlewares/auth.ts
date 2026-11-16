@@ -39,7 +39,9 @@ export function lukasAuth(req: Request, res: Response, next: NextFunction): void
   const readToken = process.env.LUKAS_USAGE_READ_TOKEN?.trim();
   const auth = req.headers.authorization;
   const readProvided = auth?.startsWith("Bearer ") ? auth.slice(7).trim() : undefined;
-  if (req.method === "GET" && ["/lukas/verbrauch", "/lukas/verbrauch/fallstudie"].includes(req.path) && readToken && gleicherToken(readProvided,readToken)) return void next();
+  const usageRead = ["/lukas/verbrauch", "/lukas/verbrauch/fallstudie"].includes(req.path) ||
+    /^\/lukas\/verbrauch\/archiv\/usage-v2-\d{4}-\d{2}-\d{2}$/.test(req.path);
+  if (req.method === "GET" && usageRead && readToken && gleicherToken(readProvided,readToken)) return void next();
   const token = process.env.LUKAS_API_TOKEN?.trim();
 
   if (!token) {
