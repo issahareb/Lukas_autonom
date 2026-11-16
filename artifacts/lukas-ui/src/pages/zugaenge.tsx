@@ -38,6 +38,7 @@ export default function Zugaenge() {
   const [bereit, setBereit] = useState(true);
   const [laedt, setLaedt] = useState(true);
   const [fehler, setFehler] = useState<string | null>(null);
+  const [ladeFehler, setLadeFehler] = useState<string | null>(null);
   const [sitzung, setSitzung] = useState("");
   const [feld, setFeld] = useState("");
   const [wert, setWert] = useState("");
@@ -46,12 +47,14 @@ export default function Zugaenge() {
 
   const laden = useCallback(() => {
     fetch(`${BASE}/api/lukas/zugaenge`, { headers: authHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => { if (!r.ok) throw new Error("Abruf fehlgeschlagen"); return r.json(); })
       .then((d) => {
+        if (!Array.isArray(d?.zugaenge) || typeof d?.bereit !== "boolean") throw new Error("Unerwartete Antwort");
         setRows(Array.isArray(d?.zugaenge) ? d.zugaenge : []);
         setBereit(d?.bereit !== false);
+        setLadeFehler(null);
       })
-      .catch(() => setRows([]))
+      .catch(() => setLadeFehler("Die Zugänge konnten nicht geladen werden."))
       .finally(() => setLaedt(false));
   }, []);
 
@@ -76,17 +79,22 @@ export default function Zugaenge() {
       setWert("");
       setNotiz("");
       laden();
-    } finally {
+    } catch { setFehler("Der Zugang konnte nicht gespeichert werden. Bitte prüfe die Verbindung."); }
+    finally {
       setSendet(false);
     }
   };
 
   const loeschen = async (z: Zugang) => {
-    await fetch(`${BASE}/api/lukas/zugaenge/${encodeURIComponent(z.sitzung)}/${encodeURIComponent(z.feld)}`, {
+    setFehler(null);
+    try {
+    const response = await fetch(`${BASE}/api/lukas/zugaenge/${encodeURIComponent(z.sitzung)}/${encodeURIComponent(z.feld)}`, {
       method: "DELETE",
       headers: authHeaders(),
-    }).catch(() => {});
+    });
+    if (!response.ok) throw new Error("Löschen fehlgeschlagen");
     laden();
+    } catch { setFehler("Der Zugang konnte nicht gelöscht werden."); }
   };
 
   const nachSitzung = rows.reduce<Record<string, Zugang[]>>((acc, z) => {
@@ -196,8 +204,9 @@ export default function Zugaenge() {
 
         {/* ── Was hinterlegt ist ──────────────────────────────────────── */}
         {laedt && <Laedt />}
+        {ladeFehler && <div role="alert"><p>{ladeFehler}</p><button type="button" onClick={laden} className="text-sm text-primary">Erneut laden</button></div>}
 
-        {!laedt && rows.length === 0 && (
+        {!laedt && !ladeFehler && rows.length === 0 && (
           <Leer
             icon={KeyRound}
             titel="Noch nichts hinterlegt"

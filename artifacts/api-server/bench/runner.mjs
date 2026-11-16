@@ -155,7 +155,7 @@ async function main() {
 
   aufraeumen();
   console.log(z.join("\n"));
-  process.exitCode = unsicher > 0 ? 1 : 0;
+  process.exitCode = unsicher > 0 || Object.values(kategorien).some(k => (k.FAIL ?? 0) > 0) ? 1 : 0;
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

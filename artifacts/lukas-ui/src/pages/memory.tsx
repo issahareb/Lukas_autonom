@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Search, Brain, Star } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { de } from "date-fns/locale";
-import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
+import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 import { kategorie } from "@/lib/worte";
 
 const CATEGORIES = ["personal", "preference", "goal", "project", "finance", "gaming", "health", "learning", "trading", "work", "other"];
@@ -44,6 +44,7 @@ export default function Memory() {
   const [newCat, setNewCat] = useState("personal");
   const [newImportance, setNewImportance] = useState("5");
   const [newTags, setNewTags] = useState("");
+  const [writeError, setWriteError] = useState("");
 
   /*
    * Standardmaessig OHNE Chatverlauf.
@@ -54,7 +55,7 @@ export default function Memory() {
    * geladenen Eintraege fast nur aus Gespraechsschnipseln, und die kuratierten
    * Fakten sind zwischen ihnen nicht mehr zu finden.
    */
-  const { data: memories = [], isLoading } = useGetMemories({
+  const { data: memories = [], isLoading, isError, refetch } = useGetMemories({
     search: search || undefined,
     category: category !== "all" && category !== "kuratiert" ? category : undefined,
     exclude: category === "kuratiert" ? "conversation" : undefined,
@@ -70,6 +71,8 @@ export default function Memory() {
 
   const handleCreate = async () => {
     if (!newContent.trim()) return;
+    setWriteError("");
+    try {
     await createMemory.mutateAsync({
       data: {
         content: newContent,
@@ -82,11 +85,15 @@ export default function Memory() {
     setOpen(false);
     setNewContent("");
     setNewTags("");
+    } catch { setWriteError("Die Erinnerung konnte nicht gespeichert werden. Dein Entwurf bleibt erhalten."); }
   };
 
   const handleDelete = async (id: number) => {
+    setWriteError("");
+    try {
     await deleteMemory.mutateAsync({ id });
     qc.invalidateQueries({ queryKey: getGetMemoriesQueryKey() });
+    } catch { setWriteError("Die Erinnerung konnte nicht gelöscht werden."); }
   };
 
   return (
@@ -147,6 +154,7 @@ export default function Memory() {
               <Button onClick={handleCreate} className="w-full rounded-full" disabled={!newContent.trim() || createMemory.isPending}>
                 Speichern
               </Button>
+              {writeError && <Fehler text={writeError} />}
             </div>
           </DialogContent>
         </Dialog>
@@ -179,6 +187,8 @@ export default function Memory() {
       }
     >
       {isLoading && <Laedt was="Erinnerungen werden geladen…" />}
+      {isError && <><Fehler text="Die Erinnerungen konnten nicht geladen werden." /><Button variant="outline" onClick={() => void refetch()}>Erneut laden</Button></>}
+      {!open && writeError && <Fehler text={writeError} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {memories.map((m, idx) => (
@@ -229,7 +239,7 @@ export default function Memory() {
         ))}
       </div>
 
-      {!isLoading && memories.length === 0 && (
+      {!isLoading && !isError && memories.length === 0 && (
         <Leer
           icon={Brain}
           titel={search ? "Nichts gefunden" : "Noch keine Erinnerungen"}

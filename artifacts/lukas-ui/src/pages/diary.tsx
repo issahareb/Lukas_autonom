@@ -3,7 +3,7 @@ import { useGetDiaryEntries } from "@workspace/api-client-react";
 import { BookOpen, Search } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
-import { Seite, Karte, Chip, Leer, Laedt, staffel } from "@/components/seite";
+import { Seite, Karte, Chip, Leer, Laedt, Fehler, staffel } from "@/components/seite";
 import { stimmung, energie } from "@/lib/worte";
 
 /*
@@ -33,7 +33,7 @@ const ENERGIE_TON: Record<string, string> = {
 
 export default function Diary() {
   const [search, setSearch] = useState("");
-  const { data: entries = [], isLoading } = useGetDiaryEntries({ limit: 50 });
+  const { data: entries = [], isLoading, isError, refetch } = useGetDiaryEntries({ limit: 50 });
 
   const visible = entries.filter(e => e.content.toLocaleLowerCase("de").includes(search.trim().toLocaleLowerCase("de")));
   return (
@@ -44,6 +44,7 @@ export default function Diary() {
       unterKopf={<label className="workspace-search"><Search size={17} /><input type="search" aria-label="Tagebuch durchsuchen" placeholder="In den letzten 50 Einträgen suchen" value={search} onChange={e => setSearch(e.target.value)} /></label>}
     >
       {isLoading && <Laedt was="Einträge werden geladen…" />}
+      {isError && <><Fehler text="Das Tagebuch konnte nicht geladen werden." /><button type="button" onClick={() => void refetch()} className="text-sm text-primary">Erneut laden</button></>}
 
       <div className="space-y-5">
         {visible.map((entry, idx) => (
@@ -86,7 +87,7 @@ export default function Diary() {
         ))}
       </div>
 
-      {!isLoading && visible.length === 0 && (
+      {!isLoading && !isError && visible.length === 0 && (
         <Leer
           icon={BookOpen}
           titel={search ? "Keine passenden Einträge" : "Noch nichts geschrieben"}
