@@ -205,7 +205,7 @@ export async function einstiegsknoten(frage: string): Promise<string[]> {
   return kandidaten.filter((k) => vorhanden.has(k)).slice(0, 4);
 }
 
-export type GraphTreffer = { text: string; score: number; claimId: number; kontext?: string };
+export type GraphTreffer = { text: string; score: number; claimId: number; kontext?: string; observedAt?: Date };
 
 /** Keep a neighbour's descriptive attributes with their actual connecting
  * claim. Following an owner's other projects is not descriptive context. */
@@ -255,6 +255,7 @@ export async function graphTreffer(
         : "unbelegt";
       return {
         claimId: c.id,
+        observedAt: c.observedAt,
         kontext: graphKontext(k, nachbarschaft),
         text:
           `[Graph${richtung}] ${c.subject.replace(/_/g, " ")} → ` +
