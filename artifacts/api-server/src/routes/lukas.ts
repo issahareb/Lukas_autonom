@@ -481,7 +481,9 @@ router.get("/lukas/verbrauch/archiv/:id", async(req,res)=>{
   try {
     const [row]=await db.select().from(verbrauchBerichte).where(eq(verbrauchBerichte.id,String(req.params.id))).limit(1);
     if(!row)return void res.status(404).json({error:"Bericht nicht gefunden."});
-    res.setHeader("Cache-Control","no-store");res.json(row.daten);
+    res.setHeader("Cache-Control","no-store");
+    res.setHeader("X-Lukas-Bericht",row.id);res.setHeader("X-Lukas-SHA256",row.sha256);
+    res.json(row.daten);
   }catch(err){logger.error({err},"Verbrauchsarchiv nicht lesbar");res.status(503).json({error:"Archiv nicht verfügbar."});}
 });
 // Owner/runner acceptance is append-only. There is intentionally no model tool to grant itself success.
