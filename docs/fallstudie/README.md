@@ -1,6 +1,6 @@
 # LUKAS: belegbare Token-Effizienz
 
-Stand der Umsetzung: 7. November 2026. Studienprotokoll Version 2. Noch kein Ergebnis einer bezahlten Testserie und keine bestätigte Produktionsersparnis.
+Stand der Umsetzung: 16. November 2026. Studienprotokoll Version 2. Produktive Archive wurden geprüft; weiterhin kein belegtes Ergebnis einer kontrollierten bezahlten Testserie und keine bestätigte Produktionsersparnis.
 
 ## Fragestellung und bisheriger Befund
 
@@ -47,6 +47,8 @@ Vollständige Exporte enthalten einen SHA-256 über das JSON ohne `nachweis`, mi
 
 Zusammenfassungen stehen als `LUKAS_EFFIZIENZ` im privaten Railway-Laufzeitlog: `art=gesamt`, `bereich` oder `vergleich`, jeweils mit identischer Berichts-ID, Stand und SHA-256. Diese Logzeilen sind über die bereits verbundene Railway-App ohne Dashboard-Login lesbar. Sie enthalten keine Prompt-/Antworttexte, Kriterien, Telefonnummern oder Zugangsdaten. Vollständige Rohbelege bleiben in der geschützten API bzw. unter `GET /api/lukas/verbrauch/archiv/:id` abrufbar. Wenn Archiv/Logs fehlen oder veraltet sind, wird die Lücke gemeldet; nicht aus Code auf funktionierende Produktion schließen.
 
+Die ergänzte Logansicht prüft den kanonischen Archivhash vor jeder Ausgabe. Vergleiche nennen Serie, Fall, einen Hash des vollständigen Vergleichsschlüssels, Abnahmezahlen, gemessene Tokens und Modellmix. Der Hash des Vergleichsschlüssels bindet Kanal, Aufgabenart, Serie, Fall, Eingabehash und identisches Abnahmekriterium, ohne die Texte zu protokollieren. `kalenderwoche` trennt ISO-Kalenderwochen in UTC, nennt die abgedeckten Tage und kennzeichnet unvollständige Wochen. Live-Sekunden bleiben separat. Alle Ansichten eines Archivs tragen dieselbe Berichts-ID, SHA-256 und denselben Datenstand. Wiederholungen desselben Berichts werden dedupliziert; überlappende Archive werden niemals addiert. Historische Berichte werden nicht verändert und fehlende Abnahmen nicht nachgetragen.
+
 ## Nutzbare Testaufgaben und 20-Euro-Rahmen
 
 `faelle.json` definiert vier Aufgaben samt nutzbaren Ergebnissen: Tracker-Auswertungscode, Messanalyse, Anfrage-/Projektbriefvorlagen und SEO-Berichtsplan. Je Bereich sind höchstens 5 Euro vorgesehen. Gleichwertigkeit entsteht durch gleiche Aufgaben und Kriterien, nicht durch das absichtliche Ausgeben gleicher Beträge.
@@ -60,6 +62,10 @@ node scripts/lukas-fallstudie.mjs test --case tracker-auswertung
 
 # Authentifizierten Bericht sichern, inklusive Hashprüfung
 node scripts/lukas-fallstudie.mjs report --von 2026-10-24 --bis 2026-11-06 --out case-study-results/baseline.json
+
+# Genau den unveränderlichen Bericht aus dem privaten Laufzeitlog sichern.
+# Prüft zusätzlich die vom Server bestätigte Berichts-ID und Archiv-SHA.
+node scripts/lukas-fallstudie.mjs report --archiv usage-v2-2026-11-15 --out case-study-results/archive-20261115.json
 
 # Genau eine kostenpflichtige Aufgabe, erst nach bestätigter Aufladung
 # und laufender Budgetkontrolle durch den Operator.
@@ -89,6 +95,6 @@ Lokaler nativer PostgreSQL-Lauf bestanden: Neuinstallation, Upgrade, Teilupgrade
 
 ## Auslieferungsstand
 
-Der Stand ist lokal implementiert und geprüft, noch nicht produktiv ausgerollt. Der Push in das öffentliche Repository wurde vom automatischen Freigabecheck wegen der Veröffentlichung technischer Betriebsdokumentation blockiert. Es wurden keine bezahlten Aufgaben ausgeführt. Eine Freigabe zur Veröffentlichung des Branches/PR ist noch erforderlich. Die Auswertung für den 15. November 2026 ist als einmaliger Zusatz zum bestehenden LUKAS-Wochenbericht hinterlegt; ein zusätzlicher Termin konnte wegen des Limits von fünf aktiven Aufgaben nicht angelegt werden.
+Die ursprüngliche Messung aus PR #42 ist seit dem 7. November gemergt. Die privaten produktiven Tagesarchive und Messversion 2 wurden am 15./16. November geprüft. Die hier beschriebenen Ergänzungen der Logansicht und des Archivclients müssen zusätzlich über CI und nach Deployment verifiziert werden. Ein erfolgreicher synthetischer Test ist kein bezahlter Produktivlauf und keine unabhängige Abnahme einer echten LUKAS-Aufgabe. Ohne lesenden API-Zugang sind die Rohbelege weiterhin nicht vollständig über die Logs zugänglich. Zugangswerte nicht in Chats oder im Repository ablegen.
 
 Browserprüfung: Die Komponententests bestehen. Ein echter Chromium-Lauf wurde versucht, scheitert lokal aber an der untersagten Unix-Socket-Erzeugung. Deshalb ist keine visuelle Browserabnahme behauptet.

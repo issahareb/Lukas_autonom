@@ -24,6 +24,7 @@ export const sql = (parts, ...values) => ({parts, values});
   await build({ stdin: { contents: `
 export * from './src/lib/verbrauchsbericht';
 export * from './src/lib/projekt-aliasse';
+export * from './src/lib/projekt-kontext';
 export * from './src/lib/meldungs-status';
 export * from './src/lib/meldungen-merge';
 export * from './src/lib/live-verbrauch';
@@ -65,6 +66,29 @@ export * from '@workspace/db';
   assert.ok(m.aliasSchluessel(["taxibb"]).includes("taxi_bb"));
   assert.match(m.projektKontext("Taxi BB"), /issahareb\/Taxibbessen/);
   assert.equal(m.projektKontext("TaxiBot"), "");
+  for (const alias of ["project:taxibb", "https://taxibbessen.de/kontakt?test=1", "https://github.com/issahareb/Taxibbessen.git"]) {
+    assert.equal(m.projektSchluessel(alias), "taxibb", alias);
+    assert.equal(m.projekteImText(`Prüfe ${alias}`)[0]?.id, "taxibb", alias);
+  }
+  for (const spoof of ["https://taxibbessen.de@evil.example/", "https://evil.example/TaxiBB", "https://taxibbessen.de:8443/", "other@taxibbessen.de"]) {
+    assert.equal(m.projekteImText(spoof).length, 0, spoof);
+  }
+  const sources = [
+    {kind:"graph",id:51,text:'[Graph] taxi_bb → has_task: "Formular prüfen" (unbelegt)',observedAt:new Date("2026-11-07T12:00:00Z")},
+    {kind:"claim",id:52,text:'[Wissen] TaxiBB → repository: "issahareb/Taxibbessen" (verifiziert)'},
+    {kind:"claim",id:53,text:'[Wissen] TaxiBB → has_decision: "Keine neue Datenbank" (unbelegt)'},
+    {kind:"memory",id:54,text:'TaxiBot verwendet eine andere Datenbank'},
+  ];
+  const pack=m.projektGedachtnis("Was ist bei TaxiBB noch offen?",sources);
+  assert.match(pack,/gespeicherte Quellen, kein geprüfter Live-Status/);
+  assert.ok(pack.indexOf("Aufgaben und Blocker:")<pack.indexOf("Technik und Artefakte:"));
+  assert.match(pack,/graph #51; Stand 2026-11-07T12:00:00.000Z/);
+  assert.equal(pack.match(/Formular prüfen/g)?.length,1,"source appears once, never in both pack and rest");
+  assert.ok(!pack.includes("TaxiBot"),"unrelated project is excluded");
+  assert.match(m.projektGedachtnis("Wie ist taxibbessen.de technisch aufgebaut?",sources),/Technik und Artefakte:[\s\S]*Aufgaben und Blocker:/);
+  assert.match(m.projektGedachtnis("Taxi BB",[]),/Kein belegter Zustand oder Fortschritt/);
+  assert.ok(m.projektGedachtnis("TaxiBB",Array.from({length:50},(_,id)=>({kind:"memory",id,text:"TaxiBB "+"x".repeat(2000)}))).length<=6000);
+  assert.ok(!m.projektGedachtnis("Allgemeine Frage",sources).includes("[Projektkontext:"));
 
   const old = { createdAt: new Date("2026-09-01"), geprueftAt: null };
   assert.equal(m.meldungIstVeraltet(old, jetzt.getTime()), true);
