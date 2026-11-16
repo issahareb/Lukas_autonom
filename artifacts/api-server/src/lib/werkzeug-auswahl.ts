@@ -14,7 +14,7 @@ const GRUPPEN: Array<[RegExp, string[]]> = [
   [/implement|programmier|debug|reparier|behebe|refactor|deploy|(?:schreib|erstell|änder|aender|bau).*?(?:code|skript|repo|typescript)|(?:führ|fuehr).*?(?:test|build|befehl)/i, ["execute_command", "propose_code_change", "fix_error"]],
   [/mail|postfach|posteingang/i, ["email_search", "email_read"]],
   [/(?:schreib|sende|schick|versend).*?(?:mail|e-mail)|(?:mail|e-mail).*?(?:sende|schick|versend)/i, ["email_send"]],
-  [/telefon|anruf|gespräch|gespraech|\bkontakte?\b|\bruf(?:e)?\b.{0,120}\ban\b/i, ["telefon_status", "telefon_kontakte"]],
+  [/telefon|anruf|angeruf|zur[uü]ckgeruf|durchgestellt|rufnummer|\brief\b|geklingelt|verpasste?\b|gespräch|gespraech|\bkontakte?\b|\bruf(?:e)?\b.{0,120}\ban\b/i, ["telefon_status", "telefon_kontakte"]],
   [/\banrufen\b|\bruf(?:e)?\b.*\ban\b|starte.*anruf/i, ["ruf_an"]],
   [/r[uü]ckruf|zur[uü]ckruf|\bruf(?:e)?\b.{0,120}\bzur[uü]ck\b/i, ["rueckruf_status"]],
   [/\b(?:plane?|terminier\w*)\b.*r[uü]ckruf|\bruf(?:e)?\b.{0,120}\bzur[uü]ck\b|\b(?:in|um)\b.*zur[uü]ckrufen/i, ["plane_rueckruf"]],

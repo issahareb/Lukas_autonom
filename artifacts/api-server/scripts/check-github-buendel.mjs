@@ -12,6 +12,7 @@
  *      Buendeln die Kosten nur vom Prompt in das Ergebnis.
  *   3. Ein kaputter Pfad darf die anderen nicht mitreissen.
  */
+import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -72,7 +73,7 @@ export const runSubagent = async () => ""; export const subagentUebersicht = asy
 export const createSubagent = async () => ""; export const fixError = async () => "";
 export const meldeDichBeiIssa = async () => "";
 export const starteAnruf = async (...args) => { globalThis.__phoneArgs = args; return "mock call"; };
-export const telefonStatus = async () => "mock phone status";
+export const telefonStatus = async input => { globalThis.__phoneStatusArgs = input; return "mock phone status"; };
 export const telefonKontakte = async () => "mock contacts";
 export const fehlerGruppen = async () => [];
 export const verbrauchsUebersicht = () => [];
@@ -101,6 +102,10 @@ await build({
 });
 
 const { executeLukasTool } = await import(out);
+const historyFilter = { suche: "11880", richtung: "eingehend", limit: 20, offset: 10 };
+assert.equal(await executeLukasTool("telefon_status", historyFilter), "mock phone status");
+assert.deepEqual(globalThis.__phoneStatusArgs, historyFilter, "History filters reach the phone reader through the real dispatcher");
+delete globalThis.__phoneStatusArgs;
 
 let fehler = 0;
 const pruefe = (bedingung, text) => {

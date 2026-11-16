@@ -389,8 +389,15 @@ export const LUKAS_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "telefon_status",
-      description: "Prüfe die tatsächlichen letzten Anrufstatus: Start, Klingeln, Zielannahme, Verbindung zu LUKAS, Ende, Besetzt, keine Antwort oder Fehler. Nutze dies bei jeder Nachfrage, ob ein Anruf durchgestellt wurde oder geklappt hat, statt zu raten oder pauschal zu sagen, du wüsstest es nicht. Eine Annahme kann auch eine Mailbox sein; ein Gesprächsende beweist keine Auftragserledigung. Ältere Einträge können unvollständig sein.",
-      parameters: { type: "object", properties: {} },
+      description: "Lies und durchsuche deine gespeicherte Anrufliste, eingehend wie ausgehend, mit Datum, Uhrzeit und Status. Immer bei Fragen wie 'Wer hat angerufen?', 'Hat die 11880 angerufen?', verpassten Anrufen oder Anrufstatus nutzen, auch im privaten Owner-Telefonat. suche durchsucht Rufnummer, Kontaktname, Anlass und Detail; richtung filtert eingehend/ausgehend. Zeitraum als ISO-Zeit mit Zeitzone, von inklusive, bis exklusiv. Bei weitereTreffer mit naechsterOffset weiterblättern. Bei unbekannter Firmenrufnummer zusätzlich die eingehenden Anrufe im Zeitraum ansehen; fehlender Namenstreffer beweist keinen fehlenden Anruf. Keine Identität aus einer Nummer erraten. Annahme kann eine Mailbox sein; Gesprächsende beweist keine Auftragserledigung. Ältere Einträge können unvollständig sein.",
+      parameters: { type: "object", properties: {
+        suche: { type: "string", maxLength: 120 },
+        richtung: { type: "string", enum: ["alle", "eingehend", "ausgehend"] },
+        von: { type: "string", description: "ISO-Zeit mit Zeitzone, inklusive" },
+        bis: { type: "string", description: "ISO-Zeit mit Zeitzone, exklusiv" },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+        offset: { type: "integer", minimum: 0, maximum: 10000 },
+      }, additionalProperties: false },
     },
   },
   {
@@ -1378,7 +1385,7 @@ export async function executeLukasTool(
       return await telefonHinweis(Number(input.anruf_id), String(input.text ?? ""), ctx.conversationId > 0 ? ctx.conversationId : undefined);
     }
     case "telefon_status":
-      return await telefonStatus();
+      return await telefonStatus(input);
     case "telefon_kontakte":
       return await telefonKontakte(typeof input.suche === "string" ? input.suche : "");
     case "github_read_path":

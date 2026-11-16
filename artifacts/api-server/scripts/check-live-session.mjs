@@ -505,6 +505,8 @@ try {
   const stoppingCall=fixture.calls.at(-1),callsBeforeStop=fixture.calls.length;
   input(stopSocket,"Stopp.");delegate(stopSocket,"owner_stop");await settle();
   assert.equal(stoppingCall.signal.aborted,true,"actual owner words stop active work");assert.equal(fixture.calls.length,callsBeforeStop,"stop does not become another backend task");
+  const stopReplies=stopSocket.sent.filter(e=>e.type==='session.commentary.append').map(e=>String(e.content)).join('\n');
+  assert.doesNotMatch(stopReplies,/Zeitlimit|konnte nicht vollständig abgeschlossen/,'An explicit stop is not reported as a deadline or backend failure');
   stopSocket.emit({type:"session.closed",reason:"remote_hangup"});await settle();
   fixture.backend=null;fixture.ownerCreateError=true;
   await api.acceptLiveSipSession({...ownerOptions,sessionId:"owner_db_failure"});
