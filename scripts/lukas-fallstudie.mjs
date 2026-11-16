@@ -18,11 +18,16 @@ async function save(path,data){if(!path)throw new Error('--out required');await 
 try{
  if(command==='plan'){console.log(JSON.stringify(plan,null,2));}
  else if(command==='report'){
+  const archive=value('--archiv');
+  if(archive&&!/^usage-v2-\d{4}-\d{2}-\d{2}$/.test(archive))throw new Error('Known daily --archiv usage-v2-YYYY-MM-DD required');
+  if(archive&&['von','bis','vergleichVon','vergleichBis'].some(k=>value('--'+k)))throw new Error('--archiv cannot be combined with reporting dates');
   const q=new URLSearchParams();for(const k of ['von','bis','vergleichVon','vergleichBis'])if(value('--'+k))q.set(k,value('--'+k));
-  const b=await(await request('/api/lukas/verbrauch/fallstudie'+(q.size?'?'+q:''))).json();
+  const response=await request(archive?'/api/lukas/verbrauch/archiv/'+encodeURIComponent(archive):'/api/lukas/verbrauch/fallstudie'+(q.size?'?'+q:''));
+  const b=await response.json();
+  if(archive&&(response.headers.get('x-lukas-bericht')!==archive||response.headers.get('x-lukas-sha256')!==b?.nachweis?.sha256))throw new Error('Archive identity or evidence hash mismatch.');
   const {nachweis,...data}=b;const hash=createHash('sha256').update(JSON.stringify(data,(_key,v)=>v && typeof v==='object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])) : v)).digest('hex');
   if(nachweis?.sha256!==hash)throw new Error('Evidence hash mismatch.');await save(value('--out'),b);
-  console.log(JSON.stringify({saved:value('--out'),sha256:hash,aktuell:b.aktuell.zeitraum,vergleich:b.vergleich.map(v=>({kanal:v.kanal,art:v.aufgabenart,urteil:v.bewertung,gruende:v.gruende}))},null,2));
+  console.log(JSON.stringify({saved:value('--out'),berichtId:archive??null,stand:b.stand,sha256:hash,aktuell:b.aktuell.zeitraum,vergleich:b.vergleich.map(v=>({kanal:v.kanal,art:v.aufgabenart,serie:v.serie,fall:v.fall,urteil:v.bewertung,gruende:v.gruende}))},null,2));
  }else if(command==='test'){
   const c=plan.faelle.find(c=>c.id===value('--case'));if(!c)throw new Error('Known --case required');
   if(!flag('--execute')){console.log(JSON.stringify({dryRun:true,case:c,serie:plan.serie,hint:'One task only. No API call. Paid run requires confirmed funding and separate budget supervision.'},null,2));}
