@@ -14,7 +14,8 @@ const proof={sha256:createHash('sha256').update(canonical(payload)).digest('hex'
 const server=createServer(async(req,res)=>{
  let body='';for await(const chunk of req)body+=chunk;requests.push({url:req.url,method:req.method,body:body?JSON.parse(body):null});
  res.setHeader('Content-Type','application/json');
- if(req.url.startsWith('/api/lukas/verbrauch/fallstudie'))res.end(JSON.stringify({nachweis:proof,...payload}));
+ if(req.url.startsWith('/api/lukas/verbrauch/archiv/')){res.setHeader('X-Lukas-Bericht','usage-v2-2026-11-14');res.setHeader('X-Lukas-SHA256',proof.sha256);res.end(JSON.stringify({nachweis:proof,...payload}));}
+ else if(req.url.startsWith('/api/lukas/verbrauch/fallstudie'))res.end(JSON.stringify({nachweis:proof,...payload}));
  else if(req.url==='/api/anthropic/conversations'){res.statusCode=201;res.end('{"id":42}');}
  else if(req.url==='/api/anthropic/conversations/42/messages'){res.setHeader('X-Lukas-Auftrag','fixture-job');res.end('data: {"content":"usable fixture result"}\n\ndata: {"done":true}\n\n');}
  else if(req.url==='/api/lukas/verbrauch/auftraege/fixture-job/abnahme'){res.statusCode=201;res.end('{"id":"accept-fixture","rootId":"fixture-job","ergebnis":"erfolgreich"}');}
@@ -31,5 +32,10 @@ try{
  assert.notEqual((await run(['test','--case','tracker-auswertung','--execute','--funding-confirmed','--supervised-budget','--out',out])).code,0);assert.equal(requests.length,2,'existing output must fail before another paid task');
  const report=await run(['report','--von','2026-11-13','--bis','2026-11-13','--vergleichVon','2026-11-07','--vergleichBis','2026-11-07','--out',join(dir,'report.json')]);assert.equal(report.code,0,report.output);assert.match(requests[2].url,/vergleichVon=2026-11-07/);
  const accept=await run(['accept','--auftrag','fixture-job','--result','erfolgreich','--evidence',out]);assert.equal(accept.code,0,accept.output);assert.match(requests[3].body.beleg,/SHA-256/);
+ const archive=await run(['report','--archiv','usage-v2-2026-11-14','--out',join(dir,'archive.json')]);assert.equal(archive.code,0,archive.output);assert.match(archive.output,/usage-v2-2026-11-14/);
+ assert.notEqual((await run(['report','--archiv','usage-v2-2026-11-13','--out',join(dir,'wrong.json')])).code,0,'wrong archive identity must fail before saving');
+ const before=requests.length;
+ assert.notEqual((await run(['report','--archiv','usage-v2-2026-11-14','--von','2026-11-13'])).code,0);
+ assert.equal(requests.length,before,'invalid mixed range/archive never requests API');
  console.log('PASS test client against local HTTP fixture only: same chat API, unchanged prompt, funding gates, no duplicate execution, signed export and separate acceptance');
 }finally{await new Promise(r=>server.close(r));await rm(dir,{recursive:true,force:true});}
