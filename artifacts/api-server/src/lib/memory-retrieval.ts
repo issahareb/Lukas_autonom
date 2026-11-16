@@ -1,5 +1,6 @@
-import { queryWords, lexicalRelevance, relevantEnough, boundedMemory } from "./memory-relevance";
-import { projekteImText, projektKontext } from "./projekt-aliasse";
+import { queryWords, lexicalRelevance, relevantEnough } from "./memory-relevance";
+import { projekteImText } from "./projekt-aliasse";
+import { projektGedachtnis } from "./projekt-kontext";
 /*
  * Memory-Retrieval — bewertete Suche ueber Memories, Claims, Episoden UND den
  * rohen Chat-Archivbestand. Damit ist "nicht im aktuellen Modellkontext" nicht
@@ -36,6 +37,7 @@ export type MemoryHit = {
   id: number;
   text: string;
   score: number;
+  observedAt?: Date;
 };
 
 async function embed(texts: string[]): Promise<number[][] | null> {
@@ -204,7 +206,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
     // its explicit connecting claim, without importing unrelated projects.
     const text = t.kontext ? `${t.text}\n[Verbindung, keine Gleichsetzung] ${t.kontext}` : t.text;
     if (!relevantEnough(q, text)) continue;
-    hits.push({ kind: "graph", id: t.claimId, text, score: 1 + t.score });
+    hits.push({ kind: "graph", id: t.claimId, text, score: 1 + t.score, observedAt: t.observedAt });
   }
 
   // Erinnerungen und Episoden am Einstieg: auch sie müssen zur Frage passen.
@@ -244,6 +246,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
     hits.push({
       kind: "claim",
       id: c.id,
+      observedAt: c.observedAt,
       text: `[Wissen] ${formatClaim(c)}`,
       score:
         rel *
@@ -294,7 +297,7 @@ export async function searchMemory(query: string, limit = 8): Promise<MemoryHit[
 
 export async function memoryContextFor(query: string, limit = 6): Promise<string> {
   const hits = await searchMemory(query, limit);
-  return [projektKontext(query), boundedMemory(hits)].filter(Boolean).join("\n");
+  return projektGedachtnis(query, hits);
 }
 
 /*
@@ -343,5 +346,5 @@ export async function memoryContextOhne(
    */
   const hits = await searchMemory(query, limit + ausser.size);
   const uebrig = waehleOhneDoppel(hits, limit, ausser);
-  return [projektKontext(query), boundedMemory(uebrig)].filter(Boolean).join("\n");
+  return projektGedachtnis(query, uebrig);
 }
