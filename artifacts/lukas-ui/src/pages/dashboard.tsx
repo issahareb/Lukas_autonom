@@ -132,6 +132,9 @@ export default function Dashboard() {
           )}
           {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
           <div className="home-composer">
+            <div className="home-composer-lights" aria-hidden="true">
+              <span /><span /><span /><span /><span />
+            </div>
             <textarea
               ref={eingabe}
               value={text}

@@ -431,39 +431,45 @@
   border-radius: inherit;
   background: inherit;
 }
-/* A diffuse light behind the surface brightens the surrounding backdrop. */
-@supports (offset-path: inset(0 round 26px)) {
-  .home-page .home-composer::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: -2;
-    width: 104px;
-    height: 104px;
-    pointer-events: none;
-    background: radial-gradient(circle closest-side,
-      rgb(204 242 107 / 80%) 0%,
-      rgb(193 235 95 / 70%) 18%,
-      rgb(180 225 97 / 40%) 42%,
-      rgb(171 219 108 / 12%) 70%,
-      rgb(171 219 108 / 0%) 100%);
-    offset-path: inset(0 round 26px);
-    offset-anchor: center;
-    offset-rotate: 0deg;
-    offset-distance: 18%;
-    animation: home-halo-orbit 8s linear -1.44s infinite;
-  }
+/* Each light shares the outline. Only its opacity changes. */
+.home-composer-lights {
+  position: absolute;
+  inset: -7px;
+  z-index: -2;
+  border-radius: 33px;
+  pointer-events: none;
 }
-@keyframes home-halo-orbit {
-  from { offset-distance: 0%; }
-  to { offset-distance: 100%; }
+.home-composer-lights > span {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse var(--spread) at var(--source),
+    var(--tint) 0%, transparent 100%);
+  filter: blur(6px);
+  animation: home-halo-pulse 10s ease-in-out infinite;
+  animation-delay: var(--phase);
 }
-@media (prefers-reduced-motion: reduce) {
-  .home-page .home-composer::after { animation: none; }
+.home-composer-lights > :nth-child(1) {
+  --source: 100% 50%; --spread: 36% 110%; --tint: #b5e957; --phase: -2s;
 }
-@media (forced-colors: active) {
-  .home-page .home-composer::after { content: none; }
+.home-composer-lights > :nth-child(2) {
+  --source: 0% 50%; --spread: 38% 110%; --tint: #c4ed68; --phase: 0s;
+}
+.home-composer-lights > :nth-child(3) {
+  --source: 47% 0%; --spread: 39% 70%; --tint: #b4e463; --phase: -8s;
+}
+.home-composer-lights > :nth-child(4) {
+  --source: 55% 100%; --spread: 42% 70%; --tint: #bee967; --phase: -6s;
+}
+.home-composer-lights > :nth-child(5) {
+  --source: 84% 0%; --spread: 33% 78%; --tint: #c6ef62; --phase: -4s;
+}
+@keyframes home-halo-pulse {
+  0%, 44%, 100% { opacity: 0; }
+  22% { opacity: .94; }
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .home-composer-lights { display: none; }
 }
 #arbeitsbereich .home-page .home-composer:focus-within { border-color: #75766e; box-shadow: 0 0 0 2px #20211e24, var(--composer-halo); }
 #arbeitsbereich .home-composer textarea {
