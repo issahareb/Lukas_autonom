@@ -16,8 +16,10 @@ export function LukasAvatar({ className = "", mood = "idle", expression = "neutr
           <path d="M20 25c9-5 29-6 40 0" stroke="#fffef7" strokeWidth="2" strokeLinecap="round" />
           <rect x="15" y="27" width="50" height="33" rx="14" fill="#171917" />
           <g className="lukas-gaze" fill="var(--robot-accent)">
-            <rect className="lukas-eye lukas-eye-left" x="25" y="34" width="9" height="13" rx="4.5" />
-            <rect className="lukas-eye lukas-eye-right" x="46" y="33" width="9" height="14" rx="4.5" />
+            <g className="lukas-eye-pose">
+              <rect className="lukas-eye lukas-eye-left" x="25" y="34" width="9" height="13" rx="4.5" />
+              <rect className="lukas-eye lukas-eye-right" x="46" y="33" width="9" height="14" rx="4.5" />
+            </g>
           </g>
           <g className="lukas-brows" stroke="var(--robot-accent)" strokeWidth="2.5" strokeLinecap="round"><path className="lukas-brow-left" d="M24 30h11"/><path className="lukas-brow-right" d="M45 30h11"/></g>
           <path className="lukas-frown" d="M34 55q7-8 14 0" stroke="var(--robot-accent)" strokeWidth="2.6" strokeLinecap="round" />

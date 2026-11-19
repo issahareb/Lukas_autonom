@@ -38,3 +38,51 @@
 .lukas-avatar[data-expression="sleepy"] .lukas-eye { animation:none; transform:scaleY(.25); }
 .lukas-avatar[data-expression="wink"] .lukas-eye-right { animation:none; transform:scaleY(.12); }
 .lukas-avatar[data-mood="speaking"] :is(.lukas-frown,.lukas-flat-mouth,.lukas-surprise-mouth) { display:none; }
+
+/* The dashboard portrait has three short idle beats: grin, puzzled tilt, raised brow. */
+@media (prefers-reduced-motion: no-preference) {
+  .home-character .lukas-avatar[data-mood="idle"][data-expression="neutral"] {
+    --idle-cycle: 32s cubic-bezier(.45, 0, .25, 1) infinite;
+
+    & .lukas-brows { display: block; }
+    & .lukas-head { animation: lukas-idle-tilt var(--idle-cycle); }
+    & .lukas-eye-pose {
+      transform-origin: 40px 43px;
+      animation: lukas-idle-eyes var(--idle-cycle);
+    }
+    & .lukas-smile {
+      transform-origin: 41px 53px;
+      animation: lukas-idle-smile var(--idle-cycle);
+    }
+    & .lukas-brow-left { animation: lukas-idle-left-brow var(--idle-cycle); }
+    & .lukas-brow-right { animation: lukas-idle-right-brow var(--idle-cycle); }
+  }
+}
+
+@keyframes lukas-idle-eyes {
+  0%, 10%, 18%, 45%, 53%, 100% { transform: none; }
+  12%, 16% { transform: translateY(-.5px) scale(1.08, .68); }
+  47%, 51% { transform: translateX(-1.5px) scale(.97, 1.08); }
+}
+@keyframes lukas-idle-smile {
+  0%, 10%, 18%, 45%, 53%, 79%, 85%, 100% { transform: none; }
+  12%, 16% { transform: translateY(-.5px) scale(1.35, 1.18); }
+  47%, 51% { transform: translateX(1px) rotate(-12deg) scale(.67, .37); }
+  81%, 83% { transform: rotate(-8deg) scale(.93, .85); }
+}
+@keyframes lukas-idle-tilt {
+  0%, 20%, 44%, 55%, 77%, 87%, 100% { transform: none; }
+  13%, 16% { transform: translateY(-1px) rotate(-2deg); }
+  48%, 51% { transform: rotate(7deg); }
+  81%, 83% { transform: rotate(-3deg); }
+}
+@keyframes lukas-idle-left-brow {
+  0%, 44%, 54%, 78%, 86%, 100% { opacity: 0; transform: none; }
+  47%, 51% { opacity: .95; transform: translateY(1px) rotate(-15deg); }
+  81%, 83% { opacity: .85; transform: translateY(1.5px); }
+}
+@keyframes lukas-idle-right-brow {
+  0%, 44%, 54%, 78%, 86%, 100% { opacity: 0; transform: none; }
+  47%, 51% { opacity: .95; transform: translateY(.5px) rotate(15deg); }
+  80%, 83% { opacity: 1; transform: translateY(-1.6px) rotate(-12deg); }
+}
