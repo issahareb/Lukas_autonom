@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useGetLukasDashboard } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
@@ -20,27 +20,58 @@ import {
   X,
 } from "lucide-react";
 import { LukasAvatar, type LukasMood } from "@/components/lukas-avatar";
+import type { Expression } from "@/lib/expression";
 import { WartetAufDich } from "@/components/wartet-auf-dich";
 import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import "./dashboard.css";
 import { queueChat, readHomeDraft, saveHomeDraft } from '@/lib/chat-draft';
 
+const greeting: { expression: Expression; duration: number }[] = [
+  { expression: "happy", duration: 1600 },
+  { expression: "curious", duration: 2400 },
+  { expression: "wink", duration: 650 },
+  { expression: "neutral", duration: 4800 },
+];
+
+function HomeCharacter({ mood, writing }: { mood: LukasMood; writing: boolean }) {
+  const [pose, setPose] = useState(0);
+  useEffect(() => {
+    if (mood !== "idle" || writing) return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: number;
+    function show(index: number) {
+      setPose(index);
+      if (!motion.matches && !document.hidden) {
+        timer = window.setTimeout(() => show((index + 1) % greeting.length), greeting[index].duration);
+      }
+    }
+    function restart() {
+      window.clearTimeout(timer);
+      show(0);
+    }
+    restart();
+    motion.addEventListener("change", restart);
+    document.addEventListener("visibilitychange", restart);
+    return () => {
+      window.clearTimeout(timer);
+      motion.removeEventListener("change", restart);
+      document.removeEventListener("visibilitychange", restart);
+    };
+  }, [mood, writing]);
+  const expression = mood === "speaking" ? "happy"
+    : mood === "listening" || mood === "thinking" || writing ? "curious"
+    : greeting[pose].expression;
+  return <LukasAvatar mood={mood} expression={expression} />;
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [text, setText] = useState(readHomeDraft);
   useEffect(() => saveHomeDraft(text), [text]);
-  const eingabe = useRef<HTMLTextAreaElement>(null);
   const sprache = useSprachsitzung();
   const { data, isError, refetch } = useGetLukasDashboard();
   const tippt = text.trim().length > 0;
   const mood: LukasMood = sprache.status === "spricht" ? "speaking" : sprache.aktiv ? "listening" : sprache.status === "verbindet" ? "thinking" : "idle";
-  useEffect(() => {
-    const el = eingabe.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
-    }
-  }, [text]);
   function absenden() {
     const frage = text.trim();
     if (!frage) return;
@@ -78,7 +109,7 @@ export default function Dashboard() {
             <span className="home-eyebrow">Ein Gedanke. Neue Möglichkeiten.</span>
 
           </div>
-          <div className="home-character" role="img" aria-label={mood === "speaking" ? "Lukas spricht" : mood === "listening" ? "Lukas hört zu" : mood === "thinking" ? "Lukas verbindet" : "Lukas wartet"}><LukasAvatar mood={mood} /></div>
+          <div className="home-character" role="img" aria-label={mood === "speaking" ? "Lukas spricht" : mood === "listening" ? "Lukas hört zu" : mood === "thinking" ? "Lukas verbindet" : "Lukas wartet"}><HomeCharacter mood={mood} writing={tippt} /></div>
           <p className="home-voice-state" aria-live="polite">{sprachText}</p>
           <h1>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute<span>?</span></>}</h1>
           <p className="home-conversation-description">Ein Ziel, eine Frage, eine neue Idee. Fang einfach an.</p>
@@ -91,7 +122,7 @@ export default function Dashboard() {
           {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
           <div className="home-composer">
             <textarea
-              ref={eingabe}
+              wrap="off"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
@@ -108,7 +139,6 @@ export default function Dashboard() {
               <button type="button" className="home-attach" onClick={() => { queueChat(text, 'draft'); navigate('/chat'); }} aria-label="Datei anhängen (im Chat)">
                 <Paperclip size={19} aria-hidden="true" />
               </button>
-              <span>Mit Lukas weiterdenken</span>
               {tippt ? (
                 <button type="button" className="home-send" onClick={absenden} aria-label="Senden"><ArrowUp size={21} aria-hidden="true" /></button>
               ) : (
@@ -119,8 +149,7 @@ export default function Dashboard() {
 
                   aria-label={sprache.status === "verbindet" ? "Verbindungsaufbau abbrechen" : sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
                 >
-                  {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
-                  <span>{sprache.status === "verbindet" ? "Abbrechen" : sprache.aktiv ? "Beenden" : "Sprechen"}</span>
+                  {sprache.aktiv || sprache.status === "verbindet" ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
                 </button>
               )}
             </div>
