@@ -25,19 +25,6 @@ import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import "./dashboard.css";
 import { queueChat, readHomeDraft, saveHomeDraft } from '@/lib/chat-draft';
 
-// The fixed path length keeps speed and trail proportions consistent as the field grows.
-const glowSegments = Array.from({ length: 48 }, (_, index) => {
-  const progress = index / 47;
-  const start = index * 0.5;
-  const length = 0.52;
-  const opacity = Math.sin(Math.PI * progress ** 2) ** 0.85;
-  return (
-    <rect key={index} width="100%" height="100%" rx="26" pathLength="100"
-      stroke={`hsl(${148 - 80 * Math.sqrt(progress)} ${52 + 42 * progress}% ${57 + 9 * progress}%)`}
-      strokeOpacity={opacity} strokeDasharray={`0 ${start} ${length} ${100 - start - length}`} />
-  );
-});
-
 const idleFaces = [
   { expression: "happy", duration: 1500 },
   { expression: "neutral", duration: 2300 },
@@ -145,9 +132,6 @@ export default function Dashboard() {
           )}
           {sprache.fehler && <p className="home-voice-error" role="alert">{sprache.fehler}</p>}
           <div className="home-composer">
-            <svg className="home-composer-glow" aria-hidden="true" focusable="false">
-              <g>{glowSegments}</g>
-            </svg>
             <textarea
               ref={eingabe}
               value={text}
