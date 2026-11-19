@@ -106,7 +106,19 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
-    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(212, 237, 138)");
+    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(250, 249, 245)");
+    const composer = page.locator(".home-composer");
+    const controls = await composer.locator("textarea, button").evaluateAll(nodes => nodes.map(node => {
+      const bounds = node.getBoundingClientRect();
+      return { y: bounds.y + bounds.height / 2, right: bounds.right, left: bounds.left };
+    }));
+    assert.equal(controls.length, 3);
+    assert.ok(controls.every(control => Math.abs(control.y - controls[0].y) < 2), "Field and buttons share a line");
+    assert.ok(controls[0].right <= controls[1].left && controls[1].right <= controls[2].left);
+    if (name === "desktop") {
+      await page.waitForFunction(() => document.querySelector(".home-character [data-expression]")?.dataset.expression === "curious");
+      await page.waitForFunction(() => document.querySelector(".home-character [data-expression]")?.dataset.expression === "wink");
+    }
     assert.equal(await page.locator(".home-composer textarea").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-conversation h1").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-orb, .home-conversation img").count(), 0, "No old black-backed orb remains");
