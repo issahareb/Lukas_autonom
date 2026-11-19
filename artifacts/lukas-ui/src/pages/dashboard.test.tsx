@@ -15,7 +15,7 @@
  *  3. Die Frage geht nicht verloren. Sie wird an den Chat übergeben; kommt
  *     sie dort nicht an, hat man sie umsonst getippt.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -92,6 +92,26 @@ describe("Startseite", () => {
     render(<Dashboard />);
     expect(document.querySelector('.home-character [data-mood="idle"]')).toBeTruthy();
     expect(screen.getByLabelText("Lukas wartet")).toBeTruthy();
+  });
+
+  it("wechselt im Hero sichtbar von Lächeln zu Neugier und Zwinkern", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<Dashboard />);
+      const avatar = container.querySelector(".home-character .lukas-avatar")!;
+      const eyes = () => avatar.querySelector(".lukas-gaze")!.innerHTML;
+      const smile = eyes();
+      expect(avatar).toHaveAttribute("data-expression", "happy");
+      act(() => vi.advanceTimersByTime(1600));
+      expect(avatar).toHaveAttribute("data-expression", "curious");
+      const curious = eyes();
+      expect(curious).not.toEqual(smile);
+      act(() => vi.advanceTimersByTime(2400));
+      expect(avatar).toHaveAttribute("data-expression", "wink");
+      expect(eyes()).not.toEqual(curious);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("zeigt 'hört zu' und 'spricht' genau dann, wenn es auch so ist", () => {
