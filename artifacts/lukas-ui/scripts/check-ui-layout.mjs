@@ -106,10 +106,27 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
-    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(212, 237, 138)");
+    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(252, 251, 248)");
+    const composer = await page.locator(".home-composer").boundingBox();
+    const field = await page.locator(".home-composer textarea").boundingBox();
+    const clip = await page.locator(".home-attach").boundingBox();
+    const voice = await page.locator(".home-speak").boundingBox();
+    assert.ok(composer.height <= 52 && field.x + field.width <= clip.x && clip.x + clip.width <= voice.x + 1);
+    assert.ok(Math.abs(voice.y + voice.height / 2 - field.y - field.height / 2) < 2);
+    assert.equal(await page.locator(".home-speak").evaluate(el => getComputedStyle(el).borderRadius), "50%");
     assert.equal(await page.locator(".home-composer textarea").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-conversation h1").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-orb, .home-conversation img").count(), 0, "No old black-backed orb remains");
+    const face = page.locator(".home-character .lukas-avatar");
+    if (name === "desktop") {
+      for (const expression of ["curious", "wink", "happy"]) {
+        const pose = page.locator(`.home-character [data-expression="${expression}"]`);
+        await pose.waitFor();
+        assert.ok(await pose.locator("svg path").count() > 0);
+      }
+    } else {
+      assert.equal(await face.getAttribute("data-expression"), "happy", "Reduced motion retains a friendly still face");
+    }
     const hero = await page.locator(".home-conversation").boundingBox();
     const shortcuts = await page.locator(".home-shortcuts").boundingBox();
     const orb = await page.locator(".home-character .lukas-avatar").boundingBox();

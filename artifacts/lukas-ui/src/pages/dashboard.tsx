@@ -25,6 +25,48 @@ import { useSprachsitzung } from "@/hooks/use-sprachsitzung";
 import "./dashboard.css";
 import { queueChat, readHomeDraft, saveHomeDraft } from '@/lib/chat-draft';
 
+const idleFaces = [
+  { expression: "happy", duration: 1500 },
+  { expression: "neutral", duration: 2300 },
+  { expression: "curious", duration: 1800 },
+  { expression: "neutral", duration: 2800 },
+  { expression: "wink", duration: 600 },
+  { expression: "happy", duration: 1200 },
+  { expression: "neutral", duration: 3200 },
+] as const;
+
+function HomeCharacter({ mood }: { mood: LukasMood }) {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (mood !== "idle") return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: number;
+    let index = 0;
+    function advance() {
+      index = (index + 1) % idleFaces.length;
+      setFrame(index);
+      timer = window.setTimeout(advance, idleFaces[index].duration);
+    }
+    function restart() {
+      window.clearTimeout(timer);
+      index = 0;
+      setFrame(0);
+      if (!motion.matches && !document.hidden) {
+        timer = window.setTimeout(advance, idleFaces[0].duration);
+      }
+    }
+    restart();
+    motion.addEventListener("change", restart);
+    document.addEventListener("visibilitychange", restart);
+    return () => {
+      window.clearTimeout(timer);
+      motion.removeEventListener("change", restart);
+      document.removeEventListener("visibilitychange", restart);
+    };
+  }, [mood]);
+  return <LukasAvatar mood={mood} expression={mood === "idle" ? idleFaces[frame].expression : mood === "speaking" ? "neutral" : "curious"} />;
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [text, setText] = useState(readHomeDraft);
@@ -78,7 +120,7 @@ export default function Dashboard() {
             <span className="home-eyebrow">Ein Gedanke. Neue Möglichkeiten.</span>
 
           </div>
-          <div className="home-character" role="img" aria-label={mood === "speaking" ? "Lukas spricht" : mood === "listening" ? "Lukas hört zu" : mood === "thinking" ? "Lukas verbindet" : "Lukas wartet"}><LukasAvatar mood={mood} /></div>
+          <div className="home-character" role="img" aria-label={mood === "speaking" ? "Lukas spricht" : mood === "listening" ? "Lukas hört zu" : mood === "thinking" ? "Lukas verbindet" : "Lukas wartet"}><HomeCharacter mood={mood} /></div>
           <p className="home-voice-state" aria-live="polite">{sprachText}</p>
           <h1>{sprache.aktiv ? "Ich bin ganz Ohr." : <>Was bewegen<br />wir heute<span>?</span></>}</h1>
           <p className="home-conversation-description">Ein Ziel, eine Frage, eine neue Idee. Fang einfach an.</p>
@@ -108,8 +150,7 @@ export default function Dashboard() {
               <button type="button" className="home-attach" onClick={() => { queueChat(text, 'draft'); navigate('/chat'); }} aria-label="Datei anhängen (im Chat)">
                 <Paperclip size={19} aria-hidden="true" />
               </button>
-              <span>Mit Lukas weiterdenken</span>
-              {tippt ? (
+              {tippt && !sprache.aktiv && sprache.status !== "verbindet" ? (
                 <button type="button" className="home-send" onClick={absenden} aria-label="Senden"><ArrowUp size={21} aria-hidden="true" /></button>
               ) : (
                 <button
@@ -120,7 +161,6 @@ export default function Dashboard() {
                   aria-label={sprache.status === "verbindet" ? "Verbindungsaufbau abbrechen" : sprache.aktiv ? "Gespräch beenden" : "Mit Lukas sprechen"}
                 >
                   {sprache.aktiv ? <X size={18} aria-hidden="true" /> : <AudioLines size={18} aria-hidden="true" />}
-                  <span>{sprache.status === "verbindet" ? "Abbrechen" : sprache.aktiv ? "Beenden" : "Sprechen"}</span>
                 </button>
               )}
             </div>
