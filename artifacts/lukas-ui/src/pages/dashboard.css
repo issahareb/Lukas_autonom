@@ -406,13 +406,52 @@
 #arbeitsbereich .home-page :is(h1,h2,h3,.home-shortcuts strong,.home-goal-copy > span,.home-metrics button > span,.home-recent strong) { color:#20211e; }
 #arbeitsbereich .home-page h1 span { color:#4f642b; }
 #arbeitsbereich .home-page :is(.home-eyebrow,.home-voice-state,.home-conversation-description,.home-intro,.home-workspace-link,.home-section-heading > span,.home-shortcuts small,.home-goal-copy > small,.home-goal-number,.home-metrics button > small,.home-recent small,.home-status-note,.home-empty,.home-text-link,.home-brain-link) { color:#62645c; }
-#arbeitsbereich .home-page .home-composer { background:#d4ed8a; border:1px solid #b5c97b; box-shadow:none; }
-#arbeitsbereich .home-page .home-composer:focus-within { border-color:#4f642b; box-shadow:0 0 0 3px #4f642b18; }
-#arbeitsbereich .home-composer textarea { color:#20211e; caret-color:#20211e; }
-#arbeitsbereich .home-composer textarea::placeholder { color:#20211e; opacity:1; }
-#arbeitsbereich .home-composer-actions > span,#arbeitsbereich .home-attach { color:#3c4034; }
-#arbeitsbereich .home-page :is(.home-speak,.home-send) { color:#f3f1eb; background:#20211e; border-radius:4px; box-shadow:none; }
-#arbeitsbereich .home-page :is(.home-speak,.home-send):hover { background:#3c4034; }
+#arbeitsbereich .home-page .home-composer {
+  display: flex;
+  align-items: center;
+  width: min(100%, 22rem);
+  padding: 2px 3px 2px 15px;
+  gap: 2px;
+  border: 1px solid #d3d3c9;
+  border-radius: 999px;
+  background: #faf9f5;
+  box-shadow: 0 2px 8px #20211e08;
+}
+#arbeitsbereich .home-composer:focus-within { border-color: #77786f; }
+#arbeitsbereich .home-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 24px;
+  padding: 0;
+  line-height: 24px;
+  color: #20211e;
+  caret-color: #20211e;
+  scrollbar-width: none;
+}
+#arbeitsbereich .home-composer textarea::placeholder { color: #62645c; opacity: 1; }
+#arbeitsbereich .home-composer-actions { flex: none; gap: 0; }
+#arbeitsbereich .home-composer-actions button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  background: radial-gradient(circle, #20211e 16px, transparent 17px);
+  color: #fff;
+}
+#arbeitsbereich .home-composer-actions .home-attach {
+  background: radial-gradient(circle, #e9e7df 16px, transparent 17px);
+  color: #34352f;
+}
+#arbeitsbereich .home-composer-actions button:focus-visible { outline: 2px solid #51524c; }
+@media (max-width: 380px) {
+  #arbeitsbereich .home-page .home-conversation { padding-inline: 10px; }
+}
 #arbeitsbereich .home-workspace { border-color:#d3d3c9; }
 #arbeitsbereich .home-page :is(.home-shortcuts button,.home-goals,.home-metrics button,.home-recent button,.home-header-action) { background:#eeece4; color:#20211e; border:1px solid #d3d3c9; box-shadow:none; }
 #arbeitsbereich .home-page :is(.home-shortcut-icon,.home-recent-icon) { color:#4f642b; background:#d4ed8a; }
@@ -421,4 +460,4 @@
 #arbeitsbereich .home-page :is(.home-focus-top,.home-mood,.home-mood small,.home-focus-cta,.home-transcript,.home-transcript span) { color:#3c4034; }
 #arbeitsbereich .home-page :is(.home-goal,.home-focus-bottom) { border-color:#20211e20; }
 #arbeitsbereich .home-page :is(.home-metrics button > svg,.home-brain-link svg,.home-recent button > svg,.home-shortcuts button > svg) { color:#4f642b; }
-@media(max-width:767px) { #arbeitsbereich .home-page .home-conversation { padding:22px 22px 16px; } }
+@media(min-width:381px) and (max-width:767px) { #arbeitsbereich .home-page .home-conversation { padding:22px 22px 16px; } }
