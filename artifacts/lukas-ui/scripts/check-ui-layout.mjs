@@ -59,7 +59,7 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined });
-  for (const [name, width, height] of [["mobil", 390, 844], ["desktop", 1440, 1000], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
+  for (const [name, width, height] of [["desktop", 1440, 1000], ["mobil", 390, 844], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, reducedMotion: name === "desktop" ? "no-preference" : "reduce" });
     await context.addInitScript(() => {
       if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Mikrofonzugriff nicht erlaubt", "NotAllowedError"); } });
@@ -168,7 +168,7 @@ try {
       if (name === "mobil") await screenshot(page, "chat-menue-mobil");
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({ state: "hidden" });
-      assert.equal(await page.getByRole("button", { name: "Menü öffnen" }).evaluate(el => el === document.activeElement), true, "Focus returns to menu trigger");
+      await page.getByRole("button", { name: "Menü öffnen" }).and(page.locator(":focus")).waitFor();
       await page.evaluate(() => {
         Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>64 });
         window.visualViewport.dispatchEvent(new Event("scroll"));
