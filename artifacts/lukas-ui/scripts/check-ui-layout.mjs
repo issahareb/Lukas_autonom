@@ -59,7 +59,7 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   browser = await chromium.launch({ executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined });
-  for (const [name, width, height] of [["mobil", 390, 844], ["desktop", 1440, 1000], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
+  for (const [name, width, height] of [["desktop", 1440, 1000], ["mobil", 390, 844], ["laptop", 1024, 768], ["tablet", 768, 1024], ["schmal", 320, 740]]) {
     const context = await browser.newContext({ viewport: { width, height }, reducedMotion: name === "desktop" ? "no-preference" : "reduce" });
     await context.addInitScript(() => {
       if (navigator.mediaDevices) Object.defineProperty(navigator.mediaDevices, "getUserMedia", { value: async () => { throw new DOMException("Mikrofonzugriff nicht erlaubt", "NotAllowedError"); } });
@@ -106,10 +106,27 @@ try {
     await page.evaluate(() => document.fonts.ready);
     await noOverflow(page, "Dashboard " + name);
     if (name === "desktop" || name === "mobil") await screenshot(page, "dashboard-" + name);
-    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(212, 237, 138)");
+    assert.equal(await page.locator(".home-composer").evaluate(el => getComputedStyle(el).backgroundColor), "rgb(252, 251, 248)");
+    const composer = await page.locator(".home-composer").boundingBox();
+    const field = await page.locator(".home-composer textarea").boundingBox();
+    const clip = await page.locator(".home-attach").boundingBox();
+    const voice = await page.locator(".home-speak").boundingBox();
+    assert.ok(composer.height <= 52 && field.x + field.width <= clip.x && clip.x + clip.width <= voice.x + 1);
+    assert.ok(Math.abs(voice.y + voice.height / 2 - field.y - field.height / 2) < 2);
+    assert.equal(await page.locator(".home-speak").evaluate(el => getComputedStyle(el).borderRadius), "50%");
     assert.equal(await page.locator(".home-composer textarea").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-conversation h1").evaluate(el => getComputedStyle(el).color), "rgb(32, 33, 30)");
     assert.equal(await page.locator(".home-orb, .home-conversation img").count(), 0, "No old black-backed orb remains");
+    const face = page.locator(".home-character .lukas-avatar");
+    if (name === "desktop") {
+      for (const expression of ["curious", "wink", "happy"]) {
+        const pose = page.locator(`.home-character [data-expression="${expression}"]`);
+        await pose.waitFor();
+        assert.ok(await pose.locator("svg path").count() > 0);
+      }
+    } else {
+      assert.equal(await face.getAttribute("data-expression"), "happy", "Reduced motion retains a friendly still face");
+    }
     const hero = await page.locator(".home-conversation").boundingBox();
     const shortcuts = await page.locator(".home-shortcuts").boundingBox();
     const orb = await page.locator(".home-character .lukas-avatar").boundingBox();
@@ -151,7 +168,7 @@ try {
       if (name === "mobil") await screenshot(page, "chat-menue-mobil");
       await page.keyboard.press("Escape");
       await page.getByRole("dialog").waitFor({ state: "hidden" });
-      assert.equal(await page.getByRole("button", { name: "Menü öffnen" }).evaluate(el => el === document.activeElement), true, "Focus returns to menu trigger");
+      await page.getByRole("button", { name: "Menü öffnen" }).and(page.locator(":focus")).waitFor();
       await page.evaluate(() => {
         Object.defineProperty(window.visualViewport, "offsetTop", { configurable:true, get:()=>64 });
         window.visualViewport.dispatchEvent(new Event("scroll"));

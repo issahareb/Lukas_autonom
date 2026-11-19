@@ -406,13 +406,45 @@
 #arbeitsbereich .home-page :is(h1,h2,h3,.home-shortcuts strong,.home-goal-copy > span,.home-metrics button > span,.home-recent strong) { color:#20211e; }
 #arbeitsbereich .home-page h1 span { color:#4f642b; }
 #arbeitsbereich .home-page :is(.home-eyebrow,.home-voice-state,.home-conversation-description,.home-intro,.home-workspace-link,.home-section-heading > span,.home-shortcuts small,.home-goal-copy > small,.home-goal-number,.home-metrics button > small,.home-recent small,.home-status-note,.home-empty,.home-text-link,.home-brain-link) { color:#62645c; }
-#arbeitsbereich .home-page .home-composer { background:#d4ed8a; border:1px solid #b5c97b; box-shadow:none; }
-#arbeitsbereich .home-page .home-composer:focus-within { border-color:#4f642b; box-shadow:0 0 0 3px #4f642b18; }
-#arbeitsbereich .home-composer textarea { color:#20211e; caret-color:#20211e; }
-#arbeitsbereich .home-composer textarea::placeholder { color:#20211e; opacity:1; }
-#arbeitsbereich .home-composer-actions > span,#arbeitsbereich .home-attach { color:#3c4034; }
-#arbeitsbereich .home-page :is(.home-speak,.home-send) { color:#f3f1eb; background:#20211e; border-radius:4px; box-shadow:none; }
-#arbeitsbereich .home-page :is(.home-speak,.home-send):hover { background:#3c4034; }
+#arbeitsbereich .home-page .home-composer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(100%, 24rem);
+  padding: 2px 3px 2px 14px;
+  border: 1px solid #c9c8bf;
+  border-radius: 26px;
+  background: #fcfbf8;
+  box-shadow: none;
+}
+#arbeitsbereich .home-page .home-composer:focus-within { border-color: #75766e; box-shadow: 0 0 0 2px #20211e12; }
+#arbeitsbereich .home-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  color: #20211e;
+  caret-color: #20211e;
+}
+#arbeitsbereich .home-composer textarea:placeholder-shown { white-space: nowrap; overflow: hidden; }
+#arbeitsbereich .home-composer textarea::placeholder { color: #575850; opacity: 1; }
+#arbeitsbereich .home-composer-actions { flex: none; gap: 0; }
+#arbeitsbereich .home-composer-actions button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 4px solid transparent;
+  border-radius: 50%;
+  background: #20211e padding-box;
+  color: #fcfbf8;
+  box-shadow: none;
+}
+#arbeitsbereich .home-composer-actions .home-attach { color: #383933; background: #eeede7 padding-box; }
+#arbeitsbereich .home-composer-actions button:hover { filter: brightness(.93); }
+#arbeitsbereich .home-composer-actions button:focus-visible { outline: 2px solid #45463f; outline-offset: -2px; }
 #arbeitsbereich .home-workspace { border-color:#d3d3c9; }
 #arbeitsbereich .home-page :is(.home-shortcuts button,.home-goals,.home-metrics button,.home-recent button,.home-header-action) { background:#eeece4; color:#20211e; border:1px solid #d3d3c9; box-shadow:none; }
 #arbeitsbereich .home-page :is(.home-shortcut-icon,.home-recent-icon) { color:#4f642b; background:#d4ed8a; }
@@ -422,3 +454,6 @@
 #arbeitsbereich .home-page :is(.home-goal,.home-focus-bottom) { border-color:#20211e20; }
 #arbeitsbereich .home-page :is(.home-metrics button > svg,.home-brain-link svg,.home-recent button > svg,.home-shortcuts button > svg) { color:#4f642b; }
 @media(max-width:767px) { #arbeitsbereich .home-page .home-conversation { padding:22px 22px 16px; } }
+@media (max-width: 360px) {
+  #arbeitsbereich .home-page .home-conversation { padding-inline: 8px; }
+}
