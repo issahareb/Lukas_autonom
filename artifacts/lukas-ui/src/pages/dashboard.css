@@ -407,6 +407,8 @@
 #arbeitsbereich .home-page h1 span { color:#4f642b; }
 #arbeitsbereich .home-page :is(.home-eyebrow,.home-voice-state,.home-conversation-description,.home-intro,.home-workspace-link,.home-section-heading > span,.home-shortcuts small,.home-goal-copy > small,.home-goal-number,.home-metrics button > small,.home-recent small,.home-status-note,.home-empty,.home-text-link,.home-brain-link) { color:#62645c; }
 #arbeitsbereich .home-page .home-composer {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -415,9 +417,47 @@
   border: 1px solid #c9c8bf;
   border-radius: 26px;
   background: #fcfbf8;
-  box-shadow: none;
+  --composer-halo: 0 0 5px 1px #c0ed6966, 0 0 14px 3px #b1df643d;
+  box-shadow: var(--composer-halo);
 }
-#arbeitsbereich .home-page .home-composer:focus-within { border-color: #75766e; box-shadow: 0 0 0 2px #20211e12; }
+/* Keep the halo behind the existing surface and its neutral outline. */
+.home-page .home-composer::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border: inherit;
+  border-radius: inherit;
+  background: inherit;
+}
+.home-composer-glow {
+  position: absolute;
+  inset: -2px;
+  z-index: -2;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  opacity: .76;
+  stroke-width: 6px;
+  filter: blur(2px) drop-shadow(0 0 5px #b5eb47);
+}
+.home-composer-glow g {
+  animation: home-composer-orbit 8s linear infinite;
+}
+@keyframes home-composer-orbit {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -100; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-composer-glow g { animation: none; }
+}
+@media (forced-colors: active) {
+  .home-composer-glow { display: none; }
+}
+#arbeitsbereich .home-page .home-composer:focus-within { border-color: #75766e; box-shadow: 0 0 0 2px #20211e24, var(--composer-halo); }
 #arbeitsbereich .home-composer textarea {
   flex: 1;
   min-width: 0;
