@@ -17,7 +17,7 @@ export type Szene = {
   eintauchen: (id: string) => void;
   dispose: () => void;
 };
-const BG = 0xf3f1eb;
+const BG = 0x0a1017;
 const VERTEX = `
   attribute vec3 tint; attribute float alpha; varying vec3 vTint; varying float vAlpha;
   void main() { vTint=tint; vAlpha=alpha; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }
@@ -61,7 +61,7 @@ export function erschaffeSzene(
   const colors = g.knoten.map(
     (k, i) =>
       new THREE.Color(
-        k.art === "identitaet" ? "#4f642b" : BEREICHE[r.regionen[i]].farbe,
+        k.art === "identitaet" ? "#d4ed8a" : BEREICHE[r.regionen[i]].farbe,
       ),
   );
   const bounds = new THREE.Box3().setFromPoints(points);
@@ -151,7 +151,7 @@ export function erschaffeSzene(
       float halo=exp(-d*d*6.)*.28;
       float core=1.-smoothstep(.03,.22,d);
       float membrane=(1.-smoothstep(.012,.027,abs(d-.3)))*.12;
-      gl_FragColor=vec4(mix(vTint,vec3(.12,.16,.08),core*.75),(halo+core*.9+membrane)*vAlpha);}`,
+      gl_FragColor=vec4(mix(vTint,vec3(.93,.98,1.),core*.75),(halo+core*.9+membrane)*vAlpha);}`,
     { resolution: { value: 1000 } },
   );
   const neurons = new THREE.Mesh(nodeGeo, nodeMat);

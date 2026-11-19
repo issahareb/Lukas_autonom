@@ -1023,3 +1023,42 @@
 .gehirn-label:is(:hover,.is-selected) { background: var(--primary); color: var(--foreground); }
 .gehirn-label { color: var(--foreground); }
 .gehirn-error { color: var(--destructive); background: color-mix(in srgb,var(--destructive) 7%,var(--card)); }
+
+/* The spatial map uses the full workspace. The index retains its split view. */
+.app-shell[data-page="/gehirn"] .gehirn-page[data-view="raum"] {
+  --map-gutter: clamp(14px, 3vw, 44px);
+  max-width: none;
+  padding-inline: var(--map-gutter);
+}
+.gehirn-page[data-view="raum"] .gehirn-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.gehirn-page[data-view="raum"] .gehirn-main {
+  margin-inline: calc(-1 * var(--map-gutter, 0px));
+  border: 0;
+  border-radius: 0;
+}
+.gehirn-stage {
+  --brain-panel: #151f2a;
+  --brain-ink: #f0f5f7;
+  --brain-muted: #c2ced7;
+  --brain-line: #394654;
+  --brain-accent: #d4ed8a;
+  background: #0a1017;
+  color: var(--brain-ink);
+  height: max(380px, 82svh);
+}
+.gehirn-stage.is-expanded { height: 100dvh; }
+.gehirn-stage .gehirn-label { color: var(--brain-ink); }
+.gehirn-stage .gehirn-label:is(:hover, .is-selected) {
+  color: #101710;
+  background: #d4ed8a;
+}
+@media (min-width: 1151px) {
+  .gehirn-page[data-view="raum"] .gehirn-workspace:has(.has-selection) {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 23%);
+  }
+  .gehirn-page[data-view="raum"] .gehirn-workspace:has(.has-selection) .gehirn-main {
+    margin-inline-end: 0;
+  }
+}
