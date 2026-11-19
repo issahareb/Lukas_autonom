@@ -485,7 +485,7 @@ export default function GehirnSeite() {
   );
 
   return (
-    <div className="gehirn-page">
+    <div className="gehirn-page" data-view={ansicht}>
       <PageHeader icon={Network} title="Gehirn" subtitle="Erinnerungen, Beziehungen und Zusammenhänge erkunden." actions={
         <div className="gehirn-heading-actions">
           <button
