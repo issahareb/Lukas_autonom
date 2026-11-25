@@ -283,8 +283,10 @@
   }
 
   // ── Text-Chat (SSE) ───────────────────────────────────────────────────
+  var chatTurn = 0;
   function send(text) {
     if (busy || !text.trim()) return;
+    var turn = ++chatTurn;
     busy = true;
     sendBtn.disabled = true;
     renderChips(null);
@@ -294,7 +296,17 @@
     var el = addMsg("a", "…");
     var full = "";
     var spoken = 0;
-    var followUp = null;
+    var committed = false;
+
+    function finishAnswer() {
+      if (committed || !full) return;
+      committed = true;
+      if (spoken < full.length) speak(full.slice(spoken));
+      history.push({ role: "assistant", content: full });
+      if (history.length > 20) history = history.slice(-20);
+      busy = false;
+      sendBtn.disabled = false;
+    }
 
     fetch(API + "/api/public/chat", {
       method: "POST",
@@ -326,8 +338,10 @@
                       speak(m[0]);
                       spoken += m[0].length;
                     }
-                  } else if (p.suggestion) {
-                    followUp = p.suggestion;
+                  } else if (p.answerComplete) {
+                    finishAnswer();
+                  } else if (p.suggestion && turn === chatTurn) {
+                    renderChips([p.suggestion]);
                   }
                 } catch (e) {}
               });
@@ -341,16 +355,14 @@
         if (!full) {
           el.textContent = "Hmm, da ist etwas schiefgelaufen. Versuch es gleich nochmal.";
         } else {
-          if (spoken < full.length) speak(full.slice(spoken));
-          history.push({ role: "assistant", content: full });
-          if (history.length > 20) history = history.slice(-20);
-          if (followUp) renderChips([followUp]);
+          finishAnswer();
         }
       })
       .catch(function () {
-        el.textContent = "Verbindung fehlgeschlagen — bitte später nochmal versuchen.";
+        if (!committed) el.textContent = "Verbindung fehlgeschlagen — bitte später nochmal versuchen.";
       })
       .finally(function () {
+        if (turn !== chatTurn) return;
         busy = false;
         sendBtn.disabled = false;
       });
@@ -358,6 +370,7 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
+    if (busy || !input.value.trim()) return;
     voiceMode = false;
     var v = input.value;
     input.value = "";
@@ -388,6 +401,7 @@
         mainBtn.classList.remove("lukas-live"); setStatus("");
       }
       if (agent.timer) window.clearTimeout(agent.timer);
+      window.clearTimeout(agent.speechTimer);
       if (agent.connectTimer) window.clearTimeout(agent.connectTimer);
       if (agent.disconnectTimer) window.clearTimeout(agent.disconnectTimer);
       if (agent.dc) {
@@ -420,6 +434,15 @@
         if (agent.eventIds.has(evt.event_id)) return;
         agent.eventIds.add(evt.event_id);
         if (agent.eventIds.size > 512) agent.eventIds.delete(agent.eventIds.values().next().value);
+      }
+      window.clearTimeout(agent.speechTimer);
+      if (role === "assistant") {
+        setStatus("Lukas spricht …");
+        agent.speechTimer = window.setTimeout(function () {
+          if (!agent.stopped) setStatus("Sprich einfach — Lukas hört zu.");
+        }, 1100);
+      } else {
+        setStatus("Sprich einfach — Lukas hört zu.");
       }
       var start = typeof evt.start_ms === "number" ? evt.start_ms : null;
       var end = typeof evt.end_ms === "number" ? evt.end_ms : start;

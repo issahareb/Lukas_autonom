@@ -144,6 +144,7 @@ try {
     };
     function fetchMock(url, init) {
       requests.push({ url, init });
+      if (options.chat && url.endsWith("/chat")) return Promise.resolve(options.chat());
       if (url.endsWith("/close")) return Promise.resolve({ ok: true, status: 204 });
       if (options.sessionPromise) return options.sessionPromise;
       return Promise.resolve({ ok: true, json: async () => state.session });
@@ -151,7 +152,7 @@ try {
     runInNewContext(widgetSource, {
       document: doc, window: win, navigator: { mediaDevices: { getUserMedia() {
         micRequests++; return options.micPromise || Promise.resolve(stream);
-      }}}, fetch: fetchMock, RTCPeerConnection: Peer, MediaStream: class {}, Audio: Element, URL, Set, console,
+      }}}, fetch: fetchMock, RTCPeerConnection: Peer, MediaStream: class {}, Audio: Element, URL, Set, TextDecoder, console,
     }, { filename: "widget.js" });
     return { nodes, requests, peers, track, stream, timers, windowEvents,
       micRequests: () => micRequests, click: selector => nodes.get(selector).click(),
@@ -162,6 +163,30 @@ try {
       messages: () => nodes.get(".lukas-msgs").children.map(node => node.textContent),
     };
   }
+  // A slow follow-up suggestion from the previous turn must never block the
+  // next message, add it to history twice, or replace the new turn's chips.
+  const streams = [];
+  const chat = browser({ chat() {
+    const body = new ReadableStream({ start(controller) { streams.push(controller); } });
+    return { ok: true, body };
+  } });
+  function submit(text) {
+    chat.nodes.get(".lukas-in").value = text;
+    chat.nodes.get(".lukas-form").events.get("submit")({ preventDefault() {} });
+  }
+  function sendEvent(index, payload) {
+    streams[index].enqueue(new TextEncoder().encode("data: " + JSON.stringify(payload) + "\n\n"));
+  }
+  submit("Hallo"); await pump();
+  sendEvent(0, { content: "Guten Tag" }); sendEvent(0, { answerComplete: true }); await pump();
+  check(!chat.nodes.get(".lukas-send").disabled, "Answer unlocks before suggestion finishes");
+  submit("Danke"); await pump();
+  check(JSON.parse(chat.requests[1].init.body).messages.map(m => m.content).join("|") === "Hallo|Guten Tag|Danke", "Second request includes the completed answer once");
+  sendEvent(0, { suggestion: "Old suggestion?" }); streams[0].close(); await pump();
+  check(chat.nodes.get(".lukas-send").disabled && !chat.nodes.get(".lukas-suggest").children.length, "Old stream cannot unlock or replace chips for a newer turn");
+  sendEvent(1, { content: "Gerne!" }); streams[1].close(); await pump();
+  check(!chat.nodes.get(".lukas-send").disabled, "Legacy stream works without early completion");
+
   let page = browser(); page.click(".lukas-btn");
   check(page.requests.length === 0 && page.micRequests() === 0, "Panel opening creates no session or mic request");
   page.click(".lukas-mic"); check(page.micRequests() === 1, "Microphone requested during click");

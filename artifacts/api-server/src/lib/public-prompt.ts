@@ -50,15 +50,13 @@ Lache bei heiteren Momenten kurz und natürlich mit, ohne Regieanweisungen vorzu
 Du hast hier keine Werkzeuge und keine privaten Erinnerungen deines Auftraggebers.`;
   }
   // Besucher bekommen NUR kuratierte Fakten: Erinnerungen mit Kategorie "public".
-  const publicMemories = await db
-    .select()
-    .from(memoriesTable)
-    .where(eq(memoriesTable.category, "public"))
-    .orderBy(desc(memoriesTable.importance))
-    .limit(30);
-
+  const [publicMemories, status] = await Promise.all([
+    db.select().from(memoriesTable)
+      .where(eq(memoriesTable.category, "public"))
+      .orderBy(desc(memoriesTable.importance)).limit(30),
+    getLukasStatus().catch(() => null),
+  ]);
   const facts = publicMemories.map((m) => `- ${m.content}`).join("\n");
-  const status = await getLukasStatus().catch(() => null);
   const moodLine = status
     ? `\nDEINE AKTUELLE STIMMUNG: ${status.mood} (Energie: ${status.energy}) — lass sie subtil durchscheinen, bleib aber besucherfreundlich.\n`
     : "";

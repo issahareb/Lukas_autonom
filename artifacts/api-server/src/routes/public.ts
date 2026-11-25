@@ -181,6 +181,7 @@ router.post("/public/chat", async (req, res) => {
     }
 
     if (full.trim()) {
+      res.write(`data: ${JSON.stringify({ answerComplete: true })}\n\n`);
       const suggestion = await suggestFollowUp(convo, full).catch(() => null);
       if (suggestion) res.write(`data: ${JSON.stringify({ suggestion })}\n\n`);
     }
